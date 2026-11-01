@@ -1,0 +1,16 @@
+const assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs'),path=require('node:path');
+const context={URL};vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../extension/recovery.js'),'utf8'),context);
+const policy=context.FruchtRecovery;
+const active={task:{id:'task',slot:'script',kind:'chat_text',payload:{provider:'chatgpt'}},tabId:12,startedAt:1000,recoveryAttempts:0};
+const live={task_status:'claimed',job_stage:'script',job_status:'running'};
+assert.equal(policy.mayCollect(active,live,2000),true);
+assert.equal(policy.mayCollect(active,{...live,job_status:'paused'},2000),false);
+assert.equal(policy.mayCollect(active,{...live,task_status:'cancelled'},2000),false);
+assert.equal(policy.mayCollect(active,live,21*60*1000),false);
+assert.equal(policy.mayCollect({...active,recoveryAttempts:20},live,2000),false);
+assert.equal(policy.allowedTab(active.task,'https://claude.ai/new'),false);
+assert.equal(policy.allowedTab(active.task,'https://chatgpt.com/c/bound'),true);
+assert.equal(policy.sameReply(active,'task',12),true);
+assert.equal(policy.sameReply(active,'another-task',12),false);
+assert.equal(policy.sameReply(active,'task',13),false);
+console.log('10 contrôles de récupération automatique réussis.');

@@ -1,0 +1,40 @@
+# Donnees privees et fichiers de production
+/data/
+**/data/
+/profiles/
+/sessions/
+/browser-data/
+/user-data/
+/chrome-data/
+Cookies
+Cookies-journal
+Login Data
+Local State
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*credentials*.json
+*token*.json
+
+# Dependances et modeles telecharges
+.venv/
+venv/
+.qc-runtime/
+.qc-models/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Resultats d installation et exports
+.installation-complete
+*.log
+*.zip
+*.mp4
+*.mp3
+*.wav
+*.webm
+.DS_Store
+Thumbs.db

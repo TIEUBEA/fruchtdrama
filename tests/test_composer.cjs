@@ -1,0 +1,26 @@
+const assert=require('node:assert/strict');
+const vm=require('node:vm');const fs=require('node:fs');const path=require('node:path');
+const context={};vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../extension/composer.js'),'utf8'),context);
+const helper=context.FruchtComposer;
+function element(props={}){return {hidden:false,disabled:false,id:'',dataset:{},innerText:'',getBoundingClientRect:()=>({width:50,height:30}),getClientRects:()=>[{}],getAttribute(k){return props[k]??null},...props};}
+const hiddenTextarea=element({getBoundingClientRect:()=>({width:1,height:1})});
+const richEditor=element({id:'prompt-textarea',contenteditable:'true',closest:()=>null});
+const doc={querySelectorAll:q=>q.startsWith('#prompt-textarea')?[richEditor]:q.startsWith('textarea')?[hiddenTextarea]:[]};
+assert.equal(helper.editor(doc),richEditor,'Prefer the visible rich-text editor to a hidden fallback textarea');
+assert.equal(helper.visible(hiddenTextarea),false);
+const send=element({'aria-label':'Nachricht absenden'}),stop=element({'aria-label':'Stop generating'}),disabled=element({id:'composer-submit-button',disabled:true});
+assert.equal(helper.button({querySelectorAll:()=>[disabled,stop,send]},richEditor),send,'Recognize German send label and reject disabled/stop buttons');
+const explicit=element({id:'composer-submit-button'});
+assert.equal(helper.button({querySelectorAll:()=>[send,explicit]},richEditor),explicit,'Prefer known composer button');
+const outside=element({id:'composer-submit-button'}),form={querySelectorAll:()=>[]};
+assert.equal(helper.button({querySelectorAll:()=>[outside]},{closest:()=>form}),outside,'Handle submit button outside editor form');
+assert.equal(helper.button({querySelectorAll:()=>[disabled,stop]},richEditor),null,'Do not submit through inactive or stop buttons');
+console.log('6 contrôles du connecteur réussis (fixtures DOM, pas un test du compte ChatGPT).');
+const footer='Diese Website ist durch reCAPTCHA geschützt. Datenschutzbestimmungen und Nutzungsbedingungen gelten.';
+assert.equal(helper.challenge({body:{innerText:footer},querySelectorAll:()=>[]}),false);
+const badge=element({title:'reCAPTCHA',getBoundingClientRect:()=>({width:256,height:60})});
+assert.equal(helper.challenge({body:{innerText:footer},querySelectorAll:()=>[badge]}),false);
+const challenge=element({title:'reCAPTCHA challenge',getBoundingClientRect:()=>({width:400,height:500})});
+assert.equal(helper.challenge({body:{innerText:''},querySelectorAll:()=>[challenge]}),true);
+assert.equal(helper.challenge({body:{innerText:'Verify you are human'},querySelectorAll:()=>[]}),true);
+console.log('4 contrôles de défi réussis : pied de page, badge passif, véritable widget et demande explicite.');
