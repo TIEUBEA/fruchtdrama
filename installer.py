@@ -22,7 +22,7 @@ def main():
     for requirements in ('requirements.txt', 'requirements-quality.txt'):
         subprocess.run([sys.executable, '-m', 'pip', 'install', '-r', str(ROOT / requirements)], check=True)
     subprocess.run([sys.executable, str(ROOT / 'quality_setup.py')], check=True, cwd=ROOT)
-    (ROOT / '.installation-complete').write_text('0.1.43\n', 'utf-8')
+    (ROOT / '.installation-complete').write_text('0.1.44\n', 'utf-8')
     print('\nInstallation terminee. Lancez Lancer-Studio.cmd, puis configurez VOS comptes dans Connexions.')
 
 

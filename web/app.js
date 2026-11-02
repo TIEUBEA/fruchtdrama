@@ -1,4 +1,5 @@
-let state=null,page='studio',selected=null,lastSnapshot='',uploadSlot=null;
+let state=null,page='studio',selected=new URLSearchParams(location.hash.slice(1)).get('job'),lastSnapshot='',uploadSlot=null;
+// Deep link: /#job=<id> opens that production (bookmarks, support, interface tests).
 // Same presence window as the server (75 s): the extension polls every 30 s.
 const ONLINE_MS=75000;
 // Connector heartbeats change only `seen`; they must not redraw the page (open panels, playing videos).
