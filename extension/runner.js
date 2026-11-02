@@ -1,6 +1,8 @@
 async function notifyResult(task){
  try{await chrome.runtime.sendMessage({type:'result-ready',task});}catch{}
 }
+// A typed failure (P2-01): the studio decides between waiting, rewording, retrying or asking a human.
+function fail(kind,message,extra={}){return Object.assign(Error(message),{kind},extra);}
 function requireLiveExtension(){
  try{if(chrome.runtime.id)return;}catch{}
  throw Error('Extension reloaded: refresh this tab before resuming.');
@@ -13,7 +15,7 @@ globalThis.fruchtRunnerHandler=(m,s,reply)=>{
  if(m.type!=='frucht-run')return false;
  if(globalThis.fruchtRunState?.state==='running'){reply({accepted:false,error:'Une tâche est déjà en cours dans cet onglet.'});return false;}
  globalThis.fruchtRunState={state:'running',task:m.task.id};
- run(m.task,m.attachments).then(result=>{if(m.task.kind==='flow_video')result.generation_submitted=globalThis.fruchtRunState.submitted===true;globalThis.fruchtRunState={...globalThis.fruchtRunState,state:'completed',task:m.task.id,result};return notifyResult(m.task.id);}).catch(e=>{globalThis.fruchtRunState={...globalThis.fruchtRunState,state:'completed',task:m.task.id,result:{ok:false,error:e.message,...(m.task.kind==='flow_video'?{generation_submitted:globalThis.fruchtRunState.submitted===true,...(e.flowBlocked?{flow_blocked:e.flowBlocked}:{})}:{})}};return notifyResult(m.task.id);});
+ run(m.task,m.attachments).then(result=>{if(m.task.kind==='flow_video')result.generation_submitted=globalThis.fruchtRunState.submitted===true;globalThis.fruchtRunState={...globalThis.fruchtRunState,state:'completed',task:m.task.id,result};return notifyResult(m.task.id);}).catch(e=>{globalThis.fruchtRunState={...globalThis.fruchtRunState,state:'completed',task:m.task.id,result:{ok:false,error:e.message,...(e.kind?{error_kind:e.kind}:{}),...(e.retryAfter?{retry_after:e.retryAfter}:{}),...(m.task.kind==='flow_video'?{generation_submitted:globalThis.fruchtRunState.submitted===true,...(e.flowBlocked?{flow_blocked:e.flowBlocked}:{})}:{})}};return notifyResult(m.task.id);});
  reply({accepted:true,task:m.task.id});return false;
 };chrome.runtime.onMessage.addListener(globalThis.fruchtRunnerHandler);
 }
@@ -32,10 +34,10 @@ async function run(task,attachments){
  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
  const visible=el=>!!el&&el.getClientRects().length>0;
  const text=()=>document.body.innerText;
- const blocked=()=>{requireLiveExtension();const t=text();if(globalThis.FruchtComposer.challenge(document))throw Error('Contrôle du fournisseur : intervention manuelle nécessaire.');if(location.hostname==='accounts.google.com')throw Error('Connexion requise. Connectez-vous vous-même.')};
+ const blocked=()=>{requireLiveExtension();const t=text();if(globalThis.FruchtComposer.challenge(document))throw fail('challenge','Contrôle du fournisseur : intervention manuelle nécessaire.');if(location.hostname==='accounts.google.com')throw fail('login','Connexion requise. Connectez-vous vous-même.')};
  const findEditor=()=>globalThis.FruchtComposer.editor(document);
  const fill=(el,value)=>{el.focus();if(el.tagName==='TEXTAREA'||el.tagName==='INPUT'){const setter=Object.getOwnPropertyDescriptor(el.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype,'value').set;setter.call(el,value);el.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:value}))}else{const selection=window.getSelection(),range=document.createRange();range.selectNodeContents(el);selection.removeAllRanges();selection.addRange(range);if(!document.execCommand('insertText',false,value)){el.textContent=value;el.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:value}))}}el.dispatchEvent(new Event('change',{bubbles:true}))};
- const waitFor=async(fn,timeout=30000)=>{const start=Date.now();while(Date.now()-start<timeout){blocked();const v=fn();if(v)return v;await sleep(1000)}throw Error('Interface non reconnue ou délai dépassé. Utilisez le prompt et l’import manuel dans le studio.')};
+ const waitFor=async(fn,timeout=30000)=>{const start=Date.now();while(Date.now()-start<timeout){blocked();const v=fn();if(v)return v;await sleep(1000)}throw fail('interface','Interface non reconnue ou délai dépassé. Utilisez le prompt et l’import manuel dans le studio.')};
  const count=s=>{if(!s)return null;const v=s.trim().replace(/\s/g,'').replace(',','.');const m=v.match(/^(\d+(?:\.\d+)?)\s*([kmb])?$/i);return m?Number(m[1])*({k:1e3,m:1e6,b:1e9}[m[2]?.toLowerCase()]||1):null};
  await sleep(1500);blocked();
  if(task.kind==='chat_collect')return collectScenario(task);
@@ -47,7 +49,7 @@ async function run(task,attachments){
  const checkFlowAccount=()=>{
   if(!isFlow)return;
   if(task.payload.flow_route&&!globalThis.FruchtFlowSession?.verify(document,task.payload.flow_route))throw Error('Compte Flow différent ou session expirée ; aucun envoi effectué.');
-  if(globalThis.FruchtFlow.creditBlocked(document)){const error=Error('Crédits Flow insuffisants signalés par le fournisseur ; aucun envoi effectué.');error.flowBlocked='credits';throw error;}
+  if(globalThis.FruchtFlow.creditBlocked(document)){const error=Error('Crédits Flow insuffisants signalés par le fournisseur ; aucun envoi effectué.');error.flowBlocked='credits';error.kind='credits';throw error;}
  };
  if(isFlow){globalThis.FruchtFlow.closeAccountPanel(document);await sleep(250);if(task.payload.flow_route||task.payload.model)await globalThis.FruchtFlow.prepareFrames(document,sleep,task.payload.cost,task.payload.model,task.payload.resolution,task.payload.seconds);}
  let editor=await waitFor(findEditor,45000);
@@ -78,7 +80,7 @@ async function run(task,attachments){
   if(!settings&&/(?:x\s*2|x\s*4)\b/i.test(text()))throw Error('Flow : vérifiez que le nombre de résultats est x1. Aucun envoi effectué.');
   if(openedSettings){settings.click();await sleep(400);}
  }
- const oldImageElements=new Set([...document.images]);const oldImages=new Set([...document.images].map(i=>i.currentSrc||i.src));const oldVideos=new Set([...document.querySelectorAll('video')].map(v=>v.currentSrc||v.src));
+ const oldAssistants=new Set(globalThis.FruchtComposer.assistants?.(document)||[]);const oldImageElements=new Set([...document.images]);const oldImages=new Set([...document.images].map(i=>i.currentSrc||i.src));const oldVideos=new Set([...document.querySelectorAll('video')].map(v=>v.currentSrc||v.src));
  const prompt=task.payload.prompt+(task.kind==='chat_image'?'\nGenerate the image now, not a written tutorial.':'');fill(editor,prompt);await sleep(700);
  const findSend=()=>isFlow?globalThis.FruchtFlow.sendButton(document,editor):globalThis.FruchtComposer.button(document,editor);
  let send=null;const buttonStart=Date.now();while(Date.now()-buttonStart<(attachments?.length?180000:25000)){blocked();checkFlowAccount();editor=findEditor()||editor;send=findSend();if(send)break;await sleep(700)}
@@ -91,5 +93,10 @@ async function run(task,attachments){
  if(task.kind==='chat_text'){
   return collectScenario(task);
  }
- let previewOpened=false;const start=Date.now();while(Date.now()-start<480000){blocked();if(isFlow){if(!previewOpened)previewOpened=globalThis.FruchtFlow.openNewVideo(document,oldImages,oldImageElements);const v=[...document.querySelectorAll('video')].find(v=>(v.currentSrc||v.src)&&!oldVideos.has(v.currentSrc||v.src)&&v.readyState>=1);if(v){return await globalThis.FruchtMedia.videoPayload(v)}}else{const candidate=globalThis.FruchtMedia.image(document,task.payload.prompt);const img=candidate&&!oldImages.has(candidate.currentSrc||candidate.src)?candidate:null;if(img&&!/avatar|profile/i.test(img.alt)){await sleep(2000);return await globalThis.FruchtMedia.payload(img)}}if(/you.ve reached|limit reached|quota atteint|limite atteinte|usage limit/i.test(text()))throw Error('Quota du fournisseur atteint. Reprenez après renouvellement.');await sleep(2000)}throw Error('Génération trop longue ou média non détecté. Vérifiez le projet avant toute nouvelle tentative.');
+ let previewOpened=false,lastRefusal=null;const start=Date.now();while(Date.now()-start<480000){blocked();if(isFlow){if(!previewOpened)previewOpened=globalThis.FruchtFlow.openNewVideo(document,oldImages,oldImageElements);const v=[...document.querySelectorAll('video')].find(v=>(v.currentSrc||v.src)&&!oldVideos.has(v.currentSrc||v.src)&&v.readyState>=1);if(v){return await globalThis.FruchtMedia.videoPayload(v)}}else{const candidate=globalThis.FruchtMedia.image(document,task.payload.prompt);const img=candidate&&!oldImages.has(candidate.currentSrc||candidate.src)?candidate:null;if(img&&!/avatar|profile/i.test(img.alt)){await sleep(2000);return await globalThis.FruchtMedia.payload(img)}
+  // A refusal is confirmed by two identical readings of a NEW reply (P2-03): no 8-minute wait.
+  const refusal=globalThis.FruchtComposer.refusal?.(document,oldAssistants)||null;
+  if(refusal&&refusal===lastRefusal)throw fail('refusal','ChatGPT refuse cette image (refus de contenu) : '+refusal.slice(0,240));
+  lastRefusal=refusal;}
+ if(/you.ve reached|you.ve hit|limit reached|quota atteint|limite atteinte|usage limit/i.test(text()))throw fail('quota','Quota du fournisseur atteint. Reprenez après renouvellement.',{retryAfter:globalThis.FruchtComposer.retryAfter?.(text())||null});await sleep(2000)}throw fail('timeout','Génération trop longue ou média non détecté. Vérifiez le projet avant toute nouvelle tentative.');
 }

@@ -7,6 +7,7 @@ import editorial
 import captions
 import covers
 import quality
+import errors
 import sys
 import traceback
 
@@ -132,13 +133,15 @@ def flow_dispatch_tick():
         if online:return
         if task.get('browser_opened'):
             if time.time()-dt.datetime.fromisoformat(task['browser_opened']).timestamp()>180:
-                j=job_by(task['job']);j['status']='attention';event(j,'Navigateur ouvert mais passerelle absente. Vérifiez le profil Chrome enregistré, la connexion Google et l’extension.');save()
+                j=job_by(task['job']);j['status']='attention';event(j,'Navigateur ouvert mais passerelle absente. Vérifiez le profil Chrome enregistré, la connexion Google et l’extension.')
+                j['last_error']={'kind':'interface','slot':task.get('slot'),'task':task.get('id'),'at':now()};save()
             return
         task['browser_opened']=now();pending=copy.deepcopy(p);event(job_by(task['job']),'Ouverture automatique de Chrome et du compte Flow enregistré.');save()
     try:flow_accounts.launch(pending)
     except Exception as e:
         with LOCK:
-            j=job_by(task['job']);j['status']='attention';event(j,'Ouverture Flow impossible : '+str(e));save()
+            j=job_by(task['job']);j['status']='attention';event(j,'Ouverture Flow impossible : '+str(e))
+            j['last_error']={'kind':'interface','slot':task.get('slot'),'task':task.get('id'),'at':now()};save()
 
 LAST_ERRORS={}
 def log_error(context,error,interval=60):
@@ -591,11 +594,13 @@ def accept_task_result(t,result):
         event(j,str(result.get('error','Essai à blanc réussi.'))[:600]+' Désactivez l’essai à blanc puis cliquez sur Reprendre pour générer réellement.')
         return
     if not result.get('ok'):
+        kind=errors.classify(result);t['error_kind']=kind
+        j['last_error']={'kind':kind,'slot':t.get('slot'),'task':t.get('id'),'at':now()}
         reservation=t.get('reservation')
         if t.get('kind')=='flow_video' and result.get('generation_submitted') is False and reservation and not reservation.get('refunded'):
             p=profile_by(reservation['profile'])
             if p:p['balance']+=reservation['amount'];reservation['refunded']=True;event(j,'Réservation locale de crédits annulée : aucune génération n’a été envoyée à Flow.')
-        t['status']='failed'; j['status']='paused' if was_paused else 'attention'; event(j,str(result.get('error','Connecteur interrompu'))[:1200])
+        t['status']='failed'; j['status']='paused' if was_paused else 'attention'; event(j,errors.message(kind,result.get('error')))
         if t.get('kind')=='flow_video' and result.get('generation_submitted') is False and result.get('flow_blocked')=='credits' and t.get('payload',{}).get('flow_route'):
             p=profile_by(t.get('profile'))
             if p:p['blocked']='credits'
@@ -635,7 +640,7 @@ def accept_task_result(t,result):
             if duplicate_scene_source(j,file,-1) or ((job_dir(j)/'cover-style-reference.png').is_file() and image_fingerprint(j,file)==image_fingerprint(j,'cover-style-reference.png')):raise ValueError('Couverture rejetée : copie exacte d’une référence. Attente de la couverture composée.')
             j['cover_file']=file;j['cover']=asset_url(j,file)
         event(j,'Média reçu : '+file)
-    t['status']='done'; t['result']=result
+    t['status']='done'; t['result']=result;j.pop('last_error',None)
     if was_paused: j['status']='paused'
     schedule(j)
 
@@ -932,7 +937,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     try:
                         accept_task_result(t,b.get('result',{}))
                         if t['status']=='done':t['result_digest']=hashlib.sha256(json.dumps(b.get('result',{}),ensure_ascii=False,sort_keys=True).encode()).hexdigest()
-                    except Exception as e: t['status']='failed'; j=job_by(t['job']); j['status']='attention'; event(j,'Réponse invalide : '+str(e))
+                    except Exception as e:
+                        t['status']='failed'; j=job_by(t['job']); j['status']='attention'; event(j,'Réponse invalide : '+str(e))
+                        j['last_error']={'kind':'other','slot':t.get('slot'),'task':t.get('id'),'at':now()}
                     save();j=job_by(t['job']);return self.send_json({'ok':True,'task_status':t['status'],'job_status':j['status'],'error':j['events'][-1]['text'] if t['status']=='failed' else None})
                 elif path=='/api/profile/check':
                     p=flow_credits.request(STATE,b.get('id'),time.time())
@@ -980,7 +987,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         for t in STATE['tasks']:
                             if t['job']==id and t['status'] in ('queued','claimed'): t['status']='cancelled'
                         if b.get('flow_profile'): j['flow_profile']=b['flow_profile']
-                        j['status']='running'; event(j,'Reprise demandée ; passage automatique limité aux comptes Flow enregistrés.' if STATE.get('settings',{}).get('flow_auto') else 'Reprise demandée ; compte Flow sélectionné conservé.'); schedule(j)
+                        j.pop('last_error',None);j['status']='running'; event(j,'Reprise demandée ; passage automatique limité aux comptes Flow enregistrés.' if STATE.get('settings',{}).get('flow_auto') else 'Reprise demandée ; compte Flow sélectionné conservé.'); schedule(j)
                     elif action=='confirm_no_clip':
                         slot=str(b.get('slot',''))
                         pending=[t for t in uncertain_clip_tasks(j) if t['slot']==slot]
@@ -1040,6 +1047,7 @@ def recover_after_restart():
         for t in STATE['tasks']:
             if t['status']=='claimed':
                 t['status']='failed'; j=job_by(t['job']); j['status']='attention'; event(j,'Redémarrage : génération précédente à vérifier avant de réessayer.')
+                j['last_error']={'kind':'restart','slot':t.get('slot'),'task':t.get('id'),'at':now()}
         for j in STATE['jobs']:
             if j.get('stage') in ('images','clips'):
                 try:repair_duplicate_scenes(j)

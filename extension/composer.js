@@ -10,6 +10,39 @@ globalThis.FruchtComposer = {
    return r.width>100&&r.height>70;
   });
  },
+ // Assistant replies, oldest first. Used to read only replies that appear after our prompt.
+ assistants(doc){
+  for(const selector of ['[data-message-author-role="assistant"]','[data-turn="assistant"]','[data-testid="assistant-message"]','.font-claude-response']){
+   const found=[...doc.querySelectorAll(selector)];if(found.length)return found;
+  }
+  return [];
+ },
+ // Content-policy refusal in a NEW short reply (P2-03). Long replies are never read as refusals.
+ refusal(doc,before){
+  const fresh=this.assistants(doc).filter(e=>!before?.has(e));
+  const last=fresh[fresh.length-1];if(!last)return null;
+  const text=String(last.innerText||last.textContent||'').trim();
+  if(!text||text.length>600)return null;
+  const patterns=[
+   /\bI(?:'|’)?m (?:not able|unable) to (?:help|create|generate|make|produce)|\bI (?:can(?:'|’)?t|cannot|am unable to) (?:help|create|generate|make|produce|assist)/i,
+   /violat\w* (?:our|the|my) (?:content|usage|image) (?:polic|guideline)|against (?:our|the|my) (?:content )?(?:policies|guidelines)|content polic(?:y|ies)/i,
+   /je ne peux pas (?:créer|générer|produire|réaliser|dessiner|t.aider|vous aider)|(?:enfrei\w*|contrevien\w*) (?:à )?(?:nos|les|mes) (?:règles|politiques|conditions)|politique de contenu/i,
+   /ich kann (?:dir |Ihnen )?(?:dabei |das |dieses Bild |so ein Bild )?(?:nicht|kein\w*) (?:helfen|erstellen|generieren|zeichnen)|versto(?:ß|ss)\w* gegen (?:unsere|die|meine) (?:Inhalts)?richtlinien|Inhaltsrichtlinien/i
+  ];
+  return patterns.some(p=>p.test(text))?text:null;
+ },
+ // Renewal delay announced by the provider, in seconds (P2-04): "resets in 22 hours and 16 minutes".
+ retryAfter(text){
+  const value=String(text||'');
+  const units=[[/(\d+)\s*(?:hours?|heures?|h\b|Stunden?|Std\.?)/i,3600],[/(\d+)\s*(?:minutes?|min\b|Minuten?)/i,60],[/(\d+)\s*(?:days?|jours?|Tagen?|Tage)/i,86400]];
+  // Every anchor is tried: an unrelated "Try again" earlier on the page must not hide the real delay.
+  for(const m of value.matchAll(/(?:resets?|renouvel|réinitialis|zurückgesetzt|again|plus tard|erneut|more images|d.autres images|weitere Bilder)/gi)){
+   const zone=value.slice(Math.max(0,m.index-60),m.index+160);let total=0;
+   for(const [re,unit] of units){const n=zone.match(re);if(n)total+=Number(n[1])*unit;}
+   if(total>0)return total;
+  }
+  return null;
+ },
  visible(el) {
   if(!el || el.hidden || el.getAttribute('aria-hidden')==='true') return false;
   const r=el.getBoundingClientRect();
