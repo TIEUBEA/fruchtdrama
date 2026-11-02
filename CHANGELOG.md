@@ -1,16 +1,41 @@
 # Journal des modifications
 
+Chaque version liste ce qui a été **corrigé**, **amélioré** et **ajouté**, avec l'exigence
+correspondante (P0-xx, P1-x, P2-xx) détaillée dans `docs/sudf/`. Guide pour reprendre le travail :
+`docs/sudf/REPRISE.md`.
+
 ## Non publié (branche `sudf`)
 
+Automatisation sans surveillance (P2), lots 2 à 5 en cours : voir `docs/sudf/REPRISE.md`.
+
+## 0.1.46 — 2026-11-02 (branche `sudf`) — P2 lot 1 : erreurs typées
+
+Détail : `docs/sudf/P2-automatisation.md` (P2-01 à P2-04).
+
 ### Ajouté
-- Relecture et correction de l’histoire avant de payer les images (option à la création, P1-1). Détail : `docs/sudf/P1-economies.md`.
-- Feuille de personnages unique pour les nouvelles productions à plusieurs personnages : une image payée au lieu d’une par personnage (P1-2).
-- « Refaire » ciblé d’une image, d’un clip, de la couverture ou des personnages, avec correction écrite et fichier précédent conservé (P1-3).
-- Essai à blanc des clips Flow : tout est préparé et vérifié dans Flow, rien n’est envoyé ni facturé (P1-4).
-- Test d’interaction navigateur piloté par le protocole DevTools (`tests/test_ui_interactions.cjs`).
+- Chaque échec de tâche porte un type : `login`, `challenge`, `quota`, `refusal`, `credits`, `interface`, `timeout`, `restart`, `other` (`errors.py`). L'extension envoie `error_kind` ; le serveur classe les messages des anciennes extensions. Le type est conservé sur la tâche (`error_kind`) et sur la production (`last_error`), effacé par une reprise ou un média reçu.
+- Encart « Action de votre part requise » pour une connexion ou une vérification anti-robot. Le studio ne contourne jamais ces contrôles.
+- ChatGPT : le délai de renouvellement affiché (« resets in 22 hours and 16 minutes », FR/DE/EN) est lu et transmis (`retry_after`).
+
+### Amélioré
+- Un refus de contenu de ChatGPT sur une image est détecté en quelques secondes (nouvelle réponse seulement, deux lectures identiques) au lieu d'attendre 8 minutes. Un ancien refus resté dans la conversation est ignoré.
+
+### Tests
+- `tests/test_p2_errors.py` (unitaires + intégration HTTP), `tests/test_refusal_runner.cjs` (connecteur sous `vm`, vérifié par mutation), cas ajoutés dans `tests/test_composer.cjs`.
+
+## 0.1.45 — 2026-11-02 (branche `sudf`) — P1 : économies
+
+Détail : `docs/sudf/P1-economies.md`.
+
+### Ajouté
+- Relecture et correction de l'histoire avant de payer les images (option à la création, P1-1). « Reprendre » ne contourne pas la relecture ; chaque correction est revalidée ; une saisie non enregistrée survit au rafraîchissement.
+- Feuille de personnages unique pour les productions à plusieurs personnages : une image payée au lieu d'une par personnage (P1-2).
+- « Refaire » ciblé d'une image, d'un clip, de la couverture ou des personnages, avec correction écrite ; fichier précédent conservé ; refaire une image impose de refaire son clip (P1-3).
+- Essai à blanc des clips Flow : tout est préparé et vérifié dans Flow, arrêt avant l'envoi, aucun crédit réservé (P1-4).
+- Test d'interaction navigateur piloté par le protocole DevTools (`tests/test_ui_interactions.cjs`).
 
 ### Corrigé
-- Le changement de `#job=` dans l’adresse ouvre la production demandée sans recharger la page.
+- Le changement de `#job=` dans l'adresse ouvre la production demandée sans recharger la page.
 
 ## 0.1.44 — 2026-11-02 (branche `sudf`)
 
