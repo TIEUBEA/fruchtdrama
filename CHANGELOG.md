@@ -2,7 +2,8 @@
 
 Chaque version liste ce qui a été **corrigé**, **amélioré** et **ajouté**, avec l'exigence
 correspondante (P0-xx, P1-x, P2-xx) détaillée dans `docs/sudf/`. Guide pour reprendre le travail :
-`docs/sudf/REPRISE.md`.
+`docs/sudf/REPRISE.md`. **Mode d'emploi détaillé** (installer, lancer, utiliser), mis à jour à chaque
+version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, version par version).
 
 ## Non publié (branche `sudf`)
 
@@ -23,6 +24,9 @@ Détail : `docs/sudf/P5-fenetre-moteurs.md` (P5-01 à P5-05).
 
 ### Modifié
 - Le panneau popup de l'extension est remplacé par l'onglet passerelle de la fenêtre (même contenu). Aucune nouvelle permission.
+
+### Mode d'emploi
+- `docs/MODE-EMPLOI.md` créé : installation, mise à jour de `sudf`, lancement, extension, fenêtre FruchtDrama, appairage, comptes (dont plusieurs comptes Flow), production, statuts et bandeaux, corrections, dépannage.
 
 ### Tests
 - `tests/test_workspace.cjs` (logique + contrôles statiques, vérifié par mutation) et `tests/test_workspace_chrome.cjs` (Chromium réel avec l'extension chargée, piloté par DevTools).

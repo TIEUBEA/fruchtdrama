@@ -70,7 +70,7 @@ Décision du propriétaire pour le contrôle qualité automatique (02/11/2026) :
 
 ## 4. Règles de travail (à respecter)
 
-- Une exigence = code + tests + doc + entrée CHANGELOG + commit conventionnel. Ne passer au lot suivant qu'avec toute la suite verte.
+- Une exigence = code + tests + doc + entrée CHANGELOG + **mise à jour de `docs/MODE-EMPLOI.md`** (section concernée + ligne dans la section 12) + commit conventionnel. Ne passer au lot suivant qu'avec toute la suite verte.
 - Jamais de contournement de CAPTCHA ni de licence (l'Atelier est décrit, jamais contourné).
 - Aucune dépense automatique ambiguë : un clip Flow peut-être envoyé n'est jamais renvoyé sans confirmation.
 - Pas de nouvelle dépendance sans justification. Pas de push sur `main` sans PR.
