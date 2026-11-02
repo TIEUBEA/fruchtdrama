@@ -9,6 +9,21 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 Prochain : P3 (séries, idées, kit de publication, veille, 16:9) et P4 (montage avancé, sous-titres karaoké, rapport de panne). Voir `docs/sudf/REPRISE.md`.
 
+## 0.1.52 — 2026-11-02 (branche `sudf`) — P3 lot 1 : séries et kit de publication
+
+Détail : `docs/sudf/P3-croissance.md`.
+
+### Ajouté
+- **Écrire la suite (partie N+1)** sur un épisode terminé : mêmes personnages, scénario lancé directement, idée facultative.
+- Les images de référence des personnages repris sont **réutilisées** : seuls les nouveaux personnages sont payés.
+- **Kit de publication** à la fin du montage : titre, description, hashtags, premier commentaire, créneaux suggérés (bouton « Kit de publication ↓ »).
+
+### Mode d'emploi
+- Section 10 bis et ligne 0.1.52 de `docs/MODE-EMPLOI.md`.
+
+### Tests
+- `tests/test_p3_series.py` (unitaires + HTTP).
+
 ## 0.1.51 — 2026-11-02 (branche `sudf`) — P4 lots 1 et 2 : entretien et sous-titres karaoké
 
 Détail : `docs/sudf/P4-montage-ux.md`.

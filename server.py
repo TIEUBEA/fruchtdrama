@@ -14,7 +14,8 @@ import refusal
 import quotas
 import power
 import maintenance
-VERSION='0.1.51'
+import series
+VERSION='0.1.52'
 import sys
 import traceback
 
@@ -683,6 +684,10 @@ def store_script(j,s):
     if s.get('production_id') and s['production_id']!=j['id']:raise ValueError('Ce scénario appartient à une autre production')
     validate_script(s,j['config']['scene_count']);editorial.validate(s,j,STATE['jobs'])
     j['script']=s; j['characters']=copy.deepcopy(s['characters']); j['scenes']=copy.deepcopy(s['scenes']); j['title']=s['title']; j['stage']='characters'; j['status']='running'
+    previous=job_by(j.get('series',{}).get('previous')) if j.get('series') else None
+    if previous:
+        reused=series.inherit(j,previous,job_dir(previous),job_dir(j))
+        if reused:event(j,'Série : images de référence reprises de la partie précédente pour '+', '.join(reused)+' (aucune image repayée).')
     d=job_dir(j); (d/'scenario.json').write_text(json.dumps(s,ensure_ascii=False,indent=2),'utf-8'); (d/'description.txt').write_text(s['description'],'utf-8'); event(j,'Scénario structuré validé ; langue de création : '+j['config'].get('language','Deutsch (de-DE)')+'.')
 
 def apply_research(j,rows):
@@ -854,6 +859,9 @@ def render_job(id):
                 run_command([ff,'-y','-i',str(d/'final.mp4'),'-frames:v','1',str(d/'cover-frame.jpg')]);make_cover(d/'cover-frame.jpg',cover_path,j['script']['cover_title'])
         with LOCK:
             actual=job_by(id); actual['stage']='done'; actual['status']='done'; actual['final']=asset_url(actual,'final.mp4'); actual['cover']=asset_url(actual,cover_file); actual['qc']={'export':'Réussi : MP4 vertical 720 × 1280, audio normalisé.','subtitles':f'{aligned_count}/{len(j["scenes"])} scènes calées sur reconnaissance vocale ; autres timings estimés. Contrôle à l’écoute nécessaire.','lips':'Synchronisation labiale non vérifiée automatiquement.','duration':len(j['scenes'])*8}; event(actual,'Export terminé. Un contrôle visuel et audio reste nécessaire avant publication.'); save()
+            try:
+                kit=series.kit(actual);(d/'publication.json').write_text(json.dumps(kit,ensure_ascii=False,indent=2),'utf-8');(d/'publication.txt').write_text(series.kit_text(kit),'utf-8');actual['publication']=asset_url(actual,'publication.txt')
+            except Exception as e:log_error('Kit de publication',e)
     except Exception as e:
         with LOCK:
             j=job_by(id); j['status']='attention'; event(j,'Montage : '+str(e)); save()
@@ -1241,6 +1249,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         if j['status']!='waiting_account':raise ValueError('Aucun changement de compte en attente')
                         switch=j.pop('account_switch',{});j['status']='running'
                         event(j,'Changement de compte confirmé ('+str(switch.get('to'))+'). Le connecteur vérifie l’identité affichée avant tout envoi.');schedule(j)
+                    elif action=='continue_series':
+                        # P3-1: next part with the same cast; research is skipped (the story continues).
+                        if j['status']!='done':raise ValueError('Terminez d’abord cet épisode')
+                        part=series.part_of(j)+1;cfg={**copy.deepcopy(j['config']),'dry_run':False}
+                        nxt={'id':uid(),'title':j.get('title','Épisode')+' — partie '+str(part),'brief':series.brief(j,str(b.get('note',''))[:500]),'config':cfg,
+                             'series':{'id':j.get('series',{}).get('id',j['id']),'part':part,'previous':j['id']},'selected':j.get('selected') or {'title':j.get('title'),'url':''},
+                             'flow_profile':j.get('flow_profile'),'status':'running','stage':'script','created':now(),'updated':now(),'events':[],'candidates':[],'characters':[],'scenes':[]}
+                        for key in ('editorial_version','retention_version','hook_version','quality_version','cover_style','character_sheet'):
+                            if key in j:nxt[key]=j[key]
+                        STATE['jobs'].insert(0,nxt);event(nxt,'Partie '+str(part)+' créée à partir de « '+str(j.get('title'))+' » : mêmes personnages, scénario en cours.');schedule(nxt)
+                        save();return self.send_json({**public_state(),'created':nxt['id']})
                     elif action=='delete':
                         # P4-1: never a silent loss: the folder goes to data/corbeille, the state is backed up first.
                         if any(t['job']==id and t['status']=='claimed' for t in STATE['tasks']):raise ValueError('Une tâche est en cours : attendez sa fin')

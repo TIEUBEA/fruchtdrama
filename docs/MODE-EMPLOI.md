@@ -1,6 +1,6 @@
 # FruchtDrama — Mode d'emploi détaillé
 
-Version du logiciel décrite : **0.1.51** (branche `sudf`). Ce guide est mis à jour à chaque version ;
+Version du logiciel décrite : **0.1.52** (branche `sudf`). Ce guide est mis à jour à chaque version ;
 la section 12 liste, version par version, ce qui change pour vous.
 
 Sommaire
@@ -170,6 +170,11 @@ Bandeaux possibles :
 - **Contrôle qualité** : la production continue seule **seulement si** chaque clip a une transcription conforme au texte à 85 % au moins , aucun défaut technique et une revue visuelle sans réserve. Sinon « À vérifier » : écouter les clips, puis **J’ai écouté les dialogues…** ou **J’ai vérifié les réserves, continuer**, ou **Refaire** le clip fautif.
 - La synchronisation des lèvres et l'identité des voix ne sont jamais certifiées automatiquement : à écouter.
 
+## 10 bis. Séries et publication
+
+- **Écrire la suite (partie N)** (production terminée) : donne une idée facultative ; la partie suivante reprend les mêmes personnages et leurs images (rien n'est repayé pour eux) et lance directement le scénario.
+- **Kit de publication ↓** : titre, description, hashtags, premier commentaire et créneaux suggérés. Ce sont des hypothèses à tester avec vos statistiques.
+
 ## 11 bis. File de nuit (production sans surveillance)
 
 1. Sur chaque production à lancer : **Ajouter à la file de nuit** (pas en essai à blanc ; une histoire à relire doit d'abord être validée).
@@ -196,6 +201,7 @@ Quand ChatGPT refuse une image, le studio la redemande seul deux fois avec une f
 
 | Version | Ce qui change pour vous |
 |---|---|
+| 0.1.52 | **Écrire la suite** d'un épisode (série) ; **Kit de publication**. |
 | 0.1.51 | Sous-titres **karaoké** ; bouton **Supprimer…** (corbeille) ; rapport de panne et nettoyage dans Connexions. |
 | 0.1.50 | **File de nuit** (section 11 bis) ; reformulation automatique des images refusées ; limites ChatGPT/Claude apprises avec reprise automatique ; seuil de paroles 85 %. |
 | 0.1.49 | **Grok et Arena utilisables** (expérimental) ; comptes Grok/Arena dans Connexions ; changement de compte guidé et reprise automatique après limite. Recharger l'extension (nouvelles autorisations grok.com et lmarena.ai). |

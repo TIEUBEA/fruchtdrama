@@ -26,7 +26,8 @@ Objectif de la branche `sudf` : automatisation de bout en bout, fiable et écono
 | P5 lot 2 | Moteur vidéo par production, durées réelles QC/montage (P5-06) | Terminé | 0.1.48 |
 | P5 lots 3-5 | Comptes par moteur, changement de compte guidé, connecteurs Grok et Arena, essai à blanc (P5-07..11) | Terminé (à vérifier sur vrais comptes) | 0.1.49 | `P5-fenetre-moteurs.md` |
 | P2 lots 2-5 | Anti-refus, quotas appris, seuil 85 %, file de nuit, anti-veille | Terminé | 0.1.50 | `P2-automatisation.md` |
-| P3 | Séries/parties, dix idées, kit publication, veille, 16:9 | À faire | | rapport `00-SYNTHESE.md` |
+| P3 lot 1 | Séries (suite, personnages réutilisés), kit de publication | Terminé | 0.1.52 | `P3-croissance.md` |
+| P3 suite | Séries/parties, dix idées, kit publication, veille, 16:9 | À faire | | rapport `00-SYNTHESE.md` |
 | P4 lots 1-2 | Corbeille, purge, rapport de panne, karaoké | Terminé | 0.1.51 | `P4-montage-ux.md` |
 | P4 suite | Transitions ffmpeg, sous-titres karaoké, contrôle hauteur de voix, rapport de panne, purge `state.json`, suppression de production | À faire | | rapport `00-SYNTHESE.md` |
 
@@ -52,7 +53,7 @@ Décision du propriétaire pour le contrôle qualité automatique (02/11/2026) :
 ## 5. Lancer les vérifications
 
 ```bash
-python3 -m unittest discover -s tests -p 'test_*.py'      # 226 tests à la 0.1.51
+python3 -m unittest discover -s tests -p 'test_*.py'      # 230 tests à la 0.1.52
 for f in tests/*.cjs; do node "$f" || echo "ÉCHEC $f"; done  # 26 suites JS (dont Chromium réel)
 python3 -m py_compile server.py errors.py quality.py editorial.py
 for f in extension/*.js web/app.js; do node --check "$f"; done

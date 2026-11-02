@@ -1,4 +1,4 @@
-# FruchtDrama — édition locale à partager, 0.1.51
+# FruchtDrama — édition locale à partager, 0.1.52
 
 Cette archive contient uniquement le logiciel. Aucun compte, crédit, session Chrome, code d'appairage, historique ou production du fournisseur de la copie n'est inclus. Les captures et modèles de couverture provenant de son compte sont exclus ; les nouvelles couvertures utilisent les consignes de style du logiciel et vos propres scènes.
 
