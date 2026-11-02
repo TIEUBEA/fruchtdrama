@@ -1,6 +1,6 @@
 # FruchtDrama — Mode d'emploi détaillé
 
-Version du logiciel décrite : **0.1.50** (branche `sudf`). Ce guide est mis à jour à chaque version ;
+Version du logiciel décrite : **0.1.51** (branche `sudf`). Ce guide est mis à jour à chaque version ;
 la section 12 liste, version par version, ce qui change pour vous.
 
 Sommaire
@@ -137,6 +137,7 @@ Studio → **Nouvelle production** :
 | Modèle vidéo Flow | Omni 12 crédits, Lite 10, Fast 20, Quality 100 par clip (Ultra : Lite 5, Fast 10). Le coût affiché dans Flow est vérifié avant tout envoi. |
 | Relire et corriger l'histoire avant de payer les images | **Recommandé** au début : la production s'arrête pour que vous relisiez les dialogues. |
 | Essai à blanc des clips Flow | **Recommandé pour le premier essai** : tout est préparé dans Flow mais rien n'est envoyé, aucun crédit consommé. |
+| Sous-titres karaoké | Coché par défaut : chaque mot s'allume en jaune quand il est dit. Décocher pour des sous-titres classiques. |
 | Profil Flow / coût prévu | Le compte à utiliser et le coût attendu par clip. |
 
 Cliquer **Créer la production**. Le studio enchaîne : Recherche → Scénario → Personnages → Scènes → Clips Flow → Contrôle qualité → Couverture → Montage → Prêt.
@@ -187,11 +188,15 @@ Quand ChatGPT refuse une image, le studio la redemande seul deux fois avec une f
 - **Problème de dépendances** : relancer Installer.cmd.
 - **Badge « Connecteur à configurer »** : vérifier l'appairage et la case « Autoriser les tâches » dans l'onglet Passerelle.
 - **Sauvegarder** : copier le dossier `data\` (vos productions et réglages). Ne jamais le partager.
+- **Supprimer une production** : bouton **Supprimer…** ; son dossier part dans `data\corbeille` (pour la récupérer, le redéplacer dans `data\jobs` et restaurer la dernière copie de `data\sauvegardes`).
+- **Rapport de panne** : Connexions → **Assistance et entretien** → **Copier un rapport de panne**, puis le coller dans votre message d'assistance (aucun secret dedans).
+- **Nettoyer l'historique** : même panneau ; une copie est gardée.
 
 ## 12. Nouveautés d'utilisation par version
 
 | Version | Ce qui change pour vous |
 |---|---|
+| 0.1.51 | Sous-titres **karaoké** ; bouton **Supprimer…** (corbeille) ; rapport de panne et nettoyage dans Connexions. |
 | 0.1.50 | **File de nuit** (section 11 bis) ; reformulation automatique des images refusées ; limites ChatGPT/Claude apprises avec reprise automatique ; seuil de paroles 85 %. |
 | 0.1.49 | **Grok et Arena utilisables** (expérimental) ; comptes Grok/Arena dans Connexions ; changement de compte guidé et reprise automatique après limite. Recharger l'extension (nouvelles autorisations grok.com et lmarena.ai). |
 | 0.1.48 | Nouveau champ **Moteur vidéo** à la création (Flow seul actif pour l'instant). Recharger l'extension après mise à jour. |

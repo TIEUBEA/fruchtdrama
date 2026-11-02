@@ -9,6 +9,26 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 Prochain : P3 (séries, idées, kit de publication, veille, 16:9) et P4 (montage avancé, sous-titres karaoké, rapport de panne). Voir `docs/sudf/REPRISE.md`.
 
+## 0.1.51 — 2026-11-02 (branche `sudf`) — P4 lots 1 et 2 : entretien et sous-titres karaoké
+
+Détail : `docs/sudf/P4-montage-ux.md`.
+
+### Ajouté
+- **Supprimer une production** (bouton « Supprimer… ») : dossier déplacé dans `data/corbeille`, récupérable ; copie de l'état prise avant ; refusé pendant une tâche, un montage ou avec un clip Flow incertain.
+- **Nettoyer l'historique** (Connexions → Assistance et entretien, et au démarrage) : anciennes tâches et journaux trop longs purgés, copie de sauvegarde gardée dans `data/sauvegardes`.
+- **Rapport de panne copiable** sans jeton, code d'appairage ni adresse e-mail (`/api/report`).
+- **Sous-titres karaoké** : chaque mot s'allume en jaune au moment où il est prononcé ; option cochée par défaut à la création.
+
+### Corrigé
+- L'alignement des sous-titres n'était plus calé pour des clips de plus de 8 s (Arena) : il suit maintenant la durée réelle du clip.
+- Test navigateur : attente fixe remplacée par une attente conditionnelle (échec intermittent sous charge).
+
+### Mode d'emploi
+- Sections 8, 10, 11 et 12 de `docs/MODE-EMPLOI.md`.
+
+### Tests
+- `test_p4_maintenance.py`, `test_p4_karaoke.py` (montage ffmpeg réel avec karaoké).
+
 ## 0.1.50 — 2026-11-02 (branche `sudf`) — P2 lots 2 à 5 : automatisation sans surveillance
 
 Détail : `docs/sudf/P2-automatisation.md` (P2-05 à P2-12).

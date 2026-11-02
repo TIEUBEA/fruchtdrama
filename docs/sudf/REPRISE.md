@@ -27,7 +27,8 @@ Objectif de la branche `sudf` : automatisation de bout en bout, fiable et écono
 | P5 lots 3-5 | Comptes par moteur, changement de compte guidé, connecteurs Grok et Arena, essai à blanc (P5-07..11) | Terminé (à vérifier sur vrais comptes) | 0.1.49 | `P5-fenetre-moteurs.md` |
 | P2 lots 2-5 | Anti-refus, quotas appris, seuil 85 %, file de nuit, anti-veille | Terminé | 0.1.50 | `P2-automatisation.md` |
 | P3 | Séries/parties, dix idées, kit publication, veille, 16:9 | À faire | | rapport `00-SYNTHESE.md` |
-| P4 | Transitions ffmpeg, sous-titres karaoké, contrôle hauteur de voix, rapport de panne, purge `state.json`, suppression de production | À faire | | rapport `00-SYNTHESE.md` |
+| P4 lots 1-2 | Corbeille, purge, rapport de panne, karaoké | Terminé | 0.1.51 | `P4-montage-ux.md` |
+| P4 suite | Transitions ffmpeg, sous-titres karaoké, contrôle hauteur de voix, rapport de panne, purge `state.json`, suppression de production | À faire | | rapport `00-SYNTHESE.md` |
 
 Avancement global estimé : environ 75 % (P0, P1, P2, P5 faits ; restent P3, P4 et la vérification réelle). Ordre décidé par le propriétaire : P5 (fenêtre unique + moteurs Grok/Arena) avant la suite de P2.
 
@@ -51,7 +52,7 @@ Décision du propriétaire pour le contrôle qualité automatique (02/11/2026) :
 ## 5. Lancer les vérifications
 
 ```bash
-python3 -m unittest discover -s tests -p 'test_*.py'      # 214 tests à la 0.1.50
+python3 -m unittest discover -s tests -p 'test_*.py'      # 226 tests à la 0.1.51
 for f in tests/*.cjs; do node "$f" || echo "ÉCHEC $f"; done  # 26 suites JS (dont Chromium réel)
 python3 -m py_compile server.py errors.py quality.py editorial.py
 for f in extension/*.js web/app.js; do node --check "$f"; done
@@ -75,6 +76,7 @@ changent souvent, seuls les tests sur fixtures DOM existent. Commencer par un **
 | `engine_accounts.py` | Comptes Grok/Arena, limites par compte, rotation (P5-07/08) |
 | `extension/engine-video.js` | Connecteurs Grok Imagine et LMArena (P5-09/10) |
 | `refusal.py`, `quotas.py`, `power.py` | Anti-refus, limites apprises, anti-veille (P2) |
+| `maintenance.py` | Corbeille, purge, sauvegardes, rapport de panne (P4-1) |
 | `errors.py` | Types d'échec (P2-01) |
 | `quality.py` | Contrôle technique, transcription, revue visuelle |
 | `editorial.py` | Validation éditoriale du scénario |

@@ -91,8 +91,10 @@ def analyse(j,folder):
     report['status']='review_required' if report['hard_errors'] or report['warnings'] else 'pass'
     return report
 
-def caption_events(scene,speech,offset,max_words=4,max_chars=30):
-    """Anchor script words to ASR matches, interpolating unmatched words explicitly."""
+def caption_events(scene,speech,offset,max_words=4,max_chars=30,length=8,karaoke=False):
+    """Anchor script words to ASR matches, interpolating unmatched words explicitly.
+
+    karaoke=True (P4-2): each caption carries ASS \\kf tags so every word lights up when it is spoken."""
     if not speech or speech.get('match',0)<.8:return None
     import captions
     original=' '.join(x['text'] for x in scene['dialogue']).split()
@@ -107,7 +109,7 @@ def caption_events(scene,speech,offset,max_words=4,max_chars=30):
         for k in range(size):
             i=owners[a+k];word=heard[heard_owners[b+k]]
             start,end=float(word['start']),float(word['end'])
-            if not 0<=start<end<=8:return None
+            if not 0<=start<end<=length:return None
             if i in anchors:start,end=min(start,anchors[i][0]),max(end,anchors[i][1])
             anchors[i]=(start,end)
     if not original or len(anchors)/len(original)<.8:return None
@@ -118,13 +120,24 @@ def caption_events(scene,speech,offset,max_words=4,max_chars=30):
         previous=max((x for x in anchors if x<i),default=-1)
         following=min((x for x in anchors if x>i),default=len(original))
         left=anchors[previous][1] if previous>=0 else 0
-        right=anchors[following][0] if following<len(original) else 7.9
+        right=anchors[following][0] if following<len(original) else length-.1
         if right<=left:return None
         step=(right-left)/(following-previous-1)
         spans.append((left+step*(i-previous-1),left+step*(i-previous)))
     if any(spans[i][0]<spans[i-1][1]-.05 for i in range(1,len(spans))):return None
-    return [(offset+spans[start][0],offset+spans[start+len(chunk)-1][1],' '.join(chunk))
-            for start,chunk in captions.chunks(original,max_words,max_chars)]
+    if not karaoke:
+        return [(offset+spans[start][0],offset+spans[start+len(chunk)-1][1],' '.join(chunk))
+                for start,chunk in captions.chunks(original,max_words,max_chars)]
+    clean=lambda w:re.sub(r'[\\{}\n]','',w)
+    events=[]
+    for start,chunk in captions.chunks(original,max_words,max_chars):
+        tagged=[];cursor=spans[start][0]
+        for k,word in enumerate(chunk):
+            a,b=spans[start+k]
+            pause='{\\k%d}'%round((a-cursor)*100) if a>cursor+.01 else ''  # silence before the word
+            tagged.append(pause+'{\\kf%d}%s'%(max(1,round((b-a)*100)),clean(word)));cursor=b
+        events.append((offset+spans[start][0],offset+spans[start+len(chunk)-1][1],' '.join(tagged)))
+    return events
 
 
 def visual_prompt(j):

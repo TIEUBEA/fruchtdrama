@@ -63,8 +63,8 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   assert.equal((await (await fetch(base+'/api/state')).json()).jobs[0].title,'Histoire QA');
 
   // 4. Navigation with unsaved changes asks for confirmation.
-  await evaluate(`document.querySelector('nav [data-page="guide"]').click()`);await sleep(300);
-  assert.ok(dialogs.some(m=>m.includes('ne sont pas enregistrées')),'confirmation before discarding');
+  await evaluate(`document.querySelector('nav [data-page="guide"]').click()`);
+  await waitFor(()=>dialogs.some(m=>m.includes('ne sont pas enregistrées')),5000,'confirmation before discarding');
   await evaluate(`document.querySelector('nav [data-page="studio"]').click()`);
   await waitFor(()=>evaluate("!!document.querySelector('#scriptReview')"),10000,'retour éditeur');
 

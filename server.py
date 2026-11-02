@@ -13,6 +13,8 @@ import engine_accounts
 import refusal
 import quotas
 import power
+import maintenance
+VERSION='0.1.51'
 import sys
 import traceback
 
@@ -804,7 +806,7 @@ def render_job(id):
         if not ff: raise RuntimeError('ffmpeg introuvable. Installe ffmpeg et relance le studio.')
         aligned_count=0
         caption_size,caption_words=(48,4) if j.get('retention_version')==1 else (38,5)
-        ass=['[Script Info]','ScriptType: v4.00+','PlayResX: 720','PlayResY: 1280','[V4+ Styles]','Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',f'Style: Default,Arial,{caption_size},&H00FFFFFF,&H0000FFFF,&H00141414,&H70000000,-1,0,0,0,100,100,0,0,1,3,1,2,55,55,160,1','[Events]','Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text']
+        ass=['[Script Info]','ScriptType: v4.00+','PlayResX: 720','PlayResY: 1280','[V4+ Styles]','Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',f'Style: Default,Arial,{caption_size},&H00FFFFFF,&H0000FFFF,&H00141414,&H70000000,-1,0,0,0,100,100,0,0,1,3,1,2,55,55,160,1',f'Style: Karaoke,Arial,{caption_size},&H0000FFFF,&H00FFFFFF,&H00141414,&H70000000,-1,0,0,0,100,100,0,0,1,3,1,2,55,55,160,1','[Events]','Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text']
         def stamp(s): return f'{int(s//3600)}:{int(s//60)%60:02}:{int(s)%60:02}.{int(s%1*100):02}'
         start=0.0
         for i,s in enumerate(j['scenes']):
@@ -819,10 +821,14 @@ def render_job(id):
             run_command(args)
             speech=(j.get('quality_report',{}).get('clips',[])[i].get('speech') if j.get('quality_version')==1 and i<len(j.get('quality_report',{}).get('clips',[])) else None)
             offset=start;start+=length
-            aligned=quality.caption_events(s,speech,offset,caption_words,30) if speech else None
+            karaoke=bool(j['config'].get('karaoke'))
+            aligned=quality.caption_events(s,speech,offset,caption_words,30,length,karaoke) if speech else None
             if aligned:
                 aligned_count+=1
                 for a,b,text in aligned:
+                    if karaoke:
+                        # Words are already cleaned by caption_events; the \\kf tags must survive.
+                        ass.append(f'Dialogue: 0,{stamp(a)},{stamp(b)},Karaoke,,0,0,0,,{text}');continue
                     text=text.replace('\\','').replace('{','').replace('}','').replace('\n',' ')
                     ass.append(f'Dialogue: 0,{stamp(a)},{stamp(b)},Default,,0,0,0,,{text}')
                 continue
@@ -894,6 +900,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         try:
             self.local(); path=urllib.parse.urlparse(self.path).path
             with LOCK:
+                if path=='/api/report':
+                    # P4-1: copiable failure report, without token, pairing code or e-mail addresses.
+                    if self.headers.get('Sec-Fetch-Site')=='cross-site': return self.send_json({'error':'Accès local requis'},403)
+                    return self.send_bytes(maintenance.report(STATE,DATA,VERSION,now()).encode(),'text/plain; charset=utf-8')
                 if path=='/api/state':
                     # Cross-origin fetches cannot read the pairing code.
                     if self.headers.get('Sec-Fetch-Site')=='cross-site': return self.send_json({'error':'Accès local requis'},403)
@@ -1144,6 +1154,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     elif action=='stop':
                         n['active']=False;night_log('File de nuit arrêtée : la production en cours continue, les suivantes attendent.')
                     else:raise ValueError('Action inconnue')
+                elif path=='/api/maintenance/purge':
+                    maintenance.backup_state(DATA,STATE);result=maintenance.purge(STATE,time.time());save()
+                    return self.send_json({**public_state(),'purge':result})
                 elif path=='/api/flow-auto':
                     STATE['settings']['flow_auto']=bool(b.get('enabled'))
                 elif path=='/api/job':
@@ -1158,6 +1171,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     cfg['language']=creation_language(cfg.get('language','Deutsch (de-DE)'))
                     cfg['review_script']=bool(b.get('config',{}).get('review_script',False))
                     cfg['dry_run']=bool(b.get('config',{}).get('dry_run',False))
+                    cfg['karaoke']=bool(b.get('config',{}).get('karaoke',True))
                     requested_query=str(b.get('config',{}).get('query','')).strip()
                     # An omitted or untouched German default follows the chosen language.
                     cfg['query']=RESEARCH_QUERIES[cfg['language']] if not requested_query or requested_query in RESEARCH_QUERIES.values() else requested_query[:200]
@@ -1227,6 +1241,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         if j['status']!='waiting_account':raise ValueError('Aucun changement de compte en attente')
                         switch=j.pop('account_switch',{});j['status']='running'
                         event(j,'Changement de compte confirmé ('+str(switch.get('to'))+'). Le connecteur vérifie l’identité affichée avant tout envoi.');schedule(j)
+                    elif action=='delete':
+                        # P4-1: never a silent loss: the folder goes to data/corbeille, the state is backed up first.
+                        if any(t['job']==id and t['status']=='claimed' for t in STATE['tasks']):raise ValueError('Une tâche est en cours : attendez sa fin')
+                        if j['status']=='rendering':raise ValueError('Montage en cours : attendez sa fin')
+                        if uncertain_clip_tasks(j):raise ValueError(uncertain_message(j))
+                        maintenance.backup_state(DATA,STATE)
+                        if id in night()['ids']:night_drop(j,'supprimée')
+                        target=maintenance.trash_job(DATA,id)
+                        STATE['jobs'].remove(j);STATE['tasks']=[t for t in STATE['tasks'] if t['job']!=id]
+                        save();return self.send_json({**public_state(),'trashed':target.name})
                     elif action=='provider':
                         if b.get('provider') not in ('chatgpt','claude'): raise ValueError('IA inconnue')
                         j['config']['provider']=b['provider']; event(j,'IA de scénario modifiée ; médias conservés.')
@@ -1237,6 +1261,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 def recover_after_restart():
     with LOCK:
+        try:
+            # P4-1: bounded state, with a copy kept before any cleanup.
+            maintenance.backup_state(DATA,STATE);maintenance.purge(STATE,time.time())
+        except Exception as e:log_error('Purge au démarrage',e)
         # Never automatically resend an ambiguous generation after a restart.
         for t in STATE['tasks']:
             if t['status']=='claimed':
