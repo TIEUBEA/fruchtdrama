@@ -137,6 +137,18 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   assert.equal(await waitFor(()=>evaluate(`document.querySelector('#createDialog').open&&document.querySelector('#createForm [name=source_url]').value`),5000,'collage'),'https://www.tiktok.com/@x/video/77');
   assert.ok(await evaluate(`[...document.querySelectorAll('nav small')].map(x=>x.textContent).join('|').includes('les vidéos virales')`),'nav subtitles');
   await evaluate(`document.querySelector('#createDialog').close()`);
+  // 12 a. Atelier-like site cards: six sites, Re-check queues a request, default language follows into the form.
+  await evaluate(`document.querySelector('[data-page="connections"]').click()`);
+  await waitFor(()=>evaluate(`document.querySelectorAll('.site-card').length===6`),10000,'cartes des sites');
+  assert.ok(await evaluate(`document.querySelector('.site-card').innerText.includes('NÉCESSAIRE')`));
+  await evaluate(`document.querySelector('[data-sites-check]').click()`);
+  await waitFor(async()=>(await (await fetch(base+'/api/state')).json()).bridge_requests?.some(r=>r.type==='check'),5000,'revérification demandée');
+  await evaluate(`document.querySelector('[data-default-language="English (en-US)"]').click()`);
+  await waitFor(async()=>(await (await fetch(base+'/api/state')).json()).settings.language==='English (en-US)',5000,'langue');
+  await waitFor(()=>evaluate(`document.querySelector('[data-default-language="English (en-US)"]').classList.contains('primary')`),5000,'langue affichée');
+  await evaluate(`document.querySelector('[data-action="new"]').click()`);
+  assert.equal(await waitFor(()=>evaluate(`document.querySelector('#createDialog').open&&document.querySelector('#createForm [name=language]').value`),5000,'langue préremplie'),'English (en-US)');
+  await evaluate(`document.querySelector('#createDialog').close()`);
   // 12. Accounts like the Atelier: one form for every platform, tables per platform; no emoji icons anywhere.
   await evaluate(`document.querySelector('nav [data-page="connections"]').click()`);
   await waitFor(()=>evaluate(`document.querySelectorAll('[data-account-tab]').length===6&&!!document.querySelector('table.accounts')`),10000,'tableaux de comptes');

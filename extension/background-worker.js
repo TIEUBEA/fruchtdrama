@@ -252,12 +252,21 @@ async function prepareNewFlowProject(task,tab,cfg){
  task.payload.flow_route.url=url;delete task.payload.flow_route.new_project;
  return prepared;
 }
+// Owner requests from "Mes comptes": open a site in the FruchtDrama window, or re-check every site.
+async function handleRequests(cfg){
+ const requests=await call('/api/bridge/requests?client='+encodeURIComponent(cfg.client));
+ for(const r of requests||[]){
+  if(r.type==='open'&&FruchtSites.list[r.site]){const tab=await FruchtWorkspace.createTab(chrome,{url:FruchtSites.list[r.site].url,active:true});await chrome.windows.update(tab.windowId,{focused:true}).catch(()=>{});}
+  if(r.type==='check'){const sites=await FruchtSites.check(chrome,FruchtWorkspace);await call('/api/bridge/sites',{client:cfg.client,sites});}
+ }
+}
 async function poll(){
  if(busy)return;busy=true;let claimed=null;let cfg;
  try{
   cfg=await chrome.storage.local.get(null);
   if(!cfg.client||!cfg.token)return;
   if(cfg.activeTask){await checkActive(cfg.activeTask);return;}
+  if(cfg.enabled)try{await handleRequests(cfg);}catch(e){recordBackgroundError(e);}
   if(globalThis.FruchtChats&&!await FruchtChats.closeCompleted(chrome))return;
   // A browser/worker restart can lose the active pointer, but not its binding.
   const bound=Object.values(cfg.scenarioTabs||{}).find(a=>a.pending&&a.client===cfg.client&&Date.now()-a.startedAt<20*60*1000);

@@ -30,6 +30,7 @@ STEPS = ['research', 'script', 'characters', 'images', 'clips', 'quality', 'cove
 LABELS = {'research':'Recherche', 'script':'Scénario', 'characters':'Personnages', 'images':'Scènes', 'clips':'Animation Flow', 'quality':'Contrôle qualité', 'cover':'Couverture', 'edit':'Montage', 'done':'Terminé'}
 CREATION_LANGUAGES=('Deutsch (de-DE)','Français (fr-FR)','English (en-US)')
 # Default research query per creation language (same values as the web form).
+SITES=('chatgpt','flow','tiktok','grok','arena','claude')
 RESEARCH_QUERIES={'Deutsch (de-DE)':'KI Früchte Geschichten deutsch','Français (fr-FR)':'histoires fruits IA français','English (en-US)':'AI fruit drama stories English'}
 
 def creation_language(value):
@@ -936,6 +937,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
         try:
             self.local(); path=urllib.parse.urlparse(self.path).path
             with LOCK:
+                if path=='/api/bridge/requests':
+                    # Owner requests waiting for the browser gateway (open a site, re-check accounts).
+                    if not self.auth_bridge():return self.send_json({'error':'Appairage requis'},401)
+                    c=STATE['clients'].get(urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get('client',[''])[0])
+                    if not c or c.get('disabled') or c.get('role') not in ('all','flow'):return self.send_json([])
+                    pending=STATE.get('bridge_requests',[]);STATE['bridge_requests']=[];save();return self.send_json(pending)
                 if path=='/api/report':
                     # P4-1: copiable failure report, without token, pairing code or e-mail addresses.
                     if self.headers.get('Sec-Fetch-Site')=='cross-site': return self.send_json({'error':'Accès local requis'},403)
@@ -1203,6 +1210,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     if not c:raise ValueError('Passerelle inconnue')
                     if any(t['status']=='claimed' and t.get('client')==b.get('id') for t in STATE['tasks']) and b.get('disabled'):raise ValueError('Cette passerelle exécute une tâche : attendez sa fin')
                     c['disabled']=bool(b.get('disabled'))
+                elif path=='/api/sites':
+                    action=b.get('action')
+                    if action=='open' and b.get('site') not in SITES:raise ValueError('Site inconnu')
+                    if action not in ('open','check'):raise ValueError('Action inconnue')
+                    queue=STATE.setdefault('bridge_requests',[])
+                    if not any(r==({'type':action,'site':b.get('site')} if action=='open' else {'type':'check'}) for r in queue):
+                        queue.append({'type':'open','site':b['site']} if action=='open' else {'type':'check'})
+                    if action=='check':STATE.setdefault('sites',{})['_requested']=now()
+                elif path=='/api/bridge/sites':
+                    c=STATE['clients'].get(b.get('client'))
+                    if not c:raise ValueError('Passerelle inconnue')
+                    sites={k:{'connected':bool(v.get('connected')),'email':str(v.get('email') or '')[:120] or None,'challenge':bool(v.get('challenge')),'checked':now()} for k,v in (b.get('sites') or {}).items() if k in SITES}
+                    STATE['sites']=sites;save();return self.send_json({'ok':True})
+                elif path=='/api/settings':
+                    if 'language' in b:STATE['settings']['language']=creation_language(b['language'])
                 elif path=='/api/flow-auto':
                     STATE['settings']['flow_auto']=bool(b.get('enabled'))
                 elif path=='/api/job':
