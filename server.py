@@ -349,15 +349,15 @@ def schedule(j):
             j['status']='waiting_review';event(j,'Histoire prête : relisez et corrigez les dialogues, puis validez pour lancer les images.');return
         if j.get('character_sheet')==1 and len(j['characters'])>1 and not any(c.get('file') for c in j['characters']):
             # P1-2: one image for the whole cast instead of one paid image per character.
-            add_task(j,'chat_image',{'provider':'chatgpt','prompt':sheet_prompt(j),'attachments':[]},'characters');return
+            add_task(j,'chat_image',{'provider':'chatgpt','prompt':sheet_prompt(j)+correction(j.get('corrections',{}).get('characters')),'attachments':[]},'characters');return
         for c in j['characters']:
             if not c.get('file'):
-                add_task(j,'chat_image',{'provider':'chatgpt','prompt':c['image_prompt']+' Create one full-body character reference image. No text. Premium 3D animation, 9:16.','attachments':[]},f"character:{c['id']}"); return
+                add_task(j,'chat_image',{'provider':'chatgpt','prompt':c['image_prompt']+' Create one full-body character reference image. No text. Premium 3D animation, 9:16.'+correction(j.get('corrections',{}).get('character:'+c['id'])),'attachments':[]},f"character:{c['id']}"); return
         j['stage']='images'; schedule(j)
     elif step=='images':
         for i,s in enumerate(j['scenes']):
             if not s.get('image'):
-                add_task(j,'chat_image',{'provider':'chatgpt','prompt':s['image_prompt']+' Use attached character references. Same identity and outfit, no text, 9:16.','attachments':image_assets(j)},f'image:{i}'); return
+                add_task(j,'chat_image',{'provider':'chatgpt','prompt':s['image_prompt']+' Use attached character references. Same identity and outfit, no text, 9:16.'+correction(j.get('corrections',{}).get(f'image:{i}')),'attachments':image_assets(j)},f'image:{i}'); return
         j['stage']='clips'; schedule(j)
     elif step=='clips':
         for i,s in enumerate(j['scenes']):
@@ -372,7 +372,7 @@ def schedule(j):
                 cast='\n'.join(c['id']+': '+c['appearance']+' Voice: '+c['voice'] for c in j['characters'])
                 dialog='\n'.join(x['speaker']+': '+x['text'] for x in s['dialogue'])
                 language=j['config'].get('language','Deutsch (de-DE)')
-                prompt=f"One continuous shot, 8 seconds, portrait 9:16. No text, no music. Spoken language ONLY: {language}. Natural native voices in the requested language, no translation or extra narration. Preserve identity.\n{cast}\n{s['video_prompt']}\nExact dialogue in this order; only the named speaker moves their lips, all others stay silent:\n{dialog}"
+                prompt=f"One continuous shot, 8 seconds, portrait 9:16. No text, no music. Spoken language ONLY: {language}. Natural native voices in the requested language, no translation or extra narration. Preserve identity.\n{cast}\n{s['video_prompt']}\nExact dialogue in this order; only the named speaker moves their lips, all others stay silent:\n{dialog}"+correction(j.get('corrections',{}).get(f'clip:{i}'))
                 payload={'prompt':prompt,'attachments':[asset_url(j,flow_reference(j,s['image']))],'cost':cost,'balance':p['balance'],'seconds':8,**({'model':j['config']['flow_model'],'resolution':j['config'].get('flow_resolution','720p')} if j['config'].get('flow_model') else {})}
                 target=flow_accounts.route(p) if STATE.get('settings',{}).get('flow_auto') else None
                 if target:
@@ -398,7 +398,7 @@ def schedule(j):
                 style_file=job_dir(j)/'cover-style-reference.png'
                 if not style_file.exists():shutil.copyfile(template,style_file)
                 attachments.append(asset_url(j,style_file.name))
-            add_task(j,'chat_image',{'provider':'chatgpt','prompt':cover_prompt(j),'attachments':attachments},'cover');return
+            add_task(j,'chat_image',{'provider':'chatgpt','prompt':cover_prompt(j)+correction(j.get('corrections',{}).get('cover')),'attachments':attachments},'cover');return
         j['stage']='edit';j['status']='rendering';event(j,'Montage local démarré.');start_render(j['id'])
     elif step=='edit':
         # A failed or interrupted montage is retried locally; no media is regenerated.
@@ -419,6 +419,61 @@ def uncertain_message(j):
     scenes=sorted({int(t['slot'].split(':')[1])+1 for t in uncertain_clip_tasks(j)})
     return ('Envoi Flow incertain pour la scène '+', '.join(map(str,scenes))+' : le clip a peut-être déjà été généré et facturé. '
             'Laissez la passerelle le récupérer, importez-le, ou confirmez qu’il n’existe pas dans Flow avant toute nouvelle génération.')
+
+def correction(note):
+    return f'\nOwner correction for this new attempt (apply it, keep everything else unchanged): {note}' if note else ''
+
+REDO_STAGES={'characters':'characters','character':'characters','image':'images','clip':'clips','cover':'cover'}
+
+def redo(j,slot,note='',include_clip=False):
+    """P1-3: regenerate one media with an owner correction; earlier media and files are kept."""
+    slot=str(slot);note=' '.join(str(note or '').split())[:500]
+    kind=slot.split(':')[0]
+    if kind not in REDO_STAGES or not re.fullmatch(r'(?:cover|characters|character:[a-z][a-z0-9_]{0,24}|image:\d+|clip:\d+)',slot):raise ValueError('Élément à refaire inconnu')
+    if j.get('status')=='rendering' or j['id'] in BUSY:raise ValueError('Montage en cours : attendez sa fin avant de refaire un élément')
+    if any(t['job']==j['id'] and t['status'] in ('queued','claimed') for t in STATE['tasks']):raise ValueError('Une tâche est en cours sur cette production : attendez sa fin')
+    if not j.get('scenes'):raise ValueError('Aucun scénario : rien à refaire')
+    scenes=j['scenes'];history=j.setdefault('redo_history',[])
+    def remember(item,file):
+        history.append({'slot':item,'file':file,'note':note,'at':now()})
+        if item.startswith('clip:'):
+            # Earlier failed submissions for this scene were resolved by the received clip: never resurrect them as uncertain.
+            for t in STATE['tasks']:
+                if t['job']==j['id'] and t['slot']==item and t.get('kind')=='flow_video' and t['status']=='failed':t.setdefault('acknowledged',now())
+    if kind in ('image','clip'):
+        index=int(slot.split(':')[1])
+        if index>=len(scenes):raise ValueError('Scène inconnue')
+        scene=scenes[index]
+    if kind in ('characters','character'):
+        targets=j['characters'] if kind=='characters' else [c for c in j['characters'] if c['id']==slot.split(':')[1]]
+        if not targets:raise ValueError('Personnage inconnu')
+        if any(x.get('image') for x in scenes):raise ValueError('Les scènes utilisent déjà ces personnages : refaites plutôt les images concernées')
+        if not any(c.get('file') for c in targets):raise ValueError('Rien à refaire : élément pas encore créé')
+        for c in targets:
+            if c.get('file'):remember('character:'+c['id'],c.pop('file'))
+        if kind=='characters':j.pop('character_sheet_file',None)
+    elif kind=='image':
+        if not scene.get('image'):raise ValueError('Rien à refaire : image pas encore créée')
+        if scene.get('clip') and not include_clip:raise ValueError('Le clip de cette scène a été animé depuis cette image : refaites l’image et le clip ensemble')
+        remember(slot,scene.pop('image'))
+        if scene.get('clip'):remember(f'clip:{index}',scene.pop('clip'))
+        if include_clip:j.setdefault('corrections',{})[f'clip:{index}']=note
+    elif kind=='clip':
+        if not scene.get('clip'):raise ValueError('Rien à refaire : clip pas encore créé')
+        remember(slot,scene.pop('clip'))
+    else:
+        if not j.get('cover_file'):raise ValueError('Rien à refaire : couverture pas encore créée')
+        remember('cover',j.pop('cover_file'));j.pop('cover',None)
+    if note:j.setdefault('corrections',{})[slot]=note
+    else:j.get('corrections',{}).pop(slot,None)
+    # Downstream results are now stale: re-check, re-cover nothing paid twice, re-render.
+    for key in ('final','qc'):j.pop(key,None)
+    order=['characters','images','clips','quality','cover','edit','done']
+    target=REDO_STAGES[kind]
+    if j.get('stage') not in order or order.index(target)<order.index(j['stage']):j['stage']=target
+    j['status']='running'
+    event(j,'À refaire : '+slot+(' — correction : '+note if note else '')+'. Fichier précédent conservé.')
+    schedule(j)
 
 def schedule_quality(j):
     folder=job_dir(j);key=quality.fingerprint(j,folder);report=j.get('quality_report',{})
@@ -948,6 +1003,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         for t in STATE['tasks']:
                             if t['job']==id and t['status'] in ('queued','claimed'): t['status']='cancelled'
                         store_script(j,b['script']); schedule(j)
+                    elif action=='redo':
+                        redo(j,b.get('slot',''),b.get('note',''),bool(b.get('include_clip')))
                     elif action=='edit_script':
                         edit_script(j,b.get('script',{}))
                     elif action=='approve_script':

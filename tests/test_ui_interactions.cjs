@@ -10,14 +10,19 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
 
 (async()=>{
  const temp=fs.mkdtempSync(path.join(os.tmpdir(),'frucht-ui-')),data=path.join(temp,'data');fs.mkdirSync(data);
- const now=new Date().toISOString(),job='c1b2c3d4e5f60718';
+ const now=new Date().toISOString(),job='c1b2c3d4e5f60718',done='d1b2c3d4e5f60718';
  const scenes=[0,1].map(i=>({characters:['orange'],meaning:'Moment '+i,image_prompt:'p',video_prompt:'v',dialogue:[{speaker:'orange',text:'Hallo'}]}));
  fs.writeFileSync(path.join(data,'state.json'),JSON.stringify({version:1,token:'t',pair_code:'abcd1234',profiles:[],clients:{},tasks:[],
   settings:{provider:'chatgpt',language:'Deutsch (de-DE)',scene_count:4,clip_seconds:8,flow_model:'gemini_omni_flash',flow_resolution:'720p',flow_cost:12,query:'q',daily_budget:50},
   jobs:[{id:job,title:'Histoire QA',brief:'b',stage:'characters',status:'waiting_review',created:now,updated:now,events:[],candidates:[],flow_profile:null,
    config:{provider:'chatgpt',scene_count:2,language:'Deutsch (de-DE)',flow_model:'gemini_omni_flash',flow_cost:12,review_script:true},
    characters:[{id:'orange',name:'Oma',appearance:'a',voice:'v',image_prompt:'p'}],scenes,
-   script:{title:'Histoire QA',cover_title:'WER FÄHRT?',description:'Beschreibung',characters:[{id:'orange',name:'Oma',appearance:'a',voice:'v',image_prompt:'p'}],scenes}}]}));
+   script:{title:'Histoire QA',cover_title:'WER FÄHRT?',description:'Beschreibung',characters:[{id:'orange',name:'Oma',appearance:'a',voice:'v',image_prompt:'p'}],scenes}},
+  {id:done,title:'Épisode terminé QA',brief:'b',stage:'done',status:'done',created:now,updated:now,events:[],candidates:[],flow_profile:null,
+   config:{provider:'chatgpt',scene_count:2,language:'Deutsch (de-DE)',flow_model:'gemini_omni_flash',flow_cost:12},
+   characters:[{id:'orange',name:'Oma',appearance:'a',voice:'v',image_prompt:'p',file:'ref.png'}],scenes:scenes.map((x,i)=>({...x,image:'scene'+i+'.png',clip:'clip'+i+'.mp4'})),
+   cover_file:'cover.png',cover:'/media/'+done+'/cover.png',final:'/media/'+done+'/final.mp4',
+   script:{title:'Épisode terminé QA',cover_title:'WER?',description:'d',characters:[],scenes}}]}));
  const port=await freePort(),base='http://127.0.0.1:'+port;
  const server=spawn('python3',[path.join(root,'server.py')],{cwd:root,env:{...process.env,FRUCHT_DATA:data,FRUCHT_PORT:String(port)},stdio:'ignore'});
  let chrome;
@@ -30,7 +35,7 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   const target=await waitFor(async()=>(await (await fetch(`http://127.0.0.1:${devtools}/json/list`)).json()).find(t=>t.type==='page'),10000,'onglet');
   const ws=new WebSocket(target.webSocketDebuggerUrl);await new Promise((ok,ko)=>{ws.onopen=ok;ws.onerror=ko;});
   let id=0;const pending=new Map();const dialogs=[];
-  ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.id&&pending.has(m.id)){pending.get(m.id)(m);pending.delete(m.id);}if(m.method==='Page.javascriptDialogOpening'){dialogs.push(m.params.message);send('Page.handleJavaScriptDialog',{accept:true});}};
+  ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.id&&pending.has(m.id)){pending.get(m.id)(m);pending.delete(m.id);}if(m.method==='Page.javascriptDialogOpening'){dialogs.push(m.params.message);send('Page.handleJavaScriptDialog',{accept:true,...(m.params.type==='prompt'?{promptText:'plus de lumière'}:{})});}};
   const send=(method,params={})=>new Promise(r=>{const n=++id;pending.set(n,r);ws.send(JSON.stringify({id:n,method,params}));});
   const evaluate=async expression=>{const r=await send('Runtime.evaluate',{expression,awaitPromise:true,returnByValue:true});if(r.result?.exceptionDetails)throw Error(JSON.stringify(r.result.exceptionDetails));return r.result?.result?.value;};
   await send('Page.enable');await send('Runtime.enable');
@@ -64,7 +69,16 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   const state=await waitFor(async()=>{const s=await (await fetch(base+'/api/state')).json();return s.jobs[0].script_approved&&s;},10000,'validation');
   assert.equal(state.jobs[0].status,'running');assert.deepEqual(state.tasks.filter(t=>t.status==='queued').map(t=>t.slot),['character:orange']);
   await waitFor(()=>evaluate("!document.querySelector('#scriptReview')"),10000,'éditeur fermé');
+  // 6. Redo the cover of a finished episode: prompt for a correction, final invalidated, only the cover task queued.
+  await send('Page.navigate',{url:base+'/#job='+done});
+  await waitFor(()=>evaluate(`!!document.querySelector('[data-redo="cover"]')`),15000,'bouton refaire');
+  assert.ok(await evaluate(`!!document.querySelector('[data-redo="clip:0"]')&&!!document.querySelector('[data-redo="image:1"][data-has-clip="1"]')`),'redo buttons on scenes');
+  await evaluate(`document.querySelector('[data-redo="cover"]').click()`);
+  const redone=await waitFor(async()=>{const s=await (await fetch(base+'/api/state')).json();const j=s.jobs.find(x=>x.id===done);return j.stage==='cover'&&{s,j};},10000,'refaire couverture');
+  assert.ok(dialogs.some(m=>m.startsWith('Refaire la couverture')),'correction asked');
+  assert.equal(redone.j.final,undefined);assert.equal(redone.j.corrections.cover,'plus de lumière');
+  assert.deepEqual(redone.s.tasks.filter(t=>t.job===done&&t.status==='queued').map(t=>t.slot),['cover']);
   assert.deepEqual(errors,[]);ws.close();
-  console.log('Interactions navigateur : correction conservée au rafraîchissement, enregistrement, refus visible, confirmation de sortie et validation vérifiés.');
+  console.log('Interactions navigateur : correction conservée au rafraîchissement, enregistrement, refus visible, confirmation de sortie, validation et « Refaire la couverture » vérifiés.');
  }finally{cleanup();}
 })().catch(e=>{console.error(e);process.exitCode=1;});
