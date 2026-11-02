@@ -25,3 +25,11 @@
 ## En cas de blocage
 
 Mes comptes → **Assistance et entretien** → **Copier un rapport de panne** (aucun secret dedans) et l'envoyer avec une capture de l'onglet concerné.
+
+## Résultat du test réel de bout en bout (02/11/2026, 20 h 29)
+
+Production « La boîte des deux jardins » (lien TikTok, français, Google Flow Omni Flash, compte arnaudchewa65) :
+histoire validée, feuille de personnages, 4 images, essai à blanc Flow réussi, puis 4 vrais clips (48 crédits),
+contrôle local OK (paroles 86,7 / 100 / 88,2 / 96,3 %), revue visuelle avec réserves acceptées par le propriétaire,
+couverture, montage : **MP4 720 × 1280, 32 s, sous-titres karaoké, kit de publication**. Exemple dans le dossier du bureau
+`Exemple-video-reelle/`.
