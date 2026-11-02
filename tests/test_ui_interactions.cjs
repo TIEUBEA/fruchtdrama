@@ -18,7 +18,7 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
    config:{provider:'chatgpt',scene_count:2,language:'Deutsch (de-DE)',flow_model:'gemini_omni_flash',flow_cost:12,review_script:true},
    characters:[{id:'orange',name:'Oma',appearance:'a',voice:'v',image_prompt:'p'}],scenes,
    script:{title:'Histoire QA',cover_title:'WER FÄHRT?',description:'Beschreibung',characters:[{id:'orange',name:'Oma',appearance:'a',voice:'v',image_prompt:'p'}],scenes}},
-  {id:done,title:'Épisode terminé QA',brief:'b',stage:'done',status:'done',created:now,updated:now,events:[],candidates:[{url:'https://www.tiktok.com/@oma/video/42',title:'Oma Orange verliert ihren Kuchen',views:1200000,metric_kind:'views',age_days:2,score:600000,basis:'vues/jour'}],flow_profile:null,
+  {id:done,title:'Épisode terminé QA',brief:'b',stage:'done',status:'done',created:now,updated:now,events:[],candidates:[{url:'https://www.tiktok.com/@oma/video/4242424242',title:'Oma Orange verliert ihren Kuchen',views:1200000,metric_kind:'views',age_days:2,score:600000,basis:'vues/jour'}],flow_profile:null,
    config:{provider:'chatgpt',scene_count:2,language:'Deutsch (de-DE)',flow_model:'gemini_omni_flash',flow_cost:12},
    characters:[{id:'orange',name:'Oma',appearance:'a',voice:'v',image_prompt:'p',file:'ref.png'}],scenes:scenes.map((x,i)=>({...x,image:'scene'+i+'.png',clip:'clip'+i+'.mp4'})),
    cover_file:'cover.png',cover:'/media/'+done+'/cover.png',final:'/media/'+done+'/final.mp4',
@@ -123,13 +123,18 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   await evaluate(`(()=>{const sel=document.querySelector('#createForm [name=video_engine]');sel.value='flow';sel.dispatchEvent(new Event('change',{bubbles:true}));return true})()`);
   assert.ok(await evaluate(`[...document.querySelectorAll('#createForm .flow-only')].every(x=>!x.hidden)`),'Flow fields back');
   // 11. Atelier-like interface: dark theme by default, Le Filon, creation from a found video.
-  assert.ok(await evaluate(`document.body.classList.contains('dark')`),'dark theme by default');
-  await evaluate(`document.querySelector('#theme').click()`);assert.ok(await evaluate(`!document.body.classList.contains('dark')`),'light theme on demand');
+  assert.ok(await evaluate(`!document.body.classList.contains('dark')`),'light theme by default');
+  await evaluate(`document.querySelector('#theme').click()`);assert.ok(await evaluate(`document.body.classList.contains('dark')`),'dark theme on demand');
   await evaluate(`document.querySelector('#theme').click()`);
   await evaluate(`document.querySelector('nav [data-page="filon"]').click()`);
   await waitFor(()=>evaluate(`document.querySelector('.filon-card')?.innerText.includes('1.2 M')`),10000,'Filon');
+  assert.equal(await evaluate(`document.querySelector('.filon-card iframe.filon-player')?.src.split('?')[0]`),'https://www.tiktok.com/player/v1/4242424242','real TikTok player in the card');
   await evaluate(`document.querySelector('.filon-card [data-action="new"]').click()`);
-  assert.equal(await waitFor(()=>evaluate(`document.querySelector('#createDialog').open&&document.querySelector('#createForm [name=source_url]').value`),5000,'formulaire prérempli'),'https://www.tiktok.com/@oma/video/42');
+  assert.equal(await waitFor(()=>evaluate(`document.querySelector('#createDialog').open&&document.querySelector('#createForm [name=source_url]').value`),5000,'formulaire prérempli'),'https://www.tiktok.com/@oma/video/4242424242');
+  // Paste a TikTok link anywhere on the page: the creation dialog opens, prefilled.
+  await evaluate(`document.querySelector('#createDialog').close()`);
+  await evaluate(`(()=>{const d=new DataTransfer();d.setData('text/plain','regarde https://www.tiktok.com/@x/video/77 !');document.body.dispatchEvent(new ClipboardEvent('paste',{clipboardData:d,bubbles:true}));return true})()`);
+  assert.equal(await waitFor(()=>evaluate(`document.querySelector('#createDialog').open&&document.querySelector('#createForm [name=source_url]').value`),5000,'collage'),'https://www.tiktok.com/@x/video/77');
   assert.ok(await evaluate(`[...document.querySelectorAll('nav small')].map(x=>x.textContent).join('|').includes('les vidéos virales')`),'nav subtitles');
   await evaluate(`document.querySelector('#createDialog').close()`);
   // 12. Accounts like the Atelier: one form for every platform, tables per platform; no emoji icons anywhere.
@@ -138,6 +143,7 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   await evaluate(`(()=>{const f=document.querySelector('#engineAccountForm');f.engine.value='flow';f.engine.dispatchEvent(new Event('change',{bubbles:true}));f.email.value='flow.qa@x.com';f.balance.value='88';f.requestSubmit();return true})()`);
   const flow=await waitFor(async()=>(await (await fetch(base+'/api/state')).json()).profiles.find(p=>p.label==='flow.qa@x.com'),10000,'compte Flow ajouté');
   assert.equal(flow.balance,88);
+  await evaluate(`document.querySelector('[data-account-tab="flow"]').click()`);
   await waitFor(()=>evaluate(`document.querySelector('table.accounts').innerText.includes('flow.qa@x.com')`),10000,'compte Flow affiché');
   const emoji=/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B50}\u{2B06}\u{2190}-\u{21FF}\u{25A0}-\u{25FF}]/u;
   for(const pageName of ['filon','studio','connections','library','guide']){

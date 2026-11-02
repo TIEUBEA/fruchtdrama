@@ -59,3 +59,6 @@ body.dark .brand{color:#f3f4f7}@media(max-width:900px){.add-account,.account-sum
 .add-inline{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}.add-inline h3{margin-bottom:10px}
 .hero{min-height:0}.hero-copy{padding:22px 30px}.hero h2{font-size:24px;margin:8px 0}.hero-art img{width:130px;height:130px}.hero .floating{display:none}
 header [data-page].active{color:#8b6cf0}
+.filon-player{position:absolute;inset:0;width:100%;height:100%;border:0;pointer-events:none;background:#000}
+.filon-hover{inset:auto 0 0 0;align-content:end;background:linear-gradient(transparent,#0b0d12e6 35%);padding:40px 12px 12px;grid-template-columns:1fr 1fr}.filon-hover .primary{grid-column:1/-1}.filon-hover .secondary{font-size:13px;padding:8px}
+.filon-stats{z-index:1}.filon-rank{z-index:2}.filon-hover{z-index:3}
