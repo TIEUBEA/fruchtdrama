@@ -48,7 +48,7 @@ def main():
             time.sleep(.25)
     if not server_matches():
         raise RuntimeError('Demarrage impossible. Consultez data/server-errors.log.')
-    webbrowser.open(ADDRESS)
+    if not os.environ.get('FRUCHT_NO_BROWSER'):webbrowser.open(ADDRESS)  # Linux script opens the dedicated Chrome instead
     print('Studio ouvert. Laissez le PC et Chrome en marche pendant la production.')
 
 
