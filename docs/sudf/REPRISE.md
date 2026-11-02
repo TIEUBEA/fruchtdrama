@@ -77,7 +77,7 @@ Décision du propriétaire pour le contrôle qualité automatique (02/11/2026) :
 
 ```bash
 python3 -m unittest discover -s tests -p 'test_*.py'      # 162 tests à la 0.1.46
-for f in tests/*.cjs; do node "$f" || echo "ÉCHEC $f"; done  # 24 suites JS
+for f in tests/*.cjs; do node "$f" || echo "ÉCHEC $f"; done  # 23 suites JS
 python3 -m py_compile server.py errors.py quality.py editorial.py
 for f in extension/*.js web/app.js; do node --check "$f"; done
 git diff --check
