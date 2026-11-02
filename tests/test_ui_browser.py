@@ -16,7 +16,7 @@ class BrowserInterfaceTests(unittest.TestCase):
     def setUpClass(cls):
         cls.temp = tempfile.TemporaryDirectory(); data = pathlib.Path(cls.temp.name) / 'data'; data.mkdir()
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-        cls.job = 'a1b2c3d4e5f60718'
+        cls.job = 'a1b2c3d4e5f60718'; cls.review = 'b1b2c3d4e5f60718'
         scenes = [{'characters': ['orange'], 'meaning': 'm', 'image_prompt': 'i', 'video_prompt': 'v', 'dialogue': [{'speaker': 'orange', 'text': 'Hallo'}]} for _ in range(2)]
         state = {'version': 1, 'token': 'test-token', 'pair_code': 'abcd1234', 'profiles': [{'id': 'flow', 'label': 'flow@example.com', 'balance': 40}],
                  'clients': {'c1': {'id': 'c1', 'label': 'Navigateur QA', 'role': 'all', 'ai_provider': 'both', 'seen': now}},
@@ -24,7 +24,11 @@ class BrowserInterfaceTests(unittest.TestCase):
                  'jobs': [{'id': cls.job, 'title': 'Épisode QA', 'brief': 'b', 'stage': 'clips', 'status': 'attention', 'created': now, 'updated': now,
                            'config': {'provider': 'chatgpt', 'scene_count': 2, 'language': 'Deutsch (de-DE)', 'flow_model': 'gemini_omni_flash', 'flow_cost': 12},
                            'events': [{'at': now, 'text': 'Redémarrage : génération précédente à vérifier avant de réessayer.'}],
-                           'candidates': [], 'characters': [{'id': 'orange', 'name': 'Oma', 'appearance': 'a', 'voice': 'v', 'image_prompt': 'p'}], 'scenes': scenes, 'flow_profile': 'flow'}],
+                           'candidates': [], 'characters': [{'id': 'orange', 'name': 'Oma', 'appearance': 'a', 'voice': 'v', 'image_prompt': 'p'}], 'scenes': scenes, 'flow_profile': 'flow'},
+                          {'id': cls.review, 'title': 'Histoire à relire QA', 'brief': 'b', 'stage': 'characters', 'status': 'waiting_review', 'created': now, 'updated': now,
+                           'config': {'provider': 'chatgpt', 'scene_count': 2, 'language': 'Deutsch (de-DE)', 'flow_model': 'gemini_omni_flash', 'flow_cost': 12, 'review_script': True},
+                           'events': [], 'candidates': [], 'flow_profile': 'flow', 'characters': [{'id': 'orange', 'name': 'Oma', 'appearance': 'a', 'voice': 'v', 'image_prompt': 'p'}], 'scenes': scenes,
+                           'script': {'title': 'Histoire à relire QA', 'cover_title': 'WER FÄHRT?', 'description': 'Beschreibung QA', 'characters': [], 'scenes': scenes}}],
                  'tasks': [{'id': 't1', 'job': cls.job, 'kind': 'flow_video', 'slot': 'clip:1', 'status': 'failed', 'profile': 'flow', 'payload': {'prompt': 'x'},
                             'reservation': {'profile': 'flow', 'amount': 12, 'refunded': False}}]}
         (data / 'state.json').write_text(json.dumps(state), 'utf-8')
@@ -61,9 +65,18 @@ class BrowserInterfaceTests(unittest.TestCase):
         self.assertIn('data-confirm-no-clip="clip:1"', html); self.assertIn('Scène 2 : aucun clip dans Flow', html)
         self.assertIn('Redémarrage : génération précédente à vérifier', html)
 
+    def test_story_review_editor_before_images(self):
+        html = self.dom('#job=' + self.review)
+        self.assertIn('Relisez l’histoire avant de payer les images', html); self.assertIn('Histoire à relire', html)
+        self.assertIn('data-speaker="orange"', html); self.assertIn('value="Hallo"', html)
+        self.assertIn('value="WER FÄHRT?"', html); self.assertIn('data-action="approveScript"', html)
+
+    def test_create_form_offers_review_option(self):
+        self.assertIn('name="review_script"', self.dom())
+
     def test_public_state_hides_token_and_lists_uncertain_scenes(self):
         state = json.load(urllib.request.urlopen(f'http://127.0.0.1:{self.port}/api/state', timeout=5))
-        self.assertNotIn('token', state); self.assertEqual(state['jobs'][0]['uncertain_clips'], [1])
+        self.assertNotIn('token', state); self.assertEqual(state['jobs'][0]['uncertain_clips'], [1]); self.assertEqual(state['jobs'][1]['uncertain_clips'], [])
 
 
 if __name__ == '__main__':

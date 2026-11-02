@@ -1,5 +1,11 @@
 # Journal des modifications
 
+## Non publié (branche `sudf`)
+
+### Ajouté
+- Relecture et correction de l’histoire avant de payer les images (option à la création, P1-1). Détail : `docs/sudf/P1-economies.md`.
+- Test d’interaction navigateur piloté par le protocole DevTools (`tests/test_ui_interactions.cjs`).
+
 ## 0.1.44 — 2026-11-02 (branche `sudf`)
 
 Fiabilité de la chaîne de production (P0). Détail des exigences : `docs/sudf/P0-fiabilite.md`.

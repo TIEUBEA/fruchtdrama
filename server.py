@@ -323,7 +323,7 @@ Recompose a tight chest-up confrontation with clearly visible expressive faces: 
 Bold clean condensed sans serif headline: white first line, warm yellow emphasis on second line, restrained dark outline and shadow. Place text in the lower middle BELOW faces, inside the central 80 percent width; leave the top 15 percent and bottom 20 percent free of important text for cropping. Never cover eyes. No large dark banner across faces. No logos, watermarks, arrows, interface, fake evidence, extra characters or sensational claims not present in the story. Generate the finished image now, not a tutorial."""
 
 def schedule(j):
-    if j['status'] in ('paused','attention','done','rendering','waiting_research','waiting_script','waiting_credit'): return
+    if j['status'] in ('paused','attention','done','rendering','waiting_research','waiting_script','waiting_credit','waiting_review'): return
     if any(t['job']==j['id'] and t['status'] in ('queued','claimed') for t in STATE['tasks']): return
     step=j['stage']
     if step=='research':
@@ -336,6 +336,9 @@ def schedule(j):
         if j.get('editorial_version')==2:editorial.direction(j,STATE['jobs'])
         add_task(j,'chat_text',{'provider':j['config']['provider'],'prompt':script_prompt(j),'scene_count':j['config']['scene_count']},'script')
     elif step=='characters':
+        if review_pending(j):
+            # Nothing is paid before the owner has read the story (P1-1).
+            j['status']='waiting_review';event(j,'Histoire prête : relisez et corrigez les dialogues, puis validez pour lancer les images.');return
         for c in j['characters']:
             if not c.get('file'):
                 add_task(j,'chat_image',{'provider':'chatgpt','prompt':c['image_prompt']+' Create one full-body character reference image. No text. Premium 3D animation, 9:16.','attachments':[]},f"character:{c['id']}"); return
@@ -451,6 +454,38 @@ def run_quality(id,key):
                 actual['status']='attention' if actual['status']!='paused' else 'paused';event(actual,'Contrôle qualité interrompu : '+str(e));save()
     finally:QUALITY_BUSY.discard(id)
 
+
+def review_pending(j):
+    return bool(j.get('config',{}).get('review_script')) and not j.get('script_approved')
+
+def script_editable(j):
+    return j.get('stage')=='characters' and not j.get('script_approved') and not any(c.get('file') for c in j.get('characters',[])) \
+        and not any(t['job']==j['id'] and t['status'] in ('queued','claimed') for t in STATE['tasks'])
+
+def edit_script(j,changes):
+    """Owner corrections of title, cover, description and dialogue before any image is paid."""
+    if not script_editable(j):raise ValueError('L’histoire ne peut plus être modifiée : les images ont commencé ou une tâche est en cours')
+    draft=copy.deepcopy(j['script'])
+    for key in ('title','cover_title','description'):
+        if key in changes:draft[key]=str(changes[key]).strip()
+    edited=changes.get('scenes')
+    if edited is not None:
+        if not isinstance(edited,list) or len(edited)!=len(draft['scenes']):raise ValueError('Une correction par scène est attendue')
+        for scene,change in zip(draft['scenes'],edited):
+            lines=change.get('dialogue') if isinstance(change,dict) else None
+            if not isinstance(lines,list):raise ValueError('Dialogue de scène attendu')
+            scene['dialogue']=[{'speaker':str(x.get('speaker','')),'text':' '.join(str(x.get('text','')).split())} for x in lines if isinstance(x,dict)]
+    if draft==j['script']:return False
+    validate_script(draft,j['config']['scene_count'])
+    if j.get('editorial_version')==2 and j.get('retention_version')==1:
+        for i,scene in enumerate(draft['scenes']):
+            if len(scene['dialogue'])>2 or sum(len(x['text'].split()) for x in scene['dialogue'])>20:
+                raise ValueError(f'Scène {i+1} : deux répliques et 20 mots au plus pour tenir dans le clip de huit secondes')
+    j['script']=draft;j['title']=draft['title']
+    for scene,source in zip(j['scenes'],draft['scenes']):scene['dialogue']=copy.deepcopy(source['dialogue'])
+    d=job_dir(j);(d/'scenario.json').write_text(json.dumps(draft,ensure_ascii=False,indent=2),'utf-8');(d/'description.txt').write_text(draft['description'],'utf-8')
+    event(j,'Histoire corrigée par le propriétaire avant les images.')
+    return True
 
 def store_script(j,s):
     if s.get('production_id') and s['production_id']!=j['id']:raise ValueError('Ce scénario appartient à une autre production')
@@ -846,6 +881,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     cfg['flow_cost']=int(b.get('config',{}).get('flow_cost',{'gemini_omni_flash':12,'veo_3_1_lite':10,'veo_3_1_fast':20,'veo_3_1_quality':100}[cfg['flow_model']]))
                     if cfg['flow_cost'] not in {'gemini_omni_flash':(12,), 'veo_3_1_lite':(10,5), 'veo_3_1_fast':(20,10), 'veo_3_1_quality':(100,)}[cfg['flow_model']]:raise ValueError('Coût incompatible avec le modèle Flow choisi. Le coût réel sera vérifié avant tout envoi.')
                     cfg['language']=creation_language(cfg.get('language','Deutsch (de-DE)'))
+                    cfg['review_script']=bool(b.get('config',{}).get('review_script',False))
                     requested_query=str(b.get('config',{}).get('query','')).strip()
                     # An omitted or untouched German default follows the chosen language.
                     cfg['query']=RESEARCH_QUERIES[cfg['language']] if not requested_query or requested_query in RESEARCH_QUERIES.values() else requested_query[:200]
@@ -897,6 +933,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         for t in STATE['tasks']:
                             if t['job']==id and t['status'] in ('queued','claimed'): t['status']='cancelled'
                         store_script(j,b['script']); schedule(j)
+                    elif action=='edit_script':
+                        edit_script(j,b.get('script',{}))
+                    elif action=='approve_script':
+                        if not review_pending(j) or j.get('stage')!='characters':raise ValueError('Aucune histoire en attente de validation')
+                        j['script_approved']=now();j['status']='running';event(j,'Histoire validée par le propriétaire : création des images lancée.');schedule(j)
                     elif action=='provider':
                         if b.get('provider') not in ('chatgpt','claude'): raise ValueError('IA inconnue')
                         j['config']['provider']=b['provider']; event(j,'IA de scénario modifiée ; médias conservés.')
