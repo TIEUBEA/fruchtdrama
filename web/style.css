@@ -22,3 +22,21 @@ body.dark .timeline .step{border-color:#3d424d;color:#9aa0ab}body.dark .timeline
 body.dark a{color:#c9b8ff}body.dark .stat-icon{background:#353947}
 body.dark .floating{background:#2b2e37;color:#e8e9ee;box-shadow:0 8px 30px #0006}body.dark .stat .stat-icon{background:#353947;color:#c9b8ff}body.dark .project-thumb{background:#353947}
 @media(min-width:821px){aside{width:270px}main{margin-left:270px}nav button{align-items:flex-start}nav button span{font-size:15px}}
+/* Professional finish: one line-icon set, wordmark, account tables. */
+.ico{flex:none;vertical-align:-3px}nav button i[data-icon]{display:inline-flex;margin-top:2px}nav button i .ico{width:20px;height:20px}
+.icon-button i{display:inline-flex}.icon-button .ico{width:20px;height:20px}
+.brand{font-size:26px;letter-spacing:-.5px;font-weight:800}.brand span{font-size:26px;position:static;color:#8b6cf0;left:0;top:0}
+.primary .ico,.secondary .ico{margin-right:2px}.primary{gap:10px}
+.stat-icon .ico{width:22px;height:22px}.empty-symbol .ico{width:26px;height:26px}.project-thumb .ico{width:24px;height:24px;color:#8b93a1}
+.asset-placeholder .ico{width:34px;height:34px;color:#a5b095}
+.account-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:20px}.account-summary .stat strong{font-size:26px}
+.account-block{margin-bottom:20px}.block-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+table.accounts{width:100%;border-collapse:collapse;margin-top:12px;font-size:15px}table.accounts th{text-align:left;font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;padding:10px 12px;border-bottom:1px solid var(--line)}
+table.accounts td{padding:14px 12px;border-bottom:1px solid var(--line);vertical-align:top}table.accounts td small{display:block;color:var(--muted);font-size:13px;margin-top:4px}
+table.accounts td.num{font-variant-numeric:tabular-nums;font-size:17px;font-weight:600}.row-actions{text-align:right;white-space:nowrap}.row-actions .secondary{margin-left:6px}
+.row-more{display:inline-block;margin:0 0 0 6px;padding:0;border:0;text-align:left;vertical-align:top}.row-more summary{display:inline-block;border:1px solid var(--line);border-radius:7px;padding:9px 13px;font-size:14px}.row-more[open]{display:block;margin-top:10px;padding:12px;border:1px solid var(--line);border-radius:9px;white-space:normal}
+.empty-row{color:var(--muted);text-align:center;padding:22px}.state{display:inline-block;font-size:13px;font-weight:600;padding:5px 10px;border-radius:20px}
+.state.ok{background:#e3f1dc;color:#2f6b2a}.state.bad{background:#fbe3e0;color:#9b3030}.state.warn{background:#fcefd9;color:#8a5a1c}.state.idle{background:#eceef1;color:#5f6670}
+.secondary.danger{color:#9b3030}.add-account{display:grid;grid-template-columns:1fr 2fr 1fr auto;gap:14px;align-items:end}.add-account label{margin:0}.pair-row{display:flex;gap:16px;align-items:center}
+body.dark .state.ok{background:#21402a;color:#9fdc9a}body.dark .state.bad{background:#4a2326;color:#f3a7a0}body.dark .state.warn{background:#4a3a1f;color:#f0c987}body.dark .state.idle{background:#353943;color:#c3c7cf}
+body.dark .brand{color:#f3f4f7}@media(max-width:900px){.add-account,.account-summary{grid-template-columns:1fr}table.accounts thead{display:none}table.accounts td{display:block;border:0;padding:6px 0}table.accounts tr{display:block;border-bottom:1px solid var(--line);padding:10px 0}.row-actions{text-align:left}}

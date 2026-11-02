@@ -14,7 +14,7 @@ L'installation n'achète aucun abonnement. Les générations consomment les quot
 
 ## Connecter vos comptes
 
-1. Dans **Connexions**, créer votre propre profil Flow et renseigner le solde réel. Aucun profil ne doit déjà exister au premier démarrage.
+1. Dans **Mes comptes**, créer votre propre profil Flow et renseigner le solde réel. Aucun profil ne doit déjà exister au premier démarrage.
 2. Dans Chrome, ouvrir `chrome://extensions`, activer **Mode développeur / Entwicklermodus**, puis **Charger l'extension non empaquetée / Entpackte Erweiterung laden**. Choisir le dossier **extension** de CETTE copie, après examen des permissions.
 3. Cliquer sur l'icône de l'extension : la **fenêtre FruchtDrama** s'ouvre. Tout s'y passe : studio, ChatGPT, Claude, TikTok, Flow et l'ouverture des comptes. Le premier onglet (épinglé) est la passerelle : y saisir le code d'appairage affiché par VOTRE studio, choisir le rôle « Recherche, IA et Flow » et cocher « Autoriser les tâches ». Un nouveau clic sur l'icône ramène la fenêtre au premier plan ; si elle est fermée, elle se rouvre d'elle-même à la tâche suivante.
 4. Vous connecter vous-même à ChatGPT, TikTok et Flow dans les profils Chrome appropriés. Claude est une option pour le scénario ; les images passent par ChatGPT. Aucun mot de passe ne doit être saisi dans le studio.

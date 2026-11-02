@@ -24,4 +24,4 @@
 
 ## En cas de blocage
 
-Connexions → **Assistance et entretien** → **Copier un rapport de panne** (aucun secret dedans) et l'envoyer avec une capture de l'onglet concerné.
+Mes comptes → **Assistance et entretien** → **Copier un rapport de panne** (aucun secret dedans) et l'envoyer avec une capture de l'onglet concerné.

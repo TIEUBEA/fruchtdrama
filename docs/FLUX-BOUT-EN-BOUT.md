@@ -11,8 +11,8 @@ quand vous lancez une production sans intervenir, et ce que vous devez préparer
 4. Cliquer sur l'icône : la **fenêtre FruchtDrama** s'ouvre (onglet Passerelle épinglé + Studio). Tout se passe dans cette fenêtre.
 5. Onglet Passerelle : code d'appairage (Studio → Connexions), rôle « Recherche, IA et Flow », **Appairer**, cocher **Autoriser les tâches**.
 6. Dans la fenêtre, se connecter soi-même à : ChatGPT, TikTok, Google Flow (et Grok / LMArena si utilisés).
-7. Flow : Connexions → profil avec solde réel ; ouvrir un projet Flow → Passerelle → **Mémoriser le compte Flow de cet onglet**. Répéter pour chaque compte Google (ajoutés au même profil Chrome). Cocher **Ouvrir Flow et passer au compte suivant automatiquement**.
-8. Grok / Arena (facultatif) : Connexions → **Comptes Grok et Arena** → adresse de chaque compte.
+7. Flow : Mes comptes → profil avec solde réel ; ouvrir un projet Flow → Passerelle → **Mémoriser le compte Flow de cet onglet**. Répéter pour chaque compte Google (ajoutés au même profil Chrome). Cocher **Ouvrir Flow et passer au compte suivant automatiquement**.
+8. Grok / Arena (facultatif) : Mes comptes → **Comptes Grok et Arena** → adresse de chaque compte.
 9. Chrome : autoriser les téléchargements multiples pour https://flow.google.com.
 10. **Premier essai : cocher « Essai à blanc »** pour vérifier les connecteurs sans rien dépenser.
 

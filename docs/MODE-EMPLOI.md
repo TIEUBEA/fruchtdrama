@@ -83,7 +83,7 @@ Si le message « Port 8840 utilisé par une autre installation » apparaît : un
 2. Une **nouvelle fenêtre** s'ouvre. **Tout se passe dans cette fenêtre** : le studio, ChatGPT, Claude, TikTok, Flow et l'ouverture des comptes. Elle contient :
    - un premier onglet épinglé **Passerelle** ;
    - l'onglet **Studio**.
-3. Dans le studio : menu **Connexions** → noter le **code d'appairage**.
+3. Dans le studio : menu **Mes comptes** → noter le **code d'appairage**.
 4. Dans l'onglet **Passerelle** :
    - coller le code d'appairage ;
    - nom du navigateur : par exemple « PC bureau » ;
@@ -105,23 +105,23 @@ Toujours **vous-même**, dans la fenêtre FruchtDrama. Le studio ne demande ni n
 **ChatGPT / Claude / TikTok** : ouvrir un onglet dans la fenêtre FruchtDrama, aller sur chatgpt.com (et claude.ai, tiktok.com), se connecter. C'est tout.
 
 **Un compte Flow**
-1. Studio → **Connexions** → créer un profil Flow, indiquer le **solde réel** de crédits.
+1. **Mes comptes** → créer un profil Flow, indiquer le **solde réel** de crédits.
 2. Dans la fenêtre FruchtDrama, ouvrir https://labs.google/fx/tools/flow, se connecter, ouvrir (ou créer) un projet.
 3. Onglet **Passerelle** → **Mémoriser le compte Flow de cet onglet**. Le dernier onglet Flow consulté est utilisé.
-4. Vérifier l'adresse e-mail affichée dans Connexions.
+4. Vérifier l'adresse e-mail affichée dans Mes comptes.
 
 **Grok Imagine et LMArena (expérimental)**
 1. Dans la fenêtre FruchtDrama, ouvrir https://grok.com/imagine (ou https://lmarena.ai) et se connecter soi-même.
-2. Studio → **Connexions** → section **Comptes Grok et Arena** : choisir le moteur, saisir l'**adresse** du compte (jamais de mot de passe), **Ajouter ce compte**. Répéter pour chaque compte, dans l'ordre d'utilisation voulu.
+2. **Mes comptes** → section **Comptes Grok et Arena** : choisir le moteur, saisir l'**adresse** du compte (jamais de mot de passe), **Ajouter ce compte**. Répéter pour chaque compte, dans l'ordre d'utilisation voulu.
 3. Quand un compte atteint sa limite, la production passe « Changement de compte » : dans l'onglet du site, se déconnecter, se connecter au compte indiqué dans le bandeau, puis cliquer **J'ai changé de compte**. Le connecteur vérifie le compte affiché avant d'envoyer.
-4. Si tous les comptes sont à leur limite : « Limite atteinte, reprise automatique » ; la production repart seule à l'heure indiquée. **Oublier la limite** (Connexions) force une nouvelle tentative.
+4. Si tous les comptes sont à leur limite : « Limite atteinte, reprise automatique » ; la production repart seule à l'heure indiquée. **Oublier la limite** (Mes comptes) force une nouvelle tentative.
 5. Toujours commencer par un **essai à blanc** : ces sites changent souvent et les connecteurs n'ont pas encore été vérifiés sur vos comptes.
 
 **Plusieurs comptes Flow dans la même fenêtre** (passage automatique quand les crédits s'épuisent)
 1. Dans la fenêtre FruchtDrama, menu du compte Google (photo en haut à droite d'une page Google) → **Ajouter un compte** ; répéter pour chaque compte.
 2. Pour chaque compte : ouvrir Flow avec ce compte (l'adresse contient `/u/0/`, `/u/1/`, `/u/2/`…), ouvrir un projet, puis **Mémoriser le compte Flow de cet onglet**.
-3. Dans Connexions, créer un profil par compte avec son solde réel.
-4. Dans Connexions, cocher **Ouvrir Flow et passer au compte suivant automatiquement**. Quand un compte n'a plus assez de crédits, le studio passe au suivant, dans la même fenêtre. Les clips déjà reçus sont conservés.
+3. Dans Mes comptes, créer un profil par compte avec son solde réel.
+4. Dans Mes comptes, cocher **Ouvrir Flow et passer au compte suivant automatiquement**. Quand un compte n'a plus assez de crédits, le studio passe au suivant, dans la même fenêtre. Les clips déjà reçus sont conservés.
 
 ## 8. Créer une production
 
@@ -133,7 +133,7 @@ Studio → **Nouvelle production** :
 | IA de scénario | ChatGPT ou Claude. Les images passent toujours par ChatGPT. |
 | Format | 4 scènes (32 s) pour commencer. |
 | Langue | Deutsch, Français ou English : dialogues, voix, sous-titres, couverture. |
-| Moteur vidéo | **Google Flow** (8 s par clip, crédits Flow). Grok Imagine (6 s) et LMArena (4 à 10 s) sont **expérimentaux** : essai à blanc d'abord ; comptes à enregistrer dans Connexions (section 7). La longueur des dialogues s'adapte au moteur. |
+| Moteur vidéo | **Google Flow** (8 s par clip, crédits Flow). Grok Imagine (6 s) et LMArena (4 à 10 s) sont **expérimentaux** : essai à blanc d'abord ; comptes à enregistrer dans Mes comptes (section 7). La longueur des dialogues s'adapte au moteur. |
 | Modèle vidéo Flow | Omni 12 crédits, Lite 10, Fast 20, Quality 100 par clip (Ultra : Lite 5, Fast 10). Le coût affiché dans Flow est vérifié avant tout envoi. |
 | Relire et corriger l'histoire avant de payer les images | **Recommandé** au début : la production s'arrête pour que vous relisiez les dialogues. |
 | Essai à blanc des clips Flow | **Recommandé pour le premier essai** : tout est préparé dans Flow mais rien n'est envoyé, aucun crédit consommé. |
@@ -151,7 +151,7 @@ Lien direct vers une production : `http://127.0.0.1:8840/#job=<identifiant>`.
 | En production | Le studio travaille. | Rien. Laisser la fenêtre FruchtDrama ouverte. |
 | Histoire à relire | Relecture demandée (option à la création). | Corriger les dialogues, **Enregistrer**, puis **Valider l’histoire et lancer les images**. |
 | En pause | Vous avez mis en pause, ou essai à blanc réussi. | **Reprendre**. Après un essai à blanc : désactiver l'essai, puis Reprendre. |
-| Crédits insuffisants | Aucun compte Flow n'a assez de crédits. | Mettre à jour le solde dans Connexions ou ajouter un compte. |
+| Crédits insuffisants | Aucun compte Flow n'a assez de crédits. | Mettre à jour le solde dans Mes comptes ou ajouter un compte. |
 | À vérifier | Un problème demande votre regard (voir bandeaux ci-dessous). | Lire le dernier message, corriger, **Reprendre**. |
 | Changement de compte | Un compte Grok/Arena a atteint sa limite. | Se connecter au compte indiqué dans l'onglet du site, puis **J'ai changé de compte**. |
 | Limite atteinte, reprise automatique | Tous les comptes du moteur sont à leur limite. | Rien : reprise seule à l'heure indiquée. Ou ajouter un compte. |
@@ -183,7 +183,7 @@ Bandeaux possibles :
 4. Pendant la file, Windows ne se met pas en veille (l'écran peut s'éteindre). Laisser le PC branché, Chrome et la fenêtre FruchtDrama ouverts.
 5. **Arrêter la file** : la production en cours continue, les suivantes attendent.
 
-Quand ChatGPT refuse une image, le studio la redemande seul deux fois avec une formulation adoucie (même style). Quand un service est à sa limite, la production attend et repart seule ; voir **Connexions → Limites apprises**.
+Quand ChatGPT refuse une image, le studio la redemande seul deux fois avec une formulation adoucie (même style). Quand un service est à sa limite, la production attend et repart seule ; voir **Mes comptes → Limites apprises**.
 
 ## 11. Arrêter, redémarrer, dépanner
 
@@ -194,7 +194,7 @@ Quand ChatGPT refuse une image, le studio la redemande seul deux fois avec une f
 - **Badge « Connecteur à configurer »** : vérifier l'appairage et la case « Autoriser les tâches » dans l'onglet Passerelle.
 - **Sauvegarder** : copier le dossier `data\` (vos productions et réglages). Ne jamais le partager.
 - **Supprimer une production** : bouton **Supprimer…** ; son dossier part dans `data\corbeille` (pour la récupérer, le redéplacer dans `data\jobs` et restaurer la dernière copie de `data\sauvegardes`).
-- **Rapport de panne** : Connexions → **Assistance et entretien** → **Copier un rapport de panne**, puis le coller dans votre message d'assistance (aucun secret dedans).
+- **Rapport de panne** : Mes comptes → **Assistance et entretien** → **Copier un rapport de panne**, puis le coller dans votre message d'assistance (aucun secret dedans).
 - **Nettoyer l'historique** : même panneau ; une copie est gardée.
 
 ## 12. Nouveautés d'utilisation par version
@@ -203,9 +203,9 @@ Quand ChatGPT refuse une image, le studio la redemande seul deux fois avec une f
 |---|---|
 | sudf-ui | Interface façon Atelier : **Le Filon**, **Créer une vidéo** d'un lien TikTok ou d'une idée, thème sombre (◐), police et images agrandies (clic pour agrandir). |
 | 0.1.52 | **Écrire la suite** d'un épisode (série) ; **Kit de publication**. |
-| 0.1.51 | Sous-titres **karaoké** ; bouton **Supprimer…** (corbeille) ; rapport de panne et nettoyage dans Connexions. |
+| 0.1.51 | Sous-titres **karaoké** ; bouton **Supprimer…** (corbeille) ; rapport de panne et nettoyage dans Mes comptes. |
 | 0.1.50 | **File de nuit** (section 11 bis) ; reformulation automatique des images refusées ; limites ChatGPT/Claude apprises avec reprise automatique ; seuil de paroles 85 %. |
-| 0.1.49 | **Grok et Arena utilisables** (expérimental) ; comptes Grok/Arena dans Connexions ; changement de compte guidé et reprise automatique après limite. Recharger l'extension (nouvelles autorisations grok.com et lmarena.ai). |
+| 0.1.49 | **Grok et Arena utilisables** (expérimental) ; comptes Grok/Arena dans Mes comptes ; changement de compte guidé et reprise automatique après limite. Recharger l'extension (nouvelles autorisations grok.com et lmarena.ai). |
 | 0.1.48 | Nouveau champ **Moteur vidéo** à la création (Flow seul actif pour l'instant). Recharger l'extension après mise à jour. |
 | 0.1.47 | L'icône ouvre la **fenêtre FruchtDrama** où tout se passe (section 6). Le panneau de l'extension devient l'onglet **Passerelle**. Plusieurs comptes Flow dans la même fenêtre (section 7). Recharger l'extension après mise à jour. |
 | 0.1.46 | Bandeau rouge **Action de votre part requise** (connexion, anti-robot). Un refus de ChatGPT sur une image est signalé en quelques secondes. |

@@ -9,6 +9,20 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 Prochain : P3 (séries, idées, kit de publication, veille, 16:9) et P4 (montage avancé, sous-titres karaoké, rapport de panne). Voir `docs/sudf/REPRISE.md`.
 
+## Branche `sudf-ui` — finition professionnelle et comptes façon Atelier (02/11/2026)
+
+### Ajouté
+- **Mes comptes** refait comme l'Atelier : synthèse (crédits Flow, comptes Grok/Arena disponibles, passerelles en ligne), un tableau par plateforme (compte, crédits, état, actions : Vérifier, Réglages, Retirer, Oublier la limite), un **formulaire unique « Ajouter un compte »** pour Flow, Grok et Arena, limites ChatGPT/Claude, passerelle et code d'appairage.
+- État « Solde bas » quand un compte Flow ne peut plus payer un clip.
+
+### Amélioré
+- **Aucune icône emoji** : un seul jeu d'icônes au trait (SVG, géométrie Lucide, licence ISC) pour la navigation, les boutons, les statistiques et les vignettes ; logo typographique « FruchtDrama ».
+- Durée de scène affichée selon le moteur (6 s Grok, 8 s Flow) au lieu de 8 s fixes.
+- Documentation : « Connexions » devient « Mes comptes ».
+
+### Tests
+- `test_ui_interactions.cjs` : ajout d'un compte Flow par le formulaire unique, tableaux par plateforme, aucune icône emoji sur les 5 pages, icônes de navigation SVG.
+
 ## Branche `sudf-ui` — interface façon Atelier (02/11/2026)
 
 ### Ajouté

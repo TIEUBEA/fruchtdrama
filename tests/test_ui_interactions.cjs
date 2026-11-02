@@ -131,6 +131,19 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   assert.equal(await waitFor(()=>evaluate(`document.querySelector('#createDialog').open&&document.querySelector('#createForm [name=source_url]').value`),5000,'formulaire prérempli'),'https://www.tiktok.com/@oma/video/42');
   assert.ok(await evaluate(`[...document.querySelectorAll('nav small')].map(x=>x.textContent).join('|').includes('les vidéos virales')`),'nav subtitles');
   await evaluate(`document.querySelector('#createDialog').close()`);
+  // 12. Accounts like the Atelier: one form for every platform, tables per platform; no emoji icons anywhere.
+  await evaluate(`document.querySelector('nav [data-page="connections"]').click()`);
+  await waitFor(()=>evaluate(`document.querySelectorAll('table.accounts').length>=4`),10000,'tableaux de comptes');
+  await evaluate(`(()=>{const f=document.querySelector('#engineAccountForm');f.engine.value='flow';f.engine.dispatchEvent(new Event('change',{bubbles:true}));f.email.value='flow.qa@x.com';f.balance.value='88';f.requestSubmit();return true})()`);
+  const flow=await waitFor(async()=>(await (await fetch(base+'/api/state')).json()).profiles.find(p=>p.label==='flow.qa@x.com'),10000,'compte Flow ajouté');
+  assert.equal(flow.balance,88);
+  await waitFor(()=>evaluate(`document.querySelector('table.accounts').innerText.includes('flow.qa@x.com')`),10000,'compte Flow affiché');
+  const emoji=/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B50}\u{2B06}\u{2190}-\u{21FF}\u{25A0}-\u{25FF}]/u;
+  for(const pageName of ['filon','studio','connections','library','guide']){
+   await evaluate(`document.querySelector('nav [data-page="${pageName}"]').click()`);await sleep(400);
+   const text=await evaluate('document.body.innerText');assert.ok(!emoji.test(text),'no emoji icon on '+pageName+': '+(text.match(emoji)||[])[0]);
+  }
+  assert.ok(await evaluate(`document.querySelectorAll('nav svg.ico').length===6`),'nav uses the line-icon set');
   assert.deepEqual(errors,[]);ws.close();
   console.log('Interactions navigateur : correction conservée au rafraîchissement, enregistrement, refus visible, confirmation de sortie, validation, « Refaire la couverture », changement de compte guidé, ajout d’un compte Grok, file de nuit, guide des nouveautés, formulaire par moteur, thème sombre, Filon et création depuis un lien vérifiés.');
  }finally{cleanup();}
