@@ -94,7 +94,15 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   const accounts=await waitFor(async()=>{const st=await (await fetch(base+'/api/state')).json();return st.engine_accounts?.length&&st.engine_accounts;},10000,'compte ajouté');
   assert.equal(accounts[0].email,'second@x.com');assert.equal(accounts[0].engine,'grok');
   await waitFor(()=>evaluate(`document.body.innerText.includes('second@x.com')`),10000,'compte affiché');
+  // 9. P2-10: add a production to the night queue, then start the queue from the studio page.
+  await send('Page.navigate',{url:base+'/#job='+job});
+  await waitFor(()=>evaluate(`!!document.querySelector('[data-night="add"]')`),15000,'bouton file de nuit');
+  await evaluate(`document.querySelector('[data-night="add"]').click()`);
+  await waitFor(async()=>(await (await fetch(base+'/api/state')).json()).night?.ids?.includes(job),10000,'ajout file de nuit');
+  await waitFor(()=>evaluate(`!!document.querySelector('[data-night="start"]')`),10000,'panneau file de nuit');
+  await evaluate(`document.querySelector('[data-night="start"]').click()`);
+  await waitFor(async()=>(await (await fetch(base+'/api/state')).json()).night?.active===true||(await (await fetch(base+'/api/state')).json()).night?.log?.some(x=>x.text.includes('démarrée')),10000,'file démarrée');
   assert.deepEqual(errors,[]);ws.close();
-  console.log('Interactions navigateur : correction conservée au rafraîchissement, enregistrement, refus visible, confirmation de sortie, validation, « Refaire la couverture », changement de compte guidé et ajout d’un compte Grok vérifiés.');
+  console.log('Interactions navigateur : correction conservée au rafraîchissement, enregistrement, refus visible, confirmation de sortie, validation, « Refaire la couverture », changement de compte guidé, ajout d’un compte Grok et file de nuit vérifiés.');
  }finally{cleanup();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

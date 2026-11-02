@@ -4,6 +4,16 @@ ROOT=pathlib.Path(__file__).resolve().parent
 sys.path.insert(0,str(ROOT))
 import engines
 
+# Owner decision (02/11/2026): automatic continuation only with >= 85 % speech match per clip,
+# no technical defect and a visual review passing everywhere (uncertain = stop).
+MIN_MATCH=.85
+THRESHOLDS={'speech_match_min':MIN_MATCH,'technical':'aucun défaut','visual':'pass partout (uncertain = arrêt)'}
+
+def decision(report,visual_issues=()):
+    """Automatic decision recorded in the report, with its reasons."""
+    reasons=[*report.get('hard_errors',[]),*report.get('warnings',[]),*[x.get('detail','') for x in visual_issues]]
+    return {'decision':'continue' if not reasons else 'review','reasons':reasons[:20],'thresholds':THRESHOLDS}
+
 def words(text):
     return re.findall(r"[^\W_]+",unicodedata.normalize('NFKC',str(text)).casefold(),re.UNICODE)
 
@@ -24,7 +34,7 @@ def compare(expected,transcript,language,probability):
     ratio=difflib.SequenceMatcher(None,a,b,autojunk=False).ratio()
     issues=[]
     if not b:issues.append('Aucune parole reconnue : écoute nécessaire.')
-    elif ratio<.8:issues.append('Les paroles reconnues diffèrent du scénario ; vérifier les répliques avant le montage.')
+    elif ratio<MIN_MATCH:issues.append(f'Les paroles reconnues correspondent à {round(ratio*100)} % du scénario (seuil {round(MIN_MATCH*100)} %) ; vérifier les répliques avant le montage.')
     if language and probability>=.8 and language not in ('de','fr','en'):issues.append('La langue détectée ne correspond à aucune langue de création autorisée.')
     return round(ratio,3),issues
 

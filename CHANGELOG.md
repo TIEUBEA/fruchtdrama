@@ -7,7 +7,27 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 ## Non publié (branche `sudf`)
 
-Prochain : P5 lots 2 à 5 (moteurs Grok et Arena, comptes par moteur, changement de compte guidé), puis P2 lots 2 à 5. Voir `docs/sudf/REPRISE.md`.
+Prochain : P3 (séries, idées, kit de publication, veille, 16:9) et P4 (montage avancé, sous-titres karaoké, rapport de panne). Voir `docs/sudf/REPRISE.md`.
+
+## 0.1.50 — 2026-11-02 (branche `sudf`) — P2 lots 2 à 5 : automatisation sans surveillance
+
+Détail : `docs/sudf/P2-automatisation.md` (P2-05 à P2-12).
+
+### Ajouté
+- **Reformulation anti-refus graduée** (`refusal.py`) : une image refusée par ChatGPT est redemandée au niveau 1 (vocabulaire adouci EN/DE/FR, cadre tout public, **même style visuel**), puis niveau 2 (âges neutres, « laisse de côté le détail refusé »). Ensuite, arrêt avec message clair. Niveau remis à zéro quand l'image arrive ou avec « Refaire ».
+- **Limites apprises** de ChatGPT et Claude (`quotas.py`) : passages et murs sur 6 h glissantes, capacité estimée, reste, heure de reprise (délai annoncé par le fournisseur en priorité). Panneau « Limites apprises » dans Connexions avec « J'ai changé de compte : oublier la limite ».
+- **Attente au lieu d'échec** : à la limite, statut « Limite atteinte, reprise automatique » ; aucun envoi tant que le service est au mur, même pour les autres productions ; reprise seule à l'heure prévue.
+- **File de nuit** : liste ordonnée, une production à la fois, échecs réessayables relancés jusqu'à 3 fois (délai croissant), attente des limites et crédits, retrait avec raison quand un humain est nécessaire (connexion, anti-robot, clip Flow incertain, réserves qualité, relecture, pause). Interdite en essai à blanc. Survit au redémarrage.
+- **Anti-veille Windows** (`power.py`) pendant la file de nuit, relâchée à l'arrêt.
+
+### Amélioré
+- Contrôle qualité : seuil de paroles porté à **85 %** (décision du propriétaire) ; décision automatique, raisons et seuils enregistrés dans le rapport (`auto`), avec la trace d'une validation par le propriétaire.
+
+### Mode d'emploi
+- Sections 9, 10, 11 bis (file de nuit) et 12 de `docs/MODE-EMPLOI.md`.
+
+### Tests
+- `test_p2_refusal.py`, `test_p2_quotas.py`, `test_p2_quality.py`, `test_p2_night.py` (unitaires + HTTP, vérifiés par mutation), `test_ui_interactions.cjs` étendu (Chrome réel : file de nuit).
 
 ## 0.1.49 — 2026-11-02 (branche `sudf`) — P5 lots 3 à 5 : Grok, Arena et changement de compte
 

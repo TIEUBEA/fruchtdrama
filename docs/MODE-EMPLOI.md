@@ -1,6 +1,6 @@
 # FruchtDrama — Mode d'emploi détaillé
 
-Version du logiciel décrite : **0.1.49** (branche `sudf`). Ce guide est mis à jour à chaque version ;
+Version du logiciel décrite : **0.1.50** (branche `sudf`). Ce guide est mis à jour à chaque version ;
 la section 12 liste, version par version, ce qui change pour vous.
 
 Sommaire
@@ -154,6 +154,7 @@ Lien direct vers une production : `http://127.0.0.1:8840/#job=<identifiant>`.
 | À vérifier | Un problème demande votre regard (voir bandeaux ci-dessous). | Lire le dernier message, corriger, **Reprendre**. |
 | Changement de compte | Un compte Grok/Arena a atteint sa limite. | Se connecter au compte indiqué dans l'onglet du site, puis **J'ai changé de compte**. |
 | Limite atteinte, reprise automatique | Tous les comptes du moteur sont à leur limite. | Rien : reprise seule à l'heure indiquée. Ou ajouter un compte. |
+| En file de nuit | Attend son tour dans la file de nuit. | Rien, ou « Retirer de la file de nuit ». |
 | Montage en cours | Montage local ffmpeg. | Attendre. |
 | Prêt à télécharger | Vidéo finale disponible. | **Télécharger le MP4** et **Télécharger la description**. |
 
@@ -165,8 +166,18 @@ Bandeaux possibles :
 ## 10. Corriger : Refaire, relecture, contrôle qualité
 
 - **Refaire** (sous chaque image, clip, couverture, personnages) : écrire la correction (ex. « plus de lumière »). L'ancien fichier est conservé. Refaire une image impose de refaire aussi son clip. Les personnages ne se refont plus une fois les scènes créées.
-- **Contrôle qualité** : la production continue seule **seulement si** chaque clip a une transcription conforme au texte à 85 % au moins (à partir de la prochaine version ; 80 % en 0.1.47), aucun défaut technique et une revue visuelle sans réserve. Sinon « À vérifier » : écouter les clips, puis **J’ai écouté les dialogues…** ou **J’ai vérifié les réserves, continuer**, ou **Refaire** le clip fautif.
+- **Contrôle qualité** : la production continue seule **seulement si** chaque clip a une transcription conforme au texte à 85 % au moins , aucun défaut technique et une revue visuelle sans réserve. Sinon « À vérifier » : écouter les clips, puis **J’ai écouté les dialogues…** ou **J’ai vérifié les réserves, continuer**, ou **Refaire** le clip fautif.
 - La synchronisation des lèvres et l'identité des voix ne sont jamais certifiées automatiquement : à écouter.
+
+## 11 bis. File de nuit (production sans surveillance)
+
+1. Sur chaque production à lancer : **Ajouter à la file de nuit** (pas en essai à blanc ; une histoire à relire doit d'abord être validée).
+2. En haut du Studio, panneau **File de nuit** → **Démarrer la file de nuit**.
+3. Le studio traite une production à la fois, dans l'ordre. Il relance seul jusqu'à 3 fois une erreur technique, attend les limites et les crédits, et retire avec la raison toute production qui a besoin de vous (connexion, anti-robot, clip Flow incertain, réserves du contrôle qualité, pause). Le journal de la file garde la trace de tout.
+4. Pendant la file, Windows ne se met pas en veille (l'écran peut s'éteindre). Laisser le PC branché, Chrome et la fenêtre FruchtDrama ouverts.
+5. **Arrêter la file** : la production en cours continue, les suivantes attendent.
+
+Quand ChatGPT refuse une image, le studio la redemande seul deux fois avec une formulation adoucie (même style). Quand un service est à sa limite, la production attend et repart seule ; voir **Connexions → Limites apprises**.
 
 ## 11. Arrêter, redémarrer, dépanner
 
@@ -181,6 +192,7 @@ Bandeaux possibles :
 
 | Version | Ce qui change pour vous |
 |---|---|
+| 0.1.50 | **File de nuit** (section 11 bis) ; reformulation automatique des images refusées ; limites ChatGPT/Claude apprises avec reprise automatique ; seuil de paroles 85 %. |
 | 0.1.49 | **Grok et Arena utilisables** (expérimental) ; comptes Grok/Arena dans Connexions ; changement de compte guidé et reprise automatique après limite. Recharger l'extension (nouvelles autorisations grok.com et lmarena.ai). |
 | 0.1.48 | Nouveau champ **Moteur vidéo** à la création (Flow seul actif pour l'instant). Recharger l'extension après mise à jour. |
 | 0.1.47 | L'icône ouvre la **fenêtre FruchtDrama** où tout se passe (section 6). Le panneau de l'extension devient l'onglet **Passerelle**. Plusieurs comptes Flow dans la même fenêtre (section 7). Recharger l'extension après mise à jour. |

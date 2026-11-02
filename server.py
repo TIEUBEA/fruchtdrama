@@ -10,6 +10,9 @@ import quality
 import errors
 import engines
 import engine_accounts
+import refusal
+import quotas
+import power
 import sys
 import traceback
 
@@ -91,6 +94,7 @@ def public_state():
     for t in s['tasks']: t.pop('result',None)
     for public,j in zip(s['jobs'],STATE['jobs']):
         public['uncertain_clips']=sorted({int(t['slot'].split(':')[1]) for t in uncertain_clip_tasks(j)})
+    s['quota_status']=quotas.summary(STATE,time.time())
     s['ffmpeg']=bool(shutil.which('ffmpeg')); return s
 def safe_child(parent, name):
     target=(parent/name).resolve()
@@ -165,7 +169,72 @@ def wake_waiting(moment=None):
         if woken:save()
     return woken
 
+# P2-10/P2-11: night queue. One production at a time, bounded automatic retries, owner decisions respected.
+NIGHT_ACTIVE=('running','rendering','waiting_quota','waiting_credit')
+NIGHT_HUMAN={'waiting_review':'histoire à relire','waiting_research':'références à choisir','waiting_script':'scénario à fournir','waiting_account':'changement de compte à faire','paused':'mise en pause par vous'}
+def night():
+    return STATE.setdefault('night',{'active':False,'ids':[],'failures':{},'retry_at':{},'log':[]})
+
+def night_log(text):
+    n=night();n['log'].append({'at':now(),'text':text});n['log']=n['log'][-50:]
+
+def night_drop(j,reason):
+    n=night();n['ids'].remove(j['id']);n['failures'].pop(j['id'],None);n['retry_at'].pop(j['id'],None)
+    night_log(j.get('title','Production')+' : retirée de la file, '+reason+'.');event(j,'File de nuit : production retirée ('+reason+').')
+
+def night_add(j):
+    n=night()
+    if j['id'] in n['ids']:raise ValueError('Déjà dans la file de nuit')
+    if j['status']=='done':raise ValueError('Production déjà terminée')
+    if j['config'].get('dry_run'):raise ValueError('File de nuit interdite en essai à blanc : désactivez-le d’abord')
+    if j['status'] in NIGHT_HUMAN and j['status']!='paused':raise ValueError('Action humaine requise d’abord : '+NIGHT_HUMAN[j['status']])
+    if any(t['job']==j['id'] and t['status']=='claimed' for t in STATE['tasks']):raise ValueError('Une tâche est en cours : attendez sa fin')
+    for t in STATE['tasks']:
+        if t['job']==j['id'] and t['status']=='queued':t['status']='cancelled'
+    n['ids'].append(j['id']);j['status']='waiting_night';event(j,'Ajoutée à la file de nuit : démarrera à son tour.')
+
+def night_remove(j):
+    n=night()
+    if j['id'] not in n['ids']:raise ValueError('Pas dans la file de nuit')
+    night_drop(j,'retirée par vous')
+    if j['status']=='waiting_night':j['status']='paused'
+
+def night_tick(moment=None):
+    moment=moment or time.time();n=night()
+    if not n['active']:return
+    for id in list(n['ids']):
+        j=job_by(id)
+        if not j:n['ids'].remove(id);continue
+        if j['status']=='done':night_drop(j,'terminée');continue
+        if j['status'] in NIGHT_HUMAN:night_drop(j,NIGHT_HUMAN[j['status']]);continue
+        if j['status']=='attention':
+            kind=(j.get('last_error') or {}).get('kind')
+            if kind in errors.RETRYABLE and not uncertain_clip_tasks(j) and j.get('stage')!='quality' and n['failures'].get(id,0)<3:
+                n['failures'][id]=n['failures'].get(id,0)+1;n['retry_at'][id]=moment+120*n['failures'][id]
+                n['ids'].remove(id);n['ids'].append(id);j['status']='waiting_night'
+                night_log(j.get('title','Production')+' : échec réessayable ('+kind+'), nouvel essai '+str(n['failures'][id])+'/3 plus tard.')
+            else:night_drop(j,'a besoin de vous : '+(j['events'][-1]['text'][:160] if j['events'] else 'à vérifier'))
+    if any(job_by(id)['status'] in NIGHT_ACTIVE for id in n['ids']):return
+    for id in n['ids']:
+        j=job_by(id)
+        if j['status']=='waiting_night' and n['retry_at'].get(id,0)<=moment:
+            for t in STATE['tasks']:
+                if t['job']==id and t['status']=='queued':t['status']='cancelled'
+            j.pop('last_error',None);j['status']='running';event(j,'File de nuit : production lancée.');night_log(j.get('title','Production')+' : lancée.');schedule(j);return
+    if not n['ids']:
+        n['active']=False;night_log('File de nuit terminée.')
+
+def night_once():
+    with LOCK:
+        before=json.dumps(STATE.get('night'),sort_keys=True,default=str)
+        night_tick()
+        if json.dumps(STATE.get('night'),sort_keys=True,default=str)!=before:save()
+        active=night()['active']
+    power.sync(active)  # same long-lived dispatch thread every time
+
 def dispatch_once():
+    try:night_once()
+    except Exception as e:log_error('File de nuit',e)
     try:wake_waiting()
     except Exception as e:log_error('Réveil des productions en attente',e)
     try:flow_dispatch_tick()
@@ -331,7 +400,17 @@ def script_prompt(j):
     return f'''Crée une mini-fiction de fruits entièrement ORIGINALE. Langue demandée pour les dialogues, les voix, les textes de couverture, la description et les prompts (sauf les clés techniques et la signature narrative) : {language}. La langue demandée prime sur la langue française des instructions et des descriptions du schéma. Aucune traduction ni réplique dans une autre langue. Les personnages parlent avec des voix natives de la langue demandée. Réponds UNIQUEMENT avec du JSON valide, sans explication. Conserve les clés techniques du schéma en anglais. Référence comme indice de tendance seulement, jamais copier les répliques ou les plans : {json.dumps(ref,ensure_ascii=False)}. Idée : {j['brief']}. Exactement {n} scènes de {engines.spec(j)['seconds']} secondes, au maximum 3 personnages. Au plus {word_limit} mots parlés par scène pour les langues avec espaces ; pour les autres, une réplique assez courte pour être prononcée naturellement en moins de 7 secondes. Maximum 2 locuteurs par scène. Accroche dès la première phrase, retournement visible, conclusion satisfaisante. Pas de présentation comme fait réel. Animation 3D premium, fruits anthropomorphes avec peau de fruit aussi sur les mains, vêtements couvrants sans logos, grands visages expressifs, décor cohérent avec l’intrigue choisie et différent des épisodes récents, vertical 9:16. Même identité et tenue partout, aucune voix de narrateur, personnages parlant à l'écran, caméra continue par clip. Sous-titres ajoutés au montage. {guidance} Le champ cover_title doit être une accroche de couverture de 3 à 5 mots maximum dans la langue demandée, sans révéler la fin. Schéma : {json.dumps(schema,ensure_ascii=False)}'''
 
 def add_task(j, kind, payload, slot):
+    if kind=='chat_image' and j.get('refusal_levels',{}).get(slot):
+        # P2-05: an image refused by ChatGPT is reworded, level by level.
+        payload={**payload,'prompt':refusal.soften(payload['prompt'],j['refusal_levels'][slot]),'refusal_level':j['refusal_levels'][slot]}
     if any(t['job']==j['id'] and t['slot']==slot and t['status'] in ('queued','claimed') for t in STATE['tasks']): return
+    name=quotas.service({'kind':kind,'payload':payload})
+    if name:
+        moment=time.time();q=quotas.status(STATE,name,moment)
+        if q['blocked']:
+            # P2-07: nothing is sent while the service is at its limit; the production resumes by itself.
+            j['status']='waiting_quota';j['wait_until']=q['retry_at']
+            event(j,q['label']+' à sa limite : reprise automatique vers '+quotas.stamp(q['retry_at'])[11:16]+' UTC.');return
     t={'id':uid(),'job':j['id'],'kind':kind,'payload':payload,'slot':slot,'status':'queued','created':now(),'profile':j.get('flow_profile') if kind=='flow_video' else None}
     STATE['tasks'].append(t); j['status']='running'; event(j,f"Tâche préparée : {slot}")
 
@@ -349,7 +428,7 @@ Recompose a tight chest-up confrontation with clearly visible expressive faces: 
 Bold clean condensed sans serif headline: white first line, warm yellow emphasis on second line, restrained dark outline and shadow. Place text in the lower middle BELOW faces, inside the central 80 percent width; leave the top 15 percent and bottom 20 percent free of important text for cropping. Never cover eyes. No large dark banner across faces. No logos, watermarks, arrows, interface, fake evidence, extra characters or sensational claims not present in the story. Generate the finished image now, not a tutorial."""
 
 def schedule(j):
-    if j['status'] in ('paused','attention','done','rendering','waiting_research','waiting_script','waiting_credit','waiting_review','waiting_quota','waiting_account'): return
+    if j['status'] in ('paused','attention','done','rendering','waiting_research','waiting_script','waiting_credit','waiting_review','waiting_quota','waiting_account','waiting_night'): return
     if any(t['job']==j['id'] and t['status'] in ('queued','claimed') for t in STATE['tasks']): return
     step=j['stage']
     if step=='research':
@@ -469,6 +548,7 @@ REDO_STAGES={'characters':'characters','character':'characters','image':'images'
 def redo(j,slot,note='',include_clip=False):
     """P1-3: regenerate one media with an owner correction; earlier media and files are kept."""
     slot=str(slot);note=' '.join(str(note or '').split())[:500]
+    j.get('refusal_levels',{}).pop(slot,None)  # a new owner instruction restarts the rewording (P2-05)
     kind=slot.split(':')[0]
     if kind not in REDO_STAGES or not re.fullmatch(r'(?:cover|characters|character:[a-z][a-z0-9_]{0,24}|image:\d+|clip:\d+)',slot):raise ValueError('Élément à refaire inconnu')
     if j.get('status')=='rendering' or j['id'] in BUSY:raise ValueError('Montage en cours : attendez sa fin avant de refaire un élément')
@@ -523,6 +603,7 @@ def schedule_quality(j):
             QUALITY_BUSY.add(j['id']);event(j,'Contrôle local des clips, transcription et préparation des images de revue démarrés.')
             threading.Thread(target=run_quality,args=(j['id'],key),daemon=True).start()
         return
+    report['auto']=quality.decision(report,[x for x in [*report.get('visual',{}).get('scenes',[]),report.get('visual',{}).get('continuity',{})] if x and x.get('status')!='pass'])
     if report.get('hard_errors'):
         j['status']='attention';event(j,'Contrôle qualité bloquant : '+report['hard_errors'][0]+' Les clips sont conservés.');return
     if report.get('warnings') and j.get('quality_speech_approval')!=key and j.get('quality_approval')!=key:
@@ -536,6 +617,8 @@ def schedule_quality(j):
     if issues and j.get('quality_approval')!=key:
         j['status']='attention';event(j,'Cohérence visuelle à vérifier : '+issues[0]['detail']+' Médias conservés, aucun nouvel envoi Flow.');return
     report['status']='approved_with_reservations' if report.get('warnings') or issues else 'checked'
+    report['auto']=quality.decision(report,issues)
+    if report['auto']['decision']=='review':report['auto']['approved_by']='owner'
     (folder/'quality-report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),'utf-8')
     j['stage']='cover';event(j,'Contrôles disponibles terminés. Synchronisation labiale et identité des voix restent à vérifier à l’écoute.');schedule(j)
 
@@ -638,6 +721,18 @@ def accept_task_result(t,result):
             p=profile_by(reservation['profile'])
             if p:p['balance']+=reservation['amount'];reservation['refunded']=True;event(j,'Réservation locale de crédits annulée : aucune génération n’a été envoyée à Flow.')
         t['status']='failed'; j['status']='paused' if was_paused else 'attention'; event(j,errors.message(kind,result.get('error')))
+        name=quotas.service(t)
+        if kind=='quota' and name and not was_paused:
+            moment=time.time();quotas.note_wall(STATE,name,moment,errors.retry_after(result),result.get('error',''))
+            j['status']='running';schedule(j)  # add_task sees the wall and sets waiting_quota
+            return
+        if kind=='refusal' and refusal.applies(t) and not was_paused:
+            level=j.setdefault('refusal_levels',{}).get(t['slot'],0)+1
+            if level<=refusal.MAX_LEVEL:
+                j['refusal_levels'][t['slot']]=level;j['status']='running'
+                event(j,'Image refusée par ChatGPT : reformulation automatique niveau '+str(level)+' sur '+str(refusal.MAX_LEVEL)+' (même style, vocabulaire adouci).');schedule(j);return
+            event(j,'ChatGPT refuse cette image même reformulée (niveau '+str(refusal.MAX_LEVEL)+'). Corrigez la consigne avec « Refaire » ou importez l’image.')
+            return
         if t.get('kind')=='engine_video' and kind=='quota' and not was_paused:
             # P5-08: the account reached its limit: remember it, then switch account or wait.
             moment=time.time();account=engine_accounts.by_id(STATE,j.get('engine_account'))
@@ -687,6 +782,8 @@ def accept_task_result(t,result):
             j['cover_file']=file;j['cover']=asset_url(j,file)
         event(j,'Média reçu : '+file)
     t['status']='done'; t['result']=result;j.pop('last_error',None)
+    if quotas.service(t) and t.get('kind') in ('chat_image','chat_text'):quotas.note_pass(STATE,quotas.service(t),time.time())
+    j.get('refusal_levels',{}).pop(slot,None)
     if was_paused: j['status']='paused'
     schedule(j)
 
@@ -1028,6 +1125,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         engine=engines.validate(b.get('engine'))
                         if engine=='flow':raise ValueError('Les comptes Flow se gèrent avec leurs crédits ci-dessus')
                         engine_accounts.add(STATE,engine,b.get('label'),b.get('email'))
+                elif path=='/api/quota/forget':
+                    name=str(b.get('service',''))
+                    if name not in quotas.SERVICES:raise ValueError('Service inconnu')
+                    quotas.forget(STATE,name)
+                    for j in STATE['jobs']:
+                        # Re-checked on wake: a production still blocked elsewhere simply waits again.
+                        if j.get('status')=='waiting_quota':j['wait_until']=0
+                elif path=='/api/night':
+                    action=b.get('action');n=night()
+                    if action in ('add','remove'):
+                        j=job_by(b.get('job'))
+                        if not j:raise ValueError('Projet inconnu')
+                        night_add(j) if action=='add' else night_remove(j)
+                    elif action=='start':
+                        if not n['ids']:raise ValueError('Ajoutez d’abord des productions à la file de nuit')
+                        n['active']=True;night_log('File de nuit démarrée ('+str(len(n['ids']))+' production(s)).')
+                    elif action=='stop':
+                        n['active']=False;night_log('File de nuit arrêtée : la production en cours continue, les suivantes attendent.')
+                    else:raise ValueError('Action inconnue')
                 elif path=='/api/flow-auto':
                     STATE['settings']['flow_auto']=bool(b.get('enabled'))
                 elif path=='/api/job':
