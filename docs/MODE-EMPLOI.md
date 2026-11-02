@@ -1,6 +1,6 @@
 # FruchtDrama — Mode d'emploi détaillé
 
-Version du logiciel décrite : **0.1.47** (branche `sudf`). Ce guide est mis à jour à chaque version ;
+Version du logiciel décrite : **0.1.48** (branche `sudf`). Ce guide est mis à jour à chaque version ;
 la section 12 liste, version par version, ce qui change pour vous.
 
 Sommaire
@@ -126,6 +126,7 @@ Studio → **Nouvelle production** :
 | IA de scénario | ChatGPT ou Claude. Les images passent toujours par ChatGPT. |
 | Format | 4 scènes (32 s) pour commencer. |
 | Langue | Deutsch, Français ou English : dialogues, voix, sous-titres, couverture. |
+| Moteur vidéo | **Google Flow** (8 s par clip, crédits Flow). Grok Imagine (6 s) et LMArena (4 à 10 s) apparaissent « bientôt » : ils seront activés avec leurs connecteurs. La longueur des dialogues s'adapte au moteur. |
 | Modèle vidéo Flow | Omni 12 crédits, Lite 10, Fast 20, Quality 100 par clip (Ultra : Lite 5, Fast 10). Le coût affiché dans Flow est vérifié avant tout envoi. |
 | Relire et corriger l'histoire avant de payer les images | **Recommandé** au début : la production s'arrête pour que vous relisiez les dialogues. |
 | Essai à blanc des clips Flow | **Recommandé pour le premier essai** : tout est préparé dans Flow mais rien n'est envoyé, aucun crédit consommé. |
@@ -171,6 +172,7 @@ Bandeaux possibles :
 
 | Version | Ce qui change pour vous |
 |---|---|
+| 0.1.48 | Nouveau champ **Moteur vidéo** à la création (Flow seul actif pour l'instant). Recharger l'extension après mise à jour. |
 | 0.1.47 | L'icône ouvre la **fenêtre FruchtDrama** où tout se passe (section 6). Le panneau de l'extension devient l'onglet **Passerelle**. Plusieurs comptes Flow dans la même fenêtre (section 7). Recharger l'extension après mise à jour. |
 | 0.1.46 | Bandeau rouge **Action de votre part requise** (connexion, anti-robot). Un refus de ChatGPT sur une image est signalé en quelques secondes. |
 | 0.1.45 | Options **Relire l'histoire** et **Essai à blanc** à la création ; boutons **Refaire** ; une seule feuille de personnages par épisode. |

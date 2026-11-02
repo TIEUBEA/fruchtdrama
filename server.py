@@ -8,6 +8,7 @@ import captions
 import covers
 import quality
 import errors
+import engines
 import sys
 import traceback
 
@@ -77,6 +78,7 @@ def client_accepts(client,task):
         target=task.get('payload',{}).get('flow_route')
         if target and not profile_by(task.get('profile')):return False
         return role in ('all','flow') and (target.get('client')==client.get('id') if target else task.get('profile')==client.get('flow_profile'))
+    if task['kind']=='engine_video':return role in ('all','flow')
     if role not in ('all','creation'):return False
     if task['kind'] in ('chat_text','chat_collect','chat_image','chat_image_collect'):
         provider=task.get('payload',{}).get('provider','chatgpt')
@@ -306,14 +308,14 @@ def script_prompt(j):
     schema={'production_id':j['id'],'title':'Titre dans la langue choisie','cover_title':'Question courte dans la langue choisie','description':'Description TikTok dans la langue choisie, mentionnant la création par IA','characters':[{'id':'fruit_a','name':'Prénom dans la langue choisie','appearance':'Design de fruit et vêtements cohérents','voice':'Voix native de la langue choisie, âge, timbre','image_prompt':'Prompt de référence dans la langue choisie'}],'scenes':[{'characters':['fruit_a'],'meaning':'Action compréhensible sans le son','image_prompt':'Prompt d’image dans la langue choisie, 9:16','video_prompt':'Animation, caméra, action, position des locuteurs, lèvres et personnages silencieux','dialogue':[{'speaker':'fruit_a','text':'Réplique courte dans la langue choisie'}]}]}
     guidance=''
     # Announce the limit the validators actually enforce (editorial.validate: 20 for retention productions).
-    word_limit=20 if j.get('editorial_version')==2 and j.get('retention_version')==1 else 25
+    word_limit=engines.word_limit(j,20 if j.get('editorial_version')==2 and j.get('retention_version')==1 else 25)
     if j.get('editorial_version')==2:
         schema['creative_selection']={'candidates':[{'title':'Titre du concept','hook':'Première réplique','conflict':'Conflit','setting':'Décor','twist':'Retournement','ending':'Fin','scores':{'hook':4,'clarity':4,'emotion':4,'novelty':5}} for _ in range(5)],'selected_index':0,'reason':'Justification éditoriale, pas une prédiction de vues'}
         if j.get('hook_version')==1:
             schema['opening_plan']={'visible_detail':'Objet ou geste visible dès la première image','question':'Question laissée ouverte par la première réplique','payoff_scene':n,'payoff':'Explication concrète apportée dans cette scène'}
         schema['story_signature']={'relationship':'short English relationship','setting':'short English setting','central_object':'short English object','twist_mechanism':'short English plot mechanism'}
         guidance=editorial.instructions(j,STATE['jobs'])+'\nRéférences comparées : '+json.dumps(j.get('candidates',[])[:6],ensure_ascii=False)+'\nCorrections demandées : '+json.dumps(j.get('editorial_feedback',[]),ensure_ascii=False)
-    return f'''Crée une mini-fiction de fruits entièrement ORIGINALE. Langue demandée pour les dialogues, les voix, les textes de couverture, la description et les prompts (sauf les clés techniques et la signature narrative) : {language}. La langue demandée prime sur la langue française des instructions et des descriptions du schéma. Aucune traduction ni réplique dans une autre langue. Les personnages parlent avec des voix natives de la langue demandée. Réponds UNIQUEMENT avec du JSON valide, sans explication. Conserve les clés techniques du schéma en anglais. Référence comme indice de tendance seulement, jamais copier les répliques ou les plans : {json.dumps(ref,ensure_ascii=False)}. Idée : {j['brief']}. Exactement {n} scènes de 8 secondes, au maximum 3 personnages. Au plus {word_limit} mots parlés par scène pour les langues avec espaces ; pour les autres, une réplique assez courte pour être prononcée naturellement en moins de 7 secondes. Maximum 2 locuteurs par scène. Accroche dès la première phrase, retournement visible, conclusion satisfaisante. Pas de présentation comme fait réel. Animation 3D premium, fruits anthropomorphes avec peau de fruit aussi sur les mains, vêtements couvrants sans logos, grands visages expressifs, décor cohérent avec l’intrigue choisie et différent des épisodes récents, vertical 9:16. Même identité et tenue partout, aucune voix de narrateur, personnages parlant à l'écran, caméra continue par clip. Sous-titres ajoutés au montage. {guidance} Le champ cover_title doit être une accroche de couverture de 3 à 5 mots maximum dans la langue demandée, sans révéler la fin. Schéma : {json.dumps(schema,ensure_ascii=False)}'''
+    return f'''Crée une mini-fiction de fruits entièrement ORIGINALE. Langue demandée pour les dialogues, les voix, les textes de couverture, la description et les prompts (sauf les clés techniques et la signature narrative) : {language}. La langue demandée prime sur la langue française des instructions et des descriptions du schéma. Aucune traduction ni réplique dans une autre langue. Les personnages parlent avec des voix natives de la langue demandée. Réponds UNIQUEMENT avec du JSON valide, sans explication. Conserve les clés techniques du schéma en anglais. Référence comme indice de tendance seulement, jamais copier les répliques ou les plans : {json.dumps(ref,ensure_ascii=False)}. Idée : {j['brief']}. Exactement {n} scènes de {engines.spec(j)['seconds']} secondes, au maximum 3 personnages. Au plus {word_limit} mots parlés par scène pour les langues avec espaces ; pour les autres, une réplique assez courte pour être prononcée naturellement en moins de 7 secondes. Maximum 2 locuteurs par scène. Accroche dès la première phrase, retournement visible, conclusion satisfaisante. Pas de présentation comme fait réel. Animation 3D premium, fruits anthropomorphes avec peau de fruit aussi sur les mains, vêtements couvrants sans logos, grands visages expressifs, décor cohérent avec l’intrigue choisie et différent des épisodes récents, vertical 9:16. Même identité et tenue partout, aucune voix de narrateur, personnages parlant à l'écran, caméra continue par clip. Sous-titres ajoutés au montage. {guidance} Le champ cover_title doit être une accroche de couverture de 3 à 5 mots maximum dans la langue demandée, sans révéler la fin. Schéma : {json.dumps(schema,ensure_ascii=False)}'''
 
 def add_task(j, kind, payload, slot):
     if any(t['job']==j['id'] and t['slot']==slot and t['status'] in ('queued','claimed') for t in STATE['tasks']): return
@@ -364,6 +366,15 @@ def schedule(j):
         j['stage']='clips'; schedule(j)
     elif step=='clips':
         for i,s in enumerate(j['scenes']):
+            if not s.get('clip') and engines.of(j)!='flow':
+                # P5-06: Grok / Arena. No credit balance to reserve; quotas are handled per account.
+                cast='\n'.join(c['id']+': '+c['appearance']+' Voice: '+c['voice'] for c in j['characters'])
+                dialog='\n'.join(x['speaker']+': '+x['text'] for x in s['dialogue'])
+                seconds=engines.spec(j)['seconds'];language=j['config'].get('language','Deutsch (de-DE)')
+                prompt=f"One continuous shot, {seconds} seconds, portrait 9:16. Animate the attached image. No text, no music. Spoken language ONLY: {language}. Natural native voices, no translation or extra narration. Preserve identity.\n{cast}\n{s['video_prompt']}\nExact dialogue in this order; only the named speaker moves their lips, all others stay silent:\n{dialog}"+correction(j.get('corrections',{}).get(f'clip:{i}'))
+                payload={'engine':engines.of(j),'prompt':prompt,'attachments':[asset_url(j,flow_reference(j,s['image']))],'seconds':seconds}
+                if j['config'].get('dry_run'):payload['dry_run']=True
+                add_task(j,'engine_video',payload,f'clip:{i}');return
             if not s.get('clip'):
                 if any(t['slot']==f'clip:{i}' for t in uncertain_clip_tasks(j)):
                     j['status']='attention';event(j,uncertain_message(j));return
@@ -549,8 +560,8 @@ def edit_script(j,changes):
     validate_script(draft,j['config']['scene_count'])
     if j.get('editorial_version')==2 and j.get('retention_version')==1:
         for i,scene in enumerate(draft['scenes']):
-            if len(scene['dialogue'])>2 or sum(len(x['text'].split()) for x in scene['dialogue'])>20:
-                raise ValueError(f'Scène {i+1} : deux répliques et 20 mots au plus pour tenir dans le clip de huit secondes')
+            if len(scene['dialogue'])>2 or sum(len(x['text'].split()) for x in scene['dialogue'])>engines.word_limit(j):
+                raise ValueError(f"Scène {i+1} : deux répliques et {engines.word_limit(j)} mots au plus pour tenir dans le clip de {engines.spec(j)['seconds']} secondes")
     j['script']=draft;j['title']=draft['title']
     for scene,source in zip(j['scenes'],draft['scenes']):scene['dialogue']=copy.deepcopy(source['dialogue'])
     d=job_dir(j);(d/'scenario.json').write_text(json.dumps(draft,ensure_ascii=False,indent=2),'utf-8');(d/'description.txt').write_text(draft['description'],'utf-8')
@@ -589,7 +600,7 @@ def apply_research(j,rows):
 def accept_task_result(t,result):
     j=job_by(t['job'])
     was_paused=j['status']=='paused'
-    if not result.get('ok') and t.get('kind')=='flow_video' and result.get('dry_run') is True and t.get('payload',{}).get('dry_run') and result.get('generation_submitted') is False:
+    if not result.get('ok') and t.get('kind') in ('flow_video','engine_video') and result.get('dry_run') is True and t.get('payload',{}).get('dry_run') and result.get('generation_submitted') is False:
         t['status']='cancelled';t['dry_run_passed']=now();j['dry_run_passed']=now();j['status']='paused'
         event(j,str(result.get('error','Essai à blanc réussi.'))[:600]+' Désactivez l’essai à blanc puis cliquez sur Reprendre pour générer réellement.')
         return
@@ -648,6 +659,12 @@ def run_command(args,cwd=None):
     r=subprocess.run(args,capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=240,cwd=cwd)
     if r.returncode: raise RuntimeError(r.stderr[-1800:])
 
+def clip_duration(probe,src):
+    try:
+        out=subprocess.run([probe,'-v','error','-show_entries','format=duration','-of','csv=p=0',str(src)],capture_output=True,text=True,timeout=30).stdout.strip()
+        return float(out)
+    except (ValueError,OSError,subprocess.SubprocessError):return None
+
 def render_job(id):
     try:
         with LOCK: j=copy.deepcopy(job_by(id)); d=job_dir(j)
@@ -657,25 +674,29 @@ def render_job(id):
         caption_size,caption_words=(48,4) if j.get('retention_version')==1 else (38,5)
         ass=['[Script Info]','ScriptType: v4.00+','PlayResX: 720','PlayResY: 1280','[V4+ Styles]','Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',f'Style: Default,Arial,{caption_size},&H00FFFFFF,&H0000FFFF,&H00141414,&H70000000,-1,0,0,0,100,100,0,0,1,3,1,2,55,55,160,1','[Events]','Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text']
         def stamp(s): return f'{int(s//3600)}:{int(s//60)%60:02}:{int(s)%60:02}.{int(s%1*100):02}'
+        start=0.0
         for i,s in enumerate(j['scenes']):
             src=safe_child(d,s['clip']); out=d/f'normalized_{i:02}.mp4'
             # Normalize silent imports too; every clip gets an audio stream.
             probe=shutil.which('ffprobe'); audio=True
             if probe:
                 pr=subprocess.run([probe,'-v','error','-select_streams','a','-show_entries','stream=index','-of','csv=p=0',str(src)],capture_output=True,text=True,timeout=30); audio=bool(pr.stdout.strip())
-            args=[ff,'-y','-i',str(src),'-f','lavfi','-i','anullsrc=r=48000:cl=stereo','-map','0:v:0','-map','0:a:0' if audio else '1:a:0','-vf','scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,setsar=1,fps=30,tpad=stop_mode=clone:stop_duration=8','-af','apad','-t','8','-c:v','libx264','-preset','fast','-crf','21','-c:a','aac','-ar','48000','-ac','2',str(out)]
+            # P5-06: Flow clips stay 8 s; Grok/Arena clips keep their real, bounded duration.
+            length=engines.clip_length(j,clip_duration(probe,src) if probe else None)
+            args=[ff,'-y','-i',str(src),'-f','lavfi','-i','anullsrc=r=48000:cl=stereo','-map','0:v:0','-map','0:a:0' if audio else '1:a:0','-vf','scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,setsar=1,fps=30,tpad=stop_mode=clone:stop_duration='+f'{length:g}','-af','apad','-t',f'{length:g}','-c:v','libx264','-preset','fast','-crf','21','-c:a','aac','-ar','48000','-ac','2',str(out)]
             run_command(args)
             speech=(j.get('quality_report',{}).get('clips',[])[i].get('speech') if j.get('quality_version')==1 and i<len(j.get('quality_report',{}).get('clips',[])) else None)
-            aligned=quality.caption_events(s,speech,i*8,caption_words,30) if speech else None
+            offset=start;start+=length
+            aligned=quality.caption_events(s,speech,offset,caption_words,30) if speech else None
             if aligned:
                 aligned_count+=1
                 for a,b,text in aligned:
                     text=text.replace('\\','').replace('{','').replace('}','').replace('\n',' ')
                     ass.append(f'Dialogue: 0,{stamp(a)},{stamp(b)},Default,,0,0,0,,{text}')
                 continue
-            lines=s['dialogue']; count=sum(len(x['text'].split()) for x in lines); cursor=i*8+.15
+            lines=s['dialogue']; count=sum(len(x['text'].split()) for x in lines); cursor=offset+.15
             for line in lines:
-                duration=7.6*len(line['text'].split())/max(count,1); words=line['text'].split()
+                duration=(length-.4)*len(line['text'].split())/max(count,1); words=line['text'].split()
                 for k,chunk in captions.chunks(words,caption_words,30 if j.get('retention_version')==1 else None):
                     a=cursor+duration*k/len(words); b=cursor+duration*(k+len(chunk))/len(words)
                     text=' '.join(chunk).replace('\\','').replace('{','').replace('}','').replace('\n',' ')
@@ -770,7 +791,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                 # A dry run never sends: nothing to reserve (P1-4).
                                 t['status']='claimed'; t['client']=client; t['claimed']=now(); event(j,'Essai à blanc : préparation de '+t['slot']+' dans Flow, sans envoi.'); save(); return self.send_json(t)
                             p['balance']-=cost;t['reservation']={'profile':p['id'],'amount':cost,'refunded':False}; event(j,f"Réservation prudente de {cost} crédits sur {p['label']}. En cas d’échec, vérifier le solde réel avant de le réajuster.")
-                        t['status']='claimed'; t['client']=client; t['claimed']=now(); event(j,'Connecteur en cours : '+t['slot']); save(); return self.send_json(t)
+                        t['status']='claimed'; t['client']=client; t['claimed']=now(); event(j,('Essai à blanc : préparation de '+t['slot']+' dans '+engines.ENGINES[t['payload']['engine']]['label']+', sans envoi.') if t['kind']=='engine_video' and t['payload'].get('dry_run') else 'Connecteur en cours : '+t['slot']); save(); return self.send_json(t)
                     save(); return self.send_json(None)
                 if path=='/api/bridge/status':
                     if not self.auth_bridge():return self.send_json({'error':'Appairage requis'},401)
@@ -962,7 +983,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     cfg={**STATE['settings'],**b.get('config',{})}; cfg['scene_count']=int(cfg['scene_count']); cfg['flow_cost']=int(cfg['flow_cost'])
                     cfg['flow_model']=b.get('config',{}).get('flow_model','gemini_omni_flash')
                     if cfg['flow_model'] not in ('gemini_omni_flash','veo_3_1_lite','veo_3_1_fast','veo_3_1_quality'):raise ValueError('Modèle Flow non pris en charge')
-                    cfg['flow_resolution']='720p';cfg['clip_seconds']=8
+                    cfg['video_engine']=engines.validate(b.get('config',{}).get('video_engine','flow'))
+                    if cfg['video_engine'] not in engines.AVAILABLE:raise ValueError('Connecteur '+engines.ENGINES[cfg['video_engine']]['label']+' pas encore livré : choisissez Google Flow.')
+                    cfg['flow_resolution']='720p';cfg['clip_seconds']=engines.ENGINES[cfg['video_engine']]['seconds']
                     cfg['flow_cost']=int(b.get('config',{}).get('flow_cost',{'gemini_omni_flash':12,'veo_3_1_lite':10,'veo_3_1_fast':20,'veo_3_1_quality':100}[cfg['flow_model']]))
                     if cfg['flow_cost'] not in {'gemini_omni_flash':(12,), 'veo_3_1_lite':(10,5), 'veo_3_1_fast':(20,10), 'veo_3_1_quality':(100,)}[cfg['flow_model']]:raise ValueError('Coût incompatible avec le modèle Flow choisi. Le coût réel sera vérifié avant tout envoi.')
                     cfg['language']=creation_language(cfg.get('language','Deutsch (de-DE)'))
@@ -1024,7 +1047,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         j['config']['dry_run']=bool(b.get('enabled'))
                         for t in STATE['tasks']:
                             # Queued Flow payloads were built for the previous mode.
-                            if t['job']==id and t['status']=='queued' and t['kind']=='flow_video':t['status']='cancelled'
+                            if t['job']==id and t['status']=='queued' and t['kind'] in ('flow_video','engine_video'):t['status']='cancelled'
                         event(j,'Essai à blanc activé : les clips seront préparés dans Flow sans être envoyés.' if j['config']['dry_run'] else 'Production réelle : les prochains clips seront envoyés à Flow et consommeront des crédits.')
                     elif action=='redo':
                         redo(j,b.get('slot',''),b.get('note',''),bool(b.get('include_clip')))

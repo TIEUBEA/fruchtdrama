@@ -23,7 +23,8 @@ Objectif de la branche `sudf` : automatisation de bout en bout, fiable et écono
 | P1 | Économies : relecture, feuille unique, Refaire, essai à blanc | Terminé | 0.1.45 | `P1-economies.md` |
 | P2 lot 1 | Erreurs typées, détection refus, délai de quota | Terminé | 0.1.46 | `P2-automatisation.md` |
 | P5 lot 1 | Fenêtre unique : tout se passe dans la fenêtre FruchtDrama (P5-01..05) | Terminé | 0.1.47 | `P5-fenetre-moteurs.md` |
-| P5 lots 2-5 | Moteurs Grok et Arena, comptes par moteur, changement de compte guidé, essai à blanc (P5-06..11) | **Priorité suivante** | | `P5-fenetre-moteurs.md` |
+| P5 lot 2 | Moteur vidéo par production, durées réelles QC/montage (P5-06) | Terminé | 0.1.48 |
+| P5 lots 3-5 | Comptes par moteur, changement de compte guidé, connecteurs Grok et Arena, essai à blanc (P5-07..11) | **Priorité suivante** | | `P5-fenetre-moteurs.md` |
 | P2 lot 2 | Reformulation anti-refus graduée (P2-05) | À faire | | `P2-automatisation.md` |
 | P2 lot 3 | Quotas appris, `waiting_quota`, réveil auto, oubli de mur (P2-06..08) | À faire | | `P2-automatisation.md` |
 | P2 lot 4 | Seuil paroles 0,85 + décision auto dans le rapport (P2-09) | À faire | | `P2-automatisation.md` |
@@ -78,7 +79,7 @@ Décision du propriétaire pour le contrôle qualité automatique (02/11/2026) :
 ## 5. Lancer les vérifications
 
 ```bash
-python3 -m unittest discover -s tests -p 'test_*.py'      # 162 tests à la 0.1.47
+python3 -m unittest discover -s tests -p 'test_*.py'      # 174 tests à la 0.1.48
 for f in tests/*.cjs; do node "$f" || echo "ÉCHEC $f"; done  # 25 suites JS (dont Chromium réel)
 python3 -m py_compile server.py errors.py quality.py editorial.py
 for f in extension/*.js web/app.js; do node --check "$f"; done
@@ -98,6 +99,7 @@ changent souvent, seuls les tests sur fixtures DOM existent. Commencer par un **
 | Fichier | Rôle |
 |---|---|
 | `server.py` | État, file de tâches, `schedule()`, `accept_task_result()`, routes HTTP |
+| `engines.py` | Moteurs vidéo : durées, limite de mots, longueur au montage (P5-06) |
 | `errors.py` | Types d'échec (P2-01) |
 | `quality.py` | Contrôle technique, transcription, revue visuelle |
 | `editorial.py` | Validation éditoriale du scénario |

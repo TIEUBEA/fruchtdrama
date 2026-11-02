@@ -9,6 +9,24 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 Prochain : P5 lots 2 à 5 (moteurs Grok et Arena, comptes par moteur, changement de compte guidé), puis P2 lots 2 à 5. Voir `docs/sudf/REPRISE.md`.
 
+## 0.1.48 — 2026-11-02 (branche `sudf`) — P5 lot 2 : moteur vidéo par production
+
+Détail : `docs/sudf/P5-fenetre-moteurs.md` (P5-06).
+
+### Ajouté
+- Choix du **moteur vidéo** à la création : Google Flow (8 s), Grok Imagine (6 s), LMArena vidéo (4 à 10 s) (`engines.py`). Grok et Arena sont affichés « bientôt » et refusés par le serveur tant que leur connecteur n'est pas livré.
+- Nouvelle tâche `engine_video` pour Grok/Arena : pas de réservation de crédits, jamais bloquée comme « envoi incertain » (aucun argent en jeu), essai à blanc pris en charge.
+
+### Amélioré
+- Le prompt de scénario, la limite de mots par scène (20 mots pour 8 s, 15 pour 6 s), la correction d'histoire et le contrôle de durée suivent le moteur choisi.
+- Montage : chaque clip garde sa durée réelle (bornée par le moteur) au lieu d'être complété par une image figée jusqu'à 8 s ; les sous-titres se calent sur les durées réelles. Flow reste exactement 8 s.
+
+### Mode d'emploi
+- `docs/MODE-EMPLOI.md` : champ « Moteur vidéo » (section 8) et ligne 0.1.48 (section 12).
+
+### Tests
+- `tests/test_p5_engines.py` : unitaires, planification, routage, HTTP, contrôle de durée et **montage ffmpeg réel** de clips de 6 s (vérifié par mutation).
+
 ## 0.1.47 — 2026-11-02 (branche `sudf`) — P5 lot 1 : fenêtre unique
 
 Détail : `docs/sudf/P5-fenetre-moteurs.md` (P5-01 à P5-05).
