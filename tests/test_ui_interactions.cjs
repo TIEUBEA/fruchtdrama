@@ -87,6 +87,8 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   await waitFor(()=>evaluate(`document.body.innerText.includes('b@x.com')&&!!document.querySelector('[data-action="accountSwitched"]')`),15000,'bandeau changement de compte');
   await evaluate(`document.querySelector('[data-action="accountSwitched"]').click()`);
   await waitFor(async()=>(await (await fetch(base+'/api/state')).json()).jobs.find(x=>x.id===switching).status==='running',10000,'changement confirmé');
+  // 7 bis. Interface: a Grok production shows its engine, not the Flow profile selector.
+  assert.ok(await evaluate(`document.querySelector('.engine-badge')?.textContent.includes('Grok Imagine')&&document.querySelector('#jobProfile').closest('label').hidden`),'engine badge and Flow selector hidden');
   // 8. P5-07: add a Grok account from Connexions (address only).
   await evaluate(`document.querySelector('nav [data-page="connections"]').click()`);
   await waitFor(()=>evaluate("!!document.querySelector('#engineAccountForm')"),10000,'formulaire comptes');
@@ -102,7 +104,16 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   await waitFor(()=>evaluate(`!!document.querySelector('[data-night="start"]')`),10000,'panneau file de nuit');
   await evaluate(`document.querySelector('[data-night="start"]').click()`);
   await waitFor(async()=>(await (await fetch(base+'/api/state')).json()).night?.active===true||(await (await fetch(base+'/api/state')).json()).night?.log?.some(x=>x.text.includes('démarrée')),10000,'file démarrée');
+  // 10. Interface: the guide lists every new feature; the creation form hides Flow-only fields for Grok.
+  await evaluate(`document.querySelector('nav [data-page="guide"]').click()`);
+  const guideText=await waitFor(()=>evaluate(`document.querySelector('.guide-new')?.innerText`),10000,'guide');
+  for(const word of ['Fenêtre FruchtDrama','Trois moteurs vidéo','Changement de compte','File de nuit','Séries et publication','Assistance'])assert.ok(guideText.includes(word),word);
+  assert.match(guideText,/version 0\.1\.\d+/);
+  await evaluate(`(()=>{const sel=document.querySelector('#createForm [name=video_engine]');sel.value='grok';sel.dispatchEvent(new Event('change',{bubbles:true}));return true})()`);
+  assert.ok(await evaluate(`[...document.querySelectorAll('#createForm .flow-only')].every(x=>x.hidden)`),'Flow-only fields hidden for Grok');
+  await evaluate(`(()=>{const sel=document.querySelector('#createForm [name=video_engine]');sel.value='flow';sel.dispatchEvent(new Event('change',{bubbles:true}));return true})()`);
+  assert.ok(await evaluate(`[...document.querySelectorAll('#createForm .flow-only')].every(x=>!x.hidden)`),'Flow fields back');
   assert.deepEqual(errors,[]);ws.close();
-  console.log('Interactions navigateur : correction conservée au rafraîchissement, enregistrement, refus visible, confirmation de sortie, validation, « Refaire la couverture », changement de compte guidé, ajout d’un compte Grok et file de nuit vérifiés.');
+  console.log('Interactions navigateur : correction conservée au rafraîchissement, enregistrement, refus visible, confirmation de sortie, validation, « Refaire la couverture », changement de compte guidé, ajout d’un compte Grok, file de nuit, guide des nouveautés et formulaire par moteur vérifiés.');
  }finally{cleanup();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

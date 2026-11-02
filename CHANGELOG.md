@@ -9,6 +9,17 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 Prochain : P3 (séries, idées, kit de publication, veille, 16:9) et P4 (montage avancé, sous-titres karaoké, rapport de panne). Voir `docs/sudf/REPRISE.md`.
 
+## Branche `sudf-ui` (sur 0.1.52) — interface complète
+
+### Amélioré
+- Mode d'emploi intégré (page « Mode d'emploi ») : section « Nouveautés » avec toutes les fonctions (fenêtre unique, moteurs, changement de compte, limites et refus, file de nuit, corrections, séries, assistance) et la version.
+- Formulaire de création : les champs propres à Flow (modèle, profil, coût) se masquent quand Grok ou Arena est choisi.
+- Production Grok/Arena : badge du moteur, sélecteur de profil Flow masqué.
+- Couleurs des nouveaux statuts (limite, file de nuit, changement de compte, relecture).
+
+### Tests
+- `tests/test_ui_interactions.cjs` étendu (Chrome réel : guide, formulaire par moteur, badge moteur).
+
 ## 0.1.52 — 2026-11-02 (branche `sudf`) — P3 lot 1 : séries et kit de publication
 
 Détail : `docs/sudf/P3-croissance.md`.

@@ -97,7 +97,7 @@ def public_state():
     for t in s['tasks']: t.pop('result',None)
     for public,j in zip(s['jobs'],STATE['jobs']):
         public['uncertain_clips']=sorted({int(t['slot'].split(':')[1]) for t in uncertain_clip_tasks(j)})
-    s['quota_status']=quotas.summary(STATE,time.time())
+    s['quota_status']=quotas.summary(STATE,time.time());s['version']=VERSION
     s['ffmpeg']=bool(shutil.which('ffmpeg')); return s
 def safe_child(parent, name):
     target=(parent/name).resolve()
