@@ -1,5 +1,5 @@
 """P2-01/P2-02: typed task failures. Unit tests of errors.py and HTTP integration through the bridge."""
-import importlib.util, json, os, pathlib, sys, tempfile, threading, unittest, urllib.request
+import importlib.util, json, os, pathlib, sys, tempfile, threading, unittest, urllib.error, urllib.request
 
 ROOT = pathlib.Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT))
@@ -110,3 +110,14 @@ class BridgeTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class GatewaySwitchTests(BridgeTests):
+    def test_disabled_gateway_gets_no_task(self):
+        j = job(); s.schedule(j)
+        self.req('/api/client', {'id': self.client, 'disabled': True})
+        self.assertIsNone(self.claim(), 'switched-off browser never claims')
+        self.req('/api/client', {'id': self.client, 'disabled': False})
+        self.assertEqual(self.claim()['slot'], 'image:0')
+        with self.assertRaises(urllib.error.HTTPError):
+            self.req('/api/client', {'id': self.client, 'disabled': True})  # a task is now running

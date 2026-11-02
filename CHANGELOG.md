@@ -9,6 +9,16 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 Prochain : P3 (séries, idées, kit de publication, veille, 16:9) et P4 (montage avancé, sous-titres karaoké, rapport de panne). Voir `docs/sudf/REPRISE.md`.
 
+## Branche `sudf-ui` — test réel de bout en bout (02/11/2026)
+
+Parcours réel dans le Chrome dédié : fenêtre unique, appairage, compte Flow rattaché (solde réel lu : 50 crédits), création d'après un lien TikTok, histoire validée, feuille de personnages, 4 images de scènes, projet Flow créé, **essai à blanc du clip réussi** (rien facturé).
+
+### Corrigé
+- Plusieurs passerelles en ligne se partageaient les tâches (une passerelle sans fenêtre provoquait « No current window ») : bouton **Désactiver / Réactiver** par passerelle (Mes comptes, onglet Passerelle) ; une passerelle désactivée ne reçoit plus aucune tâche.
+- « Mémoriser le compte Flow » reconnaît les adresses de projet sans `/u/N/`.
+- Vignettes des productions : couverture, sinon première scène, sinon feuille de personnages.
+- Le badge « connecteur(s) en ligne » ignore les passerelles désactivées.
+
 ## Branche `sudf-ui` — finition professionnelle et comptes façon Atelier (02/11/2026)
 
 ### Ajouté

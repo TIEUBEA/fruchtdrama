@@ -955,6 +955,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     q=urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query); client=q.get('client',[''])[0]; c=STATE['clients'].get(client)
                     if not c: return self.send_json({'error':'Client inconnu'},400)
                     c['seen']=now()
+                    # A gateway switched off by the owner never receives work (several browsers paired).
+                    if c.get('disabled'):save();return self.send_json(None)
                     for j in STATE['jobs']:
                         schedule(j)
                     for t in STATE['tasks']:
@@ -1196,6 +1198,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 elif path=='/api/filon':
                     if 'auto' in b:STATE['settings']['filon_auto']=bool(b['auto'])
                     if b.get('refresh'):filon_refresh(b.get('language'))
+                elif path=='/api/client':
+                    c=STATE['clients'].get(b.get('id'))
+                    if not c:raise ValueError('Passerelle inconnue')
+                    if any(t['status']=='claimed' and t.get('client')==b.get('id') for t in STATE['tasks']) and b.get('disabled'):raise ValueError('Cette passerelle exécute une tâche : attendez sa fin')
+                    c['disabled']=bool(b.get('disabled'))
                 elif path=='/api/flow-auto':
                     STATE['settings']['flow_auto']=bool(b.get('enabled'))
                 elif path=='/api/job':
