@@ -76,6 +76,14 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   // 6. Redo the cover of a finished episode: prompt for a correction, final invalidated, only the cover task queued.
   await send('Page.navigate',{url:base+'/#job='+done});
   await waitFor(()=>evaluate(`!!document.querySelector('[data-redo="cover"]')`),15000,'bouton refaire');
+  // Owner request: larger type, large images, click to enlarge.
+  assert.ok(await evaluate(`parseFloat(getComputedStyle(document.body).fontSize)>=16`),'body text at least 16 px');
+  assert.ok(await evaluate(`parseFloat(getComputedStyle(document.querySelector('.hint')).fontSize)>=14`),'hints at least 14 px');
+  const sizes=await evaluate(`JSON.stringify([...document.querySelectorAll('.asset img')].map(i=>Math.round(i.getBoundingClientRect().width)).concat([Math.round(document.querySelector('.assets').getBoundingClientRect().width),innerWidth]))`);
+  assert.ok(JSON.parse(sizes)[0]>=200,'scene images shown large '+sizes);
+  await evaluate(`document.querySelector('.asset img').click()`);
+  assert.ok(await waitFor(()=>evaluate(`!!document.querySelector('#lightbox[open] img')`),5000,'agrandissement'));
+  await evaluate(`document.querySelector('#lightbox').close()`);
   assert.ok(await evaluate(`!!document.querySelector('[data-redo="clip:0"]')&&!!document.querySelector('[data-redo="image:1"][data-has-clip="1"]')`),'redo buttons on scenes');
   await evaluate(`document.querySelector('[data-redo="cover"]').click()`);
   const redone=await waitFor(async()=>{const s=await (await fetch(base+'/api/state')).json();const j=s.jobs.find(x=>x.id===done);return j.stage==='cover'&&{s,j};},10000,'refaire couverture');
