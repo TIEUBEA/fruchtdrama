@@ -8,6 +8,7 @@ import captions
 import covers
 import quality
 import sys
+import traceback
 
 ROOT = pathlib.Path(__file__).resolve().parent
 DATA = pathlib.Path(os.environ.get('FRUCHT_DATA', ROOT / 'data')).resolve()
@@ -19,6 +20,8 @@ DOWNLOADS_ROOT = pathlib.Path(os.environ.get('FRUCHT_DOWNLOADS',pathlib.Path.hom
 STEPS = ['research', 'script', 'characters', 'images', 'clips', 'quality', 'cover', 'edit', 'done']
 LABELS = {'research':'Recherche', 'script':'Scénario', 'characters':'Personnages', 'images':'Scènes', 'clips':'Animation Flow', 'quality':'Contrôle qualité', 'cover':'Couverture', 'edit':'Montage', 'done':'Terminé'}
 CREATION_LANGUAGES=('Deutsch (de-DE)','Français (fr-FR)','English (en-US)')
+# Default research query per creation language (same values as the web form).
+RESEARCH_QUERIES={'Deutsch (de-DE)':'KI Früchte Geschichten deutsch','Français (fr-FR)':'histoires fruits IA français','English (en-US)':'AI fruit drama stories English'}
 
 def creation_language(value):
     value=str(value).strip()
@@ -82,6 +85,8 @@ def event(j, text): j['events'].append({'at':now(),'text':text}); j['updated']=n
 def public_state():
     s=copy.deepcopy(STATE); s.pop('token',None)
     for t in s['tasks']: t.pop('result',None)
+    for public,j in zip(s['jobs'],STATE['jobs']):
+        public['uncertain_clips']=sorted({int(t['slot'].split(':')[1]) for t in uncertain_clip_tasks(j)})
     s['ffmpeg']=bool(shutil.which('ffmpeg')); return s
 def safe_child(parent, name):
     target=(parent/name).resolve()
@@ -113,7 +118,12 @@ def flow_dispatch_tick():
             target=task['payload'].get('flow_route');p=profile_by(task.get('profile'))
         if not task:
             try:flow_accounts.launch(pending)
-            except Exception as e:p['credit_error']='Ouverture Flow impossible : '+str(e);p['credit_probe']['status']='failed';p['credit_next_check']=flow_credits.stamp(time.time()+900);save()
+            except Exception as e:
+                # The launch runs outside the lock; record its failure on the live profile under the lock.
+                with LOCK:
+                    live=profile_by(pending['id'])
+                    if live and live.get('credit_probe',{}).get('id')==pending['credit_probe']['id']:
+                        live['credit_error']='Ouverture Flow impossible : '+str(e);live['credit_probe']['status']='failed';live['credit_next_check']=flow_credits.stamp(time.time()+900);save()
             return
         if not target or not p:return
         client=STATE['clients'].get(target['client'],{})
@@ -130,12 +140,24 @@ def flow_dispatch_tick():
         with LOCK:
             j=job_by(task['job']);j['status']='attention';event(j,'Ouverture Flow impossible : '+str(e));save()
 
+LAST_ERRORS={}
+def log_error(context,error,interval=60):
+    """Write a traceback to stderr (data/server-errors.log), at most once per interval for the same error."""
+    key=(context,type(error).__name__,str(error));moment=time.time()
+    if moment-LAST_ERRORS.get(key,0)<interval:return False
+    LAST_ERRORS[key]=moment
+    print(f'[{now()}] {context} : '+''.join(traceback.format_exception(type(error),error,error.__traceback__)),file=sys.stderr,flush=True)
+    return True
+
+def dispatch_once():
+    try:flow_dispatch_tick()
+    except Exception as e:
+        # An unavailable account must not stop the HTTP server, but the failure must stay diagnosable.
+        log_error('Boucle de dispatch Flow',e)
+
 def flow_dispatch_loop():
     while True:
-        try:flow_dispatch_tick()
-        except Exception:
-            # An unavailable account must not stop the HTTP server.
-            pass
+        dispatch_once()
         time.sleep(3)
 def image_assets(j):
     return [asset_url(j,p['file']) for p in j.get('characters',[]) if p.get('file')]
@@ -272,13 +294,15 @@ def script_prompt(j):
     language=j['config'].get('language','Deutsch (de-DE)')
     schema={'production_id':j['id'],'title':'Titre dans la langue choisie','cover_title':'Question courte dans la langue choisie','description':'Description TikTok dans la langue choisie, mentionnant la création par IA','characters':[{'id':'fruit_a','name':'Prénom dans la langue choisie','appearance':'Design de fruit et vêtements cohérents','voice':'Voix native de la langue choisie, âge, timbre','image_prompt':'Prompt de référence dans la langue choisie'}],'scenes':[{'characters':['fruit_a'],'meaning':'Action compréhensible sans le son','image_prompt':'Prompt d’image dans la langue choisie, 9:16','video_prompt':'Animation, caméra, action, position des locuteurs, lèvres et personnages silencieux','dialogue':[{'speaker':'fruit_a','text':'Réplique courte dans la langue choisie'}]}]}
     guidance=''
+    # Announce the limit the validators actually enforce (editorial.validate: 20 for retention productions).
+    word_limit=20 if j.get('editorial_version')==2 and j.get('retention_version')==1 else 25
     if j.get('editorial_version')==2:
         schema['creative_selection']={'candidates':[{'title':'Titre du concept','hook':'Première réplique','conflict':'Conflit','setting':'Décor','twist':'Retournement','ending':'Fin','scores':{'hook':4,'clarity':4,'emotion':4,'novelty':5}} for _ in range(5)],'selected_index':0,'reason':'Justification éditoriale, pas une prédiction de vues'}
         if j.get('hook_version')==1:
             schema['opening_plan']={'visible_detail':'Objet ou geste visible dès la première image','question':'Question laissée ouverte par la première réplique','payoff_scene':n,'payoff':'Explication concrète apportée dans cette scène'}
         schema['story_signature']={'relationship':'short English relationship','setting':'short English setting','central_object':'short English object','twist_mechanism':'short English plot mechanism'}
         guidance=editorial.instructions(j,STATE['jobs'])+'\nRéférences comparées : '+json.dumps(j.get('candidates',[])[:6],ensure_ascii=False)+'\nCorrections demandées : '+json.dumps(j.get('editorial_feedback',[]),ensure_ascii=False)
-    return f'''Crée une mini-fiction de fruits entièrement ORIGINALE. Langue demandée pour les dialogues, les voix, les textes de couverture, la description et les prompts (sauf les clés techniques et la signature narrative) : {language}. La langue demandée prime sur la langue française des instructions et des descriptions du schéma. Aucune traduction ni réplique dans une autre langue. Les personnages parlent avec des voix natives de la langue demandée. Réponds UNIQUEMENT avec du JSON valide, sans explication. Conserve les clés techniques du schéma en anglais. Référence comme indice de tendance seulement, jamais copier les répliques ou les plans : {json.dumps(ref,ensure_ascii=False)}. Idée : {j['brief']}. Exactement {n} scènes de 8 secondes, au maximum 3 personnages. Au plus 25 mots parlés par scène pour les langues avec espaces ; pour les autres, une réplique assez courte pour être prononcée naturellement en moins de 7 secondes. Maximum 2 locuteurs par scène. Accroche dès la première phrase, retournement visible, conclusion satisfaisante. Pas de présentation comme fait réel. Animation 3D premium, fruits anthropomorphes avec peau de fruit aussi sur les mains, vêtements couvrants sans logos, grands visages expressifs, décor cohérent avec l’intrigue choisie et différent des épisodes récents, vertical 9:16. Même identité et tenue partout, aucune voix de narrateur, personnages parlant à l'écran, caméra continue par clip. Sous-titres ajoutés au montage. {guidance} Le champ cover_title doit être une accroche de couverture de 3 à 5 mots maximum dans la langue demandée, sans révéler la fin. Schéma : {json.dumps(schema,ensure_ascii=False)}'''
+    return f'''Crée une mini-fiction de fruits entièrement ORIGINALE. Langue demandée pour les dialogues, les voix, les textes de couverture, la description et les prompts (sauf les clés techniques et la signature narrative) : {language}. La langue demandée prime sur la langue française des instructions et des descriptions du schéma. Aucune traduction ni réplique dans une autre langue. Les personnages parlent avec des voix natives de la langue demandée. Réponds UNIQUEMENT avec du JSON valide, sans explication. Conserve les clés techniques du schéma en anglais. Référence comme indice de tendance seulement, jamais copier les répliques ou les plans : {json.dumps(ref,ensure_ascii=False)}. Idée : {j['brief']}. Exactement {n} scènes de 8 secondes, au maximum 3 personnages. Au plus {word_limit} mots parlés par scène pour les langues avec espaces ; pour les autres, une réplique assez courte pour être prononcée naturellement en moins de 7 secondes. Maximum 2 locuteurs par scène. Accroche dès la première phrase, retournement visible, conclusion satisfaisante. Pas de présentation comme fait réel. Animation 3D premium, fruits anthropomorphes avec peau de fruit aussi sur les mains, vêtements couvrants sans logos, grands visages expressifs, décor cohérent avec l’intrigue choisie et différent des épisodes récents, vertical 9:16. Même identité et tenue partout, aucune voix de narrateur, personnages parlant à l'écran, caméra continue par clip. Sous-titres ajoutés au montage. {guidance} Le champ cover_title doit être une accroche de couverture de 3 à 5 mots maximum dans la langue demandée, sans révéler la fin. Schéma : {json.dumps(schema,ensure_ascii=False)}'''
 
 def add_task(j, kind, payload, slot):
     if any(t['job']==j['id'] and t['slot']==slot and t['status'] in ('queued','claimed') for t in STATE['tasks']): return
@@ -324,12 +348,14 @@ def schedule(j):
     elif step=='clips':
         for i,s in enumerate(j['scenes']):
             if not s.get('clip'):
+                if any(t['slot']==f'clip:{i}' for t in uncertain_clip_tasks(j)):
+                    j['status']='attention';event(j,uncertain_message(j));return
                 cost=j['config']['flow_cost'];p=flow_accounts.choose(STATE,j.get('flow_profile'),cost)
                 if not p or p['balance']<cost:
                     j['status']='waiting_credit'; event(j,'Solde insuffisant ou profil Flow absent. Choisis un profil et vérifie son solde.'); return
                 if p['id']!=j.get('flow_profile'):
                     j['flow_profile']=p['id'];event(j,'Passage automatique au prochain compte Flow enregistré ; clips reçus conservés.')
-                cast='\n'.join(c['id']+': '+c['appearance']+' Stimme: '+c['voice'] for c in j['characters'])
+                cast='\n'.join(c['id']+': '+c['appearance']+' Voice: '+c['voice'] for c in j['characters'])
                 dialog='\n'.join(x['speaker']+': '+x['text'] for x in s['dialogue'])
                 language=j['config'].get('language','Deutsch (de-DE)')
                 prompt=f"One continuous shot, 8 seconds, portrait 9:16. No text, no music. Spoken language ONLY: {language}. Natural native voices in the requested language, no translation or extra narration. Preserve identity.\n{cast}\n{s['video_prompt']}\nExact dialogue in this order; only the named speaker moves their lips, all others stay silent:\n{dialog}"
@@ -360,6 +386,25 @@ def schedule(j):
                 attachments.append(asset_url(j,style_file.name))
             add_task(j,'chat_image',{'provider':'chatgpt','prompt':cover_prompt(j),'attachments':attachments},'cover');return
         j['stage']='edit';j['status']='rendering';event(j,'Montage local démarré.');start_render(j['id'])
+    elif step=='edit':
+        # A failed or interrupted montage is retried locally; no media is regenerated.
+        if not j.get('final'):
+            j['status']='rendering';event(j,'Montage local relancé avec les médias existants.');start_render(j['id'])
+
+def uncertain_clip_tasks(j):
+    """Flow submissions that may have been charged but whose clip was never received."""
+    scenes=j.get('scenes',[])
+    def missing(t):
+        index=int(t['slot'].split(':')[1])
+        return index<len(scenes) and not scenes[index].get('clip')
+    return [t for t in STATE['tasks'] if t.get('job')==j['id'] and t.get('kind')=='flow_video' and t.get('status')=='failed'
+            and t.get('reservation') and not t['reservation'].get('refunded') and not t.get('acknowledged')
+            and str(t.get('slot','')).startswith('clip:') and missing(t)]
+
+def uncertain_message(j):
+    scenes=sorted({int(t['slot'].split(':')[1])+1 for t in uncertain_clip_tasks(j)})
+    return ('Envoi Flow incertain pour la scène '+', '.join(map(str,scenes))+' : le clip a peut-être déjà été généré et facturé. '
+            'Laissez la passerelle le récupérer, importez-le, ou confirmez qu’il n’existe pas dans Flow avant toute nouvelle génération.')
 
 def schedule_quality(j):
     folder=job_dir(j);key=quality.fingerprint(j,folder);report=j.get('quality_report',{})
@@ -461,7 +506,8 @@ def accept_task_result(t,result):
         event(j,'Revue visuelle IA reçue ; lèvres et identité des voix restent non certifiées.')
     elif slot=='script':
         try:store_script(j,parse_json(result.get('text','')))
-        except editorial.Rejection as e:
+        except ValueError as e:
+            # Editorial refusals and structurally invalid JSON share the same bounded rewrite.
             t['status']='failed';t['error']=str(e);j['editorial_attempts']=j.get('editorial_attempts',0)+1
             j['editorial_feedback']=[str(e)];j['stage']='script'
             j['status']='paused' if was_paused else 'running' if j['editorial_attempts']<=2 else 'attention'
@@ -680,7 +726,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     if path=='/api/upload':
                         t=next((t for t in STATE['tasks'] if t['job']==id and t['slot']==slot and t['status'] in ('queued','claimed')),None)
                         for other in STATE['tasks']:
-                            if other['job']==id and other['status'] in ('queued','claimed'): other['status']='cancelled'
+                            # A generation running for another scene keeps its owner: its result stays acceptable.
+                            if other['job']==id and (other['status']=='queued' or other['status']=='claimed' and other['slot']==slot): other['status']='cancelled'
                         if not t: t={'job':id,'slot':slot}
                         j['status']='running'; accept_task_result(t,{'ok':True,'file':name}); save()
                     return self.send_json({'file':name})
@@ -799,6 +846,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     cfg['flow_cost']=int(b.get('config',{}).get('flow_cost',{'gemini_omni_flash':12,'veo_3_1_lite':10,'veo_3_1_fast':20,'veo_3_1_quality':100}[cfg['flow_model']]))
                     if cfg['flow_cost'] not in {'gemini_omni_flash':(12,), 'veo_3_1_lite':(10,5), 'veo_3_1_fast':(20,10), 'veo_3_1_quality':(100,)}[cfg['flow_model']]:raise ValueError('Coût incompatible avec le modèle Flow choisi. Le coût réel sera vérifié avant tout envoi.')
                     cfg['language']=creation_language(cfg.get('language','Deutsch (de-DE)'))
+                    requested_query=str(b.get('config',{}).get('query','')).strip()
+                    # An omitted or untouched German default follows the chosen language.
+                    cfg['query']=RESEARCH_QUERIES[cfg['language']] if not requested_query or requested_query in RESEARCH_QUERIES.values() else requested_query[:200]
                     if cfg['scene_count'] not in (3,4,6,8) or not 1<=cfg['flow_cost']<=100 or cfg['provider'] not in ('chatgpt','claude'): raise ValueError('Réglages invalides')
                     j={'id':uid(),'title':'Nouvel épisode','brief':str(b.get('brief',''))[:4000], 'config':cfg,'editorial_version':2,'retention_version':1,'hook_version':1,'quality_version':1,'cover_style':'family_poster_v3','flow_profile':b.get('flow_profile'),'status':'running','stage':'research','created':now(),'updated':now(),'events':[],'candidates':[],'characters':[],'scenes':[]}; STATE['jobs'].insert(0,j); event(j,'Projet créé. Recherche préalable et comparaison de cinq concepts obligatoires.'); schedule(j)
                 elif path.startswith('/api/job/'):
@@ -811,10 +861,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         if active:
                             if b.get('flow_profile') and b['flow_profile']!=j.get('flow_profile'):raise ValueError('Un clip est déjà suivi : attendez sa récupération avant de changer de compte')
                             j['status']='running';event(j,'Suivi de la tâche en cours conservé ; aucun nouvel envoi.');save();return self.send_json(public_state())
+                        if j.get('stage')=='clips' and uncertain_clip_tasks(j):raise ValueError(uncertain_message(j))
                         for t in STATE['tasks']:
                             if t['job']==id and t['status'] in ('queued','claimed'): t['status']='cancelled'
                         if b.get('flow_profile'): j['flow_profile']=b['flow_profile']
                         j['status']='running'; event(j,'Reprise demandée ; passage automatique limité aux comptes Flow enregistrés.' if STATE.get('settings',{}).get('flow_auto') else 'Reprise demandée ; compte Flow sélectionné conservé.'); schedule(j)
+                    elif action=='confirm_no_clip':
+                        slot=str(b.get('slot',''))
+                        pending=[t for t in uncertain_clip_tasks(j) if t['slot']==slot]
+                        if not pending:raise ValueError('Aucun envoi Flow incertain pour cette scène')
+                        for t in pending:t['acknowledged']=now()
+                        event(j,'Le propriétaire confirme qu’aucun clip n’existe dans Flow pour la scène '+str(int(slot.split(':')[1])+1)+'. Nouvelle génération autorisée ; vérifiez le solde réel du compte Flow.')
                     elif action=='approve_quality':
                         if j.get('stage')!='quality' or not j.get('quality_report'):raise ValueError('Aucun contrôle qualité à valider')
                         report=j['quality_report'];key=quality.fingerprint(j,job_dir(j))
@@ -848,7 +905,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 save(); self.send_json(public_state())
         except Exception as e: self.send_json({'error':str(e)},400)
 
-if __name__=='__main__':
+def recover_after_restart():
     with LOCK:
         # Never automatically resend an ambiguous generation after a restart.
         for t in STATE['tasks']:
@@ -859,7 +916,14 @@ if __name__=='__main__':
                 try:repair_duplicate_scenes(j)
                 except Exception as e:
                     j['status']='attention';event(j,'Vérification des images impossible : '+str(e))
+        for j in STATE['jobs']:
+            # The render thread died with the previous process: restart the local montage only.
+            if j.get('stage')=='edit' and j.get('status')=='rendering' and not j.get('final'):
+                j['status']='running';event(j,'Redémarrage pendant le montage : reprise locale sans nouvelle génération.');schedule(j)
         save()
+
+if __name__=='__main__':
+    recover_after_restart()
     print(f'FruchtDrama Studio : http://127.0.0.1:{PORT}',flush=True)
     threading.Thread(target=flow_dispatch_loop,daemon=True).start()
     http.server.ThreadingHTTPServer(('127.0.0.1',PORT),Handler).serve_forever()
