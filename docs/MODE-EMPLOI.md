@@ -201,6 +201,7 @@ Quand ChatGPT refuse une image, le studio la redemande seul deux fois avec une f
 
 | Version | Ce qui change pour vous |
 |---|---|
+| sudf-ui | Interface façon Atelier : **Le Filon**, **Créer une vidéo** d'un lien TikTok ou d'une idée, thème sombre (◐), police et images agrandies (clic pour agrandir). |
 | 0.1.52 | **Écrire la suite** d'un épisode (série) ; **Kit de publication**. |
 | 0.1.51 | Sous-titres **karaoké** ; bouton **Supprimer…** (corbeille) ; rapport de panne et nettoyage dans Connexions. |
 | 0.1.50 | **File de nuit** (section 11 bis) ; reformulation automatique des images refusées ; limites ChatGPT/Claude apprises avec reprise automatique ; seuil de paroles 85 %. |

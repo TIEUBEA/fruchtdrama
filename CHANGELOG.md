@@ -9,6 +9,20 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 Prochain : P3 (séries, idées, kit de publication, veille, 16:9) et P4 (montage avancé, sous-titres karaoké, rapport de panne). Voir `docs/sudf/REPRISE.md`.
 
+## Branche `sudf-ui` — interface façon Atelier (02/11/2026)
+
+### Ajouté
+- Navigation d'action avec sous-titres : **Le Filon** (vidéos virales relevées), **Créer une vidéo** (d'un lien ou d'une idée), **Studio**, **Mes comptes**, Bibliothèque, Mode d'emploi.
+- **Le Filon** : toutes les vidéos TikTok relevées par les recherches, meilleur signal d'abord, bouton « Créer d'après cette vidéo ».
+- **Créer d'après un lien TikTok** : la recherche est sautée, l'histoire originale s'inspire de la vidéo fournie (paramètres de suivi retirés, autres sites refusés).
+- **Thème sombre** par défaut (bouton ◐ pour le thème clair, mémorisé).
+
+### Amélioré
+- Police agrandie sur toute la plateforme ; images des scènes, clips et couverture affichés en grand, agrandissement plein écran au clic ; barre latérale élargie.
+
+### Tests
+- `tests/test_link_creation.py` ; `tests/test_ui_interactions.cjs` étendu (thème, Filon, création pré-remplie, tailles de police et d'images, agrandissement).
+
 ## Branche `sudf-ui` — correctifs du test réel (02/11/2026)
 
 Test réel automatisé sur ce PC : serveur réel, Chromium avec l'extension, vrais sites (sans compte). Détail et liste de contrôle : `docs/ESSAI-REEL.md`.
