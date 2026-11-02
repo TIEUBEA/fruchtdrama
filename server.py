@@ -235,7 +235,28 @@ def night_once():
         active=night()['active']
     power.sync(active)  # same long-lived dispatch thread every time
 
+FILON_EVERY=2*3600
+def filon_refresh(language=None):
+    """Start a research-only job that refreshes Le Filon (no story, no paid generation)."""
+    if any(j.get('filon_only') and j['status'] not in ('done','attention','paused') for j in STATE['jobs']):raise ValueError('Actualisation du Filon déjà en cours')
+    cfg={**STATE['settings']};cfg['language']=creation_language(language or cfg.get('language','Deutsch (de-DE)'));cfg['query']=RESEARCH_QUERIES[cfg['language']]
+    j={'id':uid(),'title':'Actualisation du Filon','brief':'','config':cfg,'filon_only':True,'status':'running','stage':'research','created':now(),'updated':now(),'events':[],'candidates':[],'characters':[],'scenes':[],'flow_profile':None}
+    STATE['jobs'].append(j);schedule(j);return j
+
+def filon_tick(moment=None):
+    moment=moment or time.time();s=STATE.get('settings',{})
+    if not s.get('filon_auto'):return None
+    try:last=dt.datetime.fromisoformat(s.get('filon_refreshed','')).timestamp()
+    except ValueError:last=0
+    if moment-last<FILON_EVERY:return None
+    try:j=filon_refresh();s['filon_refreshed']=now();return j
+    except ValueError:return None
+
 def dispatch_once():
+    try:
+        with LOCK:
+            if filon_tick():save()
+    except Exception as e:log_error('Filon automatique',e)
     try:night_once()
     except Exception as e:log_error('File de nuit',e)
     try:wake_waiting()
@@ -342,6 +363,9 @@ def rank_candidates(rows,language='Deutsch (de-DE)'):
             v=r.get(k)
             item[k]=float(v) if type(v) in (int,float) and 0<=v<1e12 else None
         item['date']=str(r.get('date',''))[:40]
+        thumb=urllib.parse.urlparse(str(r.get('thumb','')))
+        # Filon gallery: TikTok CDN covers only, never arbitrary hosts.
+        item['thumb']=str(r.get('thumb'))[:2000] if thumb.scheme=='https' and thumb.hostname and re.search(r'(?:^|\.)(?:tiktokcdn(?:-[a-z]+)?\.com|ibyteimg\.com|tiktok\.com)$',thumb.hostname) else None
         age=None
         try: age=max(1,(dt.datetime.now(dt.timezone.utc).date()-dt.date.fromisoformat(item['date'][:10])).days)
         except ValueError: pass
@@ -691,6 +715,10 @@ def store_script(j,s):
     d=job_dir(j); (d/'scenario.json').write_text(json.dumps(s,ensure_ascii=False,indent=2),'utf-8'); (d/'description.txt').write_text(s['description'],'utf-8'); event(j,'Scénario structuré validé ; langue de création : '+j['config'].get('language','Deutsch (de-DE)')+'.')
 
 def apply_research(j,rows):
+    if j.get('filon_only'):
+        # Filon refresh: keep the gallery, never start a story.
+        j['candidates']=rank_candidates(rows,j['config'].get('language','Deutsch (de-DE)'))[:60];j['stage']='done';j['status']='done'
+        STATE.setdefault('settings',{})['filon_refreshed']=now();event(j,'Filon actualisé : '+str(len(j['candidates']))+' vidéo(s).');return
     if j.get('editorial_version')!=2:
         ranked=rank_candidates(rows,j['config'].get('language','Deutsch (de-DE)'));j['candidates']=ranked
         measured=[r for r in ranked if any(r[k] is not None for k in ('views','likes','signal'))]
@@ -1165,6 +1193,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 elif path=='/api/maintenance/purge':
                     maintenance.backup_state(DATA,STATE);result=maintenance.purge(STATE,time.time());save()
                     return self.send_json({**public_state(),'purge':result})
+                elif path=='/api/filon':
+                    if 'auto' in b:STATE['settings']['filon_auto']=bool(b['auto'])
+                    if b.get('refresh'):filon_refresh(b.get('language'))
                 elif path=='/api/flow-auto':
                     STATE['settings']['flow_auto']=bool(b.get('enabled'))
                 elif path=='/api/job':

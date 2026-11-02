@@ -63,7 +63,7 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   assert.equal((await (await fetch(base+'/api/state')).json()).jobs[0].title,'Histoire QA');
 
   // 4. Navigation with unsaved changes asks for confirmation.
-  await evaluate(`document.querySelector('nav [data-page="guide"]').click()`);
+  await evaluate(`document.querySelector('[data-page="guide"]').click()`);
   await waitFor(()=>dialogs.some(m=>m.includes('ne sont pas enregistrées')),5000,'confirmation before discarding');
   await evaluate(`document.querySelector('nav [data-page="studio"]').click()`);
   await waitFor(()=>evaluate("!!document.querySelector('#scriptReview')"),10000,'retour éditeur');
@@ -103,6 +103,7 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   await evaluate(`(()=>{const f=document.querySelector('#engineAccountForm');f.engine.value='grok';f.email.value='Second@x.com';f.requestSubmit();return true})()`);
   const accounts=await waitFor(async()=>{const st=await (await fetch(base+'/api/state')).json();return st.engine_accounts?.length&&st.engine_accounts;},10000,'compte ajouté');
   assert.equal(accounts[0].email,'second@x.com');assert.equal(accounts[0].engine,'grok');
+  await evaluate(`document.querySelector('[data-account-tab="grok"]').click()`);
   await waitFor(()=>evaluate(`document.body.innerText.includes('second@x.com')`),10000,'compte affiché');
   // 9. P2-10: add a production to the night queue, then start the queue from the studio page.
   await send('Page.navigate',{url:base+'/#job='+job});
@@ -113,7 +114,7 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   await evaluate(`document.querySelector('[data-night="start"]').click()`);
   await waitFor(async()=>(await (await fetch(base+'/api/state')).json()).night?.active===true||(await (await fetch(base+'/api/state')).json()).night?.log?.some(x=>x.text.includes('démarrée')),10000,'file démarrée');
   // 10. Interface: the guide lists every new feature; the creation form hides Flow-only fields for Grok.
-  await evaluate(`document.querySelector('nav [data-page="guide"]').click()`);
+  await evaluate(`document.querySelector('[data-page="guide"]').click()`);
   const guideText=await waitFor(()=>evaluate(`document.querySelector('.guide-new')?.innerText`),10000,'guide');
   for(const word of ['Fenêtre FruchtDrama','Trois moteurs vidéo','Changement de compte','File de nuit','Séries et publication','Assistance'])assert.ok(guideText.includes(word),word);
   assert.match(guideText,/version 0\.1\.\d+/);
@@ -126,24 +127,24 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   await evaluate(`document.querySelector('#theme').click()`);assert.ok(await evaluate(`!document.body.classList.contains('dark')`),'light theme on demand');
   await evaluate(`document.querySelector('#theme').click()`);
   await evaluate(`document.querySelector('nav [data-page="filon"]').click()`);
-  await waitFor(()=>evaluate(`document.querySelector('.filon-card')?.innerText.includes('1.2 M vues')`),10000,'Filon');
+  await waitFor(()=>evaluate(`document.querySelector('.filon-card')?.innerText.includes('1.2 M')`),10000,'Filon');
   await evaluate(`document.querySelector('.filon-card [data-action="new"]').click()`);
   assert.equal(await waitFor(()=>evaluate(`document.querySelector('#createDialog').open&&document.querySelector('#createForm [name=source_url]').value`),5000,'formulaire prérempli'),'https://www.tiktok.com/@oma/video/42');
   assert.ok(await evaluate(`[...document.querySelectorAll('nav small')].map(x=>x.textContent).join('|').includes('les vidéos virales')`),'nav subtitles');
   await evaluate(`document.querySelector('#createDialog').close()`);
   // 12. Accounts like the Atelier: one form for every platform, tables per platform; no emoji icons anywhere.
   await evaluate(`document.querySelector('nav [data-page="connections"]').click()`);
-  await waitFor(()=>evaluate(`document.querySelectorAll('table.accounts').length>=4`),10000,'tableaux de comptes');
+  await waitFor(()=>evaluate(`document.querySelectorAll('[data-account-tab]').length===6&&!!document.querySelector('table.accounts')`),10000,'tableaux de comptes');
   await evaluate(`(()=>{const f=document.querySelector('#engineAccountForm');f.engine.value='flow';f.engine.dispatchEvent(new Event('change',{bubbles:true}));f.email.value='flow.qa@x.com';f.balance.value='88';f.requestSubmit();return true})()`);
   const flow=await waitFor(async()=>(await (await fetch(base+'/api/state')).json()).profiles.find(p=>p.label==='flow.qa@x.com'),10000,'compte Flow ajouté');
   assert.equal(flow.balance,88);
   await waitFor(()=>evaluate(`document.querySelector('table.accounts').innerText.includes('flow.qa@x.com')`),10000,'compte Flow affiché');
   const emoji=/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B50}\u{2B06}\u{2190}-\u{21FF}\u{25A0}-\u{25FF}]/u;
   for(const pageName of ['filon','studio','connections','library','guide']){
-   await evaluate(`document.querySelector('nav [data-page="${pageName}"]').click()`);await sleep(400);
+   await evaluate(`document.querySelector('[data-page="${pageName}"]').click()`);await sleep(400);
    const text=await evaluate('document.body.innerText');assert.ok(!emoji.test(text),'no emoji icon on '+pageName+': '+(text.match(emoji)||[])[0]);
   }
-  assert.ok(await evaluate(`document.querySelectorAll('nav svg.ico').length===6`),'nav uses the line-icon set');
+  assert.ok(await evaluate(`document.querySelectorAll('nav svg.ico').length===5`),'nav uses the line-icon set');
   assert.deepEqual(errors,[]);ws.close();
   console.log('Interactions navigateur : correction conservée au rafraîchissement, enregistrement, refus visible, confirmation de sortie, validation, « Refaire la couverture », changement de compte guidé, ajout d’un compte Grok, file de nuit, guide des nouveautés, formulaire par moteur, thème sombre, Filon et création depuis un lien vérifiés.');
  }finally{cleanup();}

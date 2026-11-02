@@ -407,12 +407,14 @@ async function tidyChats(){
   await chrome.storage.local.set({status:result.message});return result;
  }finally{busy=false;}
 }
+// Project URLs with or without an account prefix: /project/<id>, /u/1/project/<id>, /fx/tools/flow/project/<id>.
+const FLOW_PROJECT=/^https:\/\/(flow\.google\.com|labs\.google)\/(?:[^?#]*\/)?project\//;
 async function registerFlow(){
  const cfg=await chrome.storage.local.get(null);
  if(!cfg.client||!cfg.token)throw Error('Appairez d’abord la passerelle au studio.');
  if(cfg.activeTask||busy)throw Error('Attendez la fin de la tâche en cours avant de mémoriser ce compte.');
  if(cfg.role==='creation')throw Error('Ce navigateur est réservé à votre IA ; utilisez la passerelle Flow.');
- const tab=await FruchtWorkspace.latest(chrome,/^https:\/\/(flow\.google\.com|labs\.google)\/.*\/project\//);
+ const tab=await FruchtWorkspace.latest(chrome,FLOW_PROJECT);
  if(!FruchtFlowSession.project(tab?.url))throw Error('Ouvrez, dans la fenêtre FruchtDrama, le projet Flow du compte à mémoriser, puis cliquez ici.');
  const base=FruchtFlowSession.project(tab.url);
  if(tab.url!==base){await chrome.tabs.update(tab.id,{url:base,active:true});await ready(tab.id,{kind:'flow_video',payload:{}},base);}

@@ -39,6 +39,11 @@ function harness(){
  assert.equal((await h.ws.latest(h.chrome,/^https:\/\/chatgpt\.com\//)).id,chat.id);
  assert.equal((await h.ws.latest(h.chrome,/flow\.google\.com\/.*\/project\//)).id,other.id);
  assert.equal(await h.ws.latest(h.chrome,/claude\.ai/),null);
+ // 5 bis. Real check 02/11/2026: Flow project URLs without /u/N must be found too.
+ const worker2=fs.readFileSync(path.join(__dirname,'../extension/background-worker.js'),'utf8');
+ const FLOW_PROJECT=eval(worker2.match(/const FLOW_PROJECT=(\/.*\/);/)[1]);
+ for(const u of ['https://flow.google.com/project/0d99','https://flow.google.com/u/1/project/x','https://labs.google/fx/tools/flow/project/y'])assert.ok(FLOW_PROJECT.test(u),u);
+ assert.ok(!FLOW_PROJECT.test('https://flow.google.com/about'));
  // 6. Window closed by the owner: forgotten, then recreated on the next task (never a random window).
  h.windows.delete(id);await h.ws.closed(h.chrome,id);assert.equal(h.store.workspaceWindow,undefined);
  const again=await h.ws.createTab(h.chrome,{url:'https://grok.com/imagine'});
