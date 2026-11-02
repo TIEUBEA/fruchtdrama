@@ -39,7 +39,7 @@ globalThis.FruchtCredits={
   try{
    const tabs=await chrome.tabs.query({url:['https://flow.google.com/*','https://labs.google/*']});
    let tab=tabs.find(t=>FruchtFlowSession.project(t.url)===lease.target.url);
-   if(!tab)tab=await chrome.tabs.create({url:lease.target.url,active:false});
+   tab=tab?await globalThis.FruchtWorkspace.adopt(chrome,tab):await globalThis.FruchtWorkspace.createTab(chrome,{url:lease.target.url,active:false});
    const start=Date.now();
    while(Date.now()-start<90000){
     try{

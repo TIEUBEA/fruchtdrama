@@ -4,6 +4,10 @@ Studio Windows local pour produire des histoires originales en allemand, frança
 
 Cette version commence avec un espace vide. Chaque utilisateur connecte ses propres comptes. Aucun compte, session, cookie, crédit, production ou identifiant du fournisseur de cette copie n'est livré.
 
+## Mode d'emploi
+
+Guide détaillé, pas à pas, de l'installation à la vidéo finale : **docs/MODE-EMPLOI.md** (mis à jour à chaque version).
+
 ## Installation
 
 Lire **INSTALLATION.md**, puis **CONDITIONS-UTILISATION.txt**. Installer Python 3.11 ou 3.12 64 bits, Chrome et FFmpeg/ffprobe. Extraire ou cloner le dépôt, lancer **Installer.cmd**, puis **Lancer-Studio.cmd**.

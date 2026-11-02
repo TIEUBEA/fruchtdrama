@@ -1,10 +1,34 @@
 {
   "manifest_version": 3,
   "name": "FruchtDrama — passerelle locale",
-  "version": "0.1.43",
-  "description": "Relie vos sessions de création au studio local. Comptes Flow enregistrés, ouverture et passage automatiques entre les clips.",
-  "permissions": ["storage", "tabs", "scripting", "alarms", "downloads"],
-  "host_permissions": ["http://127.0.0.1:8840/*", "https://www.tiktok.com/*", "https://chatgpt.com/*", "https://claude.ai/*", "https://labs.google/*", "https://flow.google.com/*", "https://*.oaiusercontent.com/*", "https://*.googleusercontent.com/*", "https://*.googlevideo.com/*"],
-  "action": {"default_popup": "popup.html", "default_title": "FruchtDrama Studio"},
-  "background": {"service_worker": "background.js"}
+  "version": "0.1.52",
+  "description": "Ouvre une fenêtre FruchtDrama où tout se passe : studio, IA, Flow et comptes. Relie vos sessions de création au studio local.",
+  "permissions": [
+    "storage",
+    "tabs",
+    "scripting",
+    "alarms",
+    "downloads"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:8840/*",
+    "https://www.tiktok.com/*",
+    "https://chatgpt.com/*",
+    "https://claude.ai/*",
+    "https://labs.google/*",
+    "https://flow.google.com/*",
+    "https://*.oaiusercontent.com/*",
+    "https://*.googleusercontent.com/*",
+    "https://*.googlevideo.com/*",
+    "https://grok.com/*",
+    "https://*.grok.com/*",
+    "https://lmarena.ai/*",
+    "https://*.lmarena.ai/*"
+  ],
+  "action": {
+    "default_title": "Ouvrir la fenêtre FruchtDrama"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
 }

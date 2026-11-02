@@ -37,7 +37,8 @@ globalThis.FruchtFlowSession={
  async prepareProject(task,tab,chrome,pause){
   const target=task.payload.flow_route,key=task.job+':'+task.profile;
   const saved=(await chrome.storage.local.get('flowProjects')).flowProjects||{};
-  if(saved[key]&&this.home(saved[key])===this.home(target.url))return chrome.tabs.update(tab.id,{url:saved[key],active:true});
+  // chrome.tabs.update may still report the previous URL while navigating: return the remembered project.
+  if(saved[key]&&this.home(saved[key])===this.home(target.url))return {...await chrome.tabs.update(tab.id,{url:saved[key],active:true}),url:saved[key]};
   const home=this.home(target.url);await chrome.tabs.update(tab.id,{url:home,active:true});
   let requested=false,lastError='';
   for(let i=0;i<180;i++){
@@ -66,8 +67,9 @@ globalThis.FruchtFlowSession={
    const saved=(await chrome.storage.local.get('flowTab')).flowTab;
    // Reuse only the tab previously owned by this connector.
    const owned=tabs.find(t=>t.id===saved);
-   tab=owned?await chrome.tabs.update(owned.id,{url,active:true}):await chrome.tabs.create({url,active:true});
+   tab=owned?await chrome.tabs.update(owned.id,{url,active:true}):await globalThis.FruchtWorkspace.createTab(chrome,{url,active:true});
   }
+  tab=await globalThis.FruchtWorkspace.adopt(chrome,tab);
   await chrome.storage.local.set({flowTab:tab.id});return tab;
  }
 };

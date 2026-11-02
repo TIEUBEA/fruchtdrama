@@ -1,4 +1,4 @@
-# FruchtDrama — édition locale à partager, 0.1.43
+# FruchtDrama — édition locale à partager, 0.1.52
 
 Cette archive contient uniquement le logiciel. Aucun compte, crédit, session Chrome, code d'appairage, historique ou production du fournisseur de la copie n'est inclus. Les captures et modèles de couverture provenant de son compte sont exclus ; les nouvelles couvertures utilisent les consignes de style du logiciel et vos propres scènes.
 
@@ -16,9 +16,9 @@ L'installation n'achète aucun abonnement. Les générations consomment les quot
 
 1. Dans **Connexions**, créer votre propre profil Flow et renseigner le solde réel. Aucun profil ne doit déjà exister au premier démarrage.
 2. Dans Chrome, ouvrir `chrome://extensions`, activer **Mode développeur / Entwicklermodus**, puis **Charger l'extension non empaquetée / Entpackte Erweiterung laden**. Choisir le dossier **extension** de CETTE copie, après examen des permissions.
-3. Ouvrir le panneau de l'extension. Utiliser le code d'appairage affiché par VOTRE studio. Choisir le rôle et, si demandé, l'identifiant du profil Flow de VOTRE installation.
+3. Cliquer sur l'icône de l'extension : la **fenêtre FruchtDrama** s'ouvre. Tout s'y passe : studio, ChatGPT, Claude, TikTok, Flow et l'ouverture des comptes. Le premier onglet (épinglé) est la passerelle : y saisir le code d'appairage affiché par VOTRE studio, choisir le rôle « Recherche, IA et Flow » et cocher « Autoriser les tâches ». Un nouveau clic sur l'icône ramène la fenêtre au premier plan ; si elle est fermée, elle se rouvre d'elle-même à la tâche suivante.
 4. Vous connecter vous-même à ChatGPT, TikTok et Flow dans les profils Chrome appropriés. Claude est une option pour le scénario ; les images passent par ChatGPT. Aucun mot de passe ne doit être saisi dans le studio.
-5. Le compte ChatGPT peut être distinct du compte Flow. Pour plusieurs comptes Flow autorisés, configurer l'extension dans chaque profil Chrome et mémoriser chaque compte depuis le panneau de l'extension avec le bon profil Flow sélectionné. Vérifier l'identité affichée avant de l'enregistrer.
+5. Plusieurs comptes Flow dans la même fenêtre : ajouter tous les comptes Google au même profil Chrome (menu du compte Google → « Ajouter un compte »). Pour chacun, ouvrir son projet Flow dans la fenêtre FruchtDrama (adresse en `/u/0/`, `/u/1/`…), puis cliquer « Mémoriser le compte Flow de cet onglet » dans l'onglet passerelle. Quand les crédits d'un compte sont épuisés, le studio passe au compte suivant dans la même fenêtre. Vérifier l'identité affichée avant de l'enregistrer. L'ancienne méthode (un profil Chrome par compte) reste possible.
 6. Pour autoriser durablement les téléchargements multiples, ouvrir `chrome://settings/content/automaticDownloads` dans chaque profil et ajouter `https://flow.google.com` aux sites autorisés. Les autorisations de sécurité et les connexions restent manuelles.
 7. Créer une première production courte. Choisir Deutsch, Français ou English, et un modèle disponible sur votre compte. Les réglages actuels sont 720p, vertical 9:16, 8 secondes et x1. Omni, Veo Lite, Fast et Quality sont proposés ; le modèle et le coût visibles sont vérifiés avant l'envoi.
 

@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs'),path=require('node:path');
 const ctx={URL,chrome:{runtime:{onMessage:{addListener:()=>{}}}}};
-vm.createContext(ctx);vm.runInContext(fs.readFileSync(path.join(__dirname,'../extension/flow-session.js'),'utf8'),ctx);
+vm.createContext(ctx);ctx.FruchtWorkspace={createTab:(c,p)=>c.tabs.create(p),adopt:async(c,t)=>t};vm.runInContext(fs.readFileSync(path.join(__dirname,'../extension/flow-session.js'),'utf8'),ctx);
 const session=ctx.FruchtFlowSession;
 const url='https://flow.google.com/u/3/project/production';
 const target={url,email:'owner@example.com',client:'browser'};
@@ -36,6 +36,10 @@ assert.equal(session.project(url+'/edit/video'),url);
  store.flowProjects={'job:profile':url};
  const cached=await session.prepareProject(task,{id:2},chrome,async()=>{});
  assert.equal(cached.url,url);assert.equal(created.length,1,'Reuse the production project on recovery');
+ const realUpdate=chrome.tabs.update;chrome.tabs.update=async id=>({id,url:session.home(url)});
+ const pendingNavigation=await session.prepareProject(task,{id:2},chrome,async()=>{});
+ assert.equal(pendingNavigation.url,url,'A tab still on its previous URL must report the remembered project');
+ assert.equal(pendingNavigation.id,2);chrome.tabs.update=realUpdate;
  delete store.flowProjects;let newProjectSent=0,requested=false;
  chrome.scripting={executeScript:async()=>[]};
  chrome.tabs.get=async()=>({id:2,url:requested?'https://flow.google.com/u/3/project/new':session.home(url)});

@@ -1,6 +1,18 @@
 """Evidence-based clip QC. No regeneration and no paid API calls."""
 import difflib, hashlib, json, pathlib, re, shutil, subprocess, sys, unicodedata
 ROOT=pathlib.Path(__file__).resolve().parent
+sys.path.insert(0,str(ROOT))
+import engines
+
+# Owner decision (02/11/2026): automatic continuation only with >= 85 % speech match per clip,
+# no technical defect and a visual review passing everywhere (uncertain = stop).
+MIN_MATCH=.85
+THRESHOLDS={'speech_match_min':MIN_MATCH,'technical':'aucun défaut','visual':'pass partout (uncertain = arrêt)'}
+
+def decision(report,visual_issues=()):
+    """Automatic decision recorded in the report, with its reasons."""
+    reasons=[*report.get('hard_errors',[]),*report.get('warnings',[]),*[x.get('detail','') for x in visual_issues]]
+    return {'decision':'continue' if not reasons else 'review','reasons':reasons[:20],'thresholds':THRESHOLDS}
 
 def words(text):
     return re.findall(r"[^\W_]+",unicodedata.normalize('NFKC',str(text)).casefold(),re.UNICODE)
@@ -22,16 +34,16 @@ def compare(expected,transcript,language,probability):
     ratio=difflib.SequenceMatcher(None,a,b,autojunk=False).ratio()
     issues=[]
     if not b:issues.append('Aucune parole reconnue : écoute nécessaire.')
-    elif ratio<.8:issues.append('Les paroles reconnues diffèrent du scénario ; vérifier les répliques avant le montage.')
+    elif ratio<MIN_MATCH:issues.append(f'Les paroles reconnues correspondent à {round(ratio*100)} % du scénario (seuil {round(MIN_MATCH*100)} %) ; vérifier les répliques avant le montage.')
     if language and probability>=.8 and language not in ('de','fr','en'):issues.append('La langue détectée ne correspond à aucune langue de création autorisée.')
     return round(ratio,3),issues
 
-def technical(path):
+def technical(path,expected=(7.5,8.5)):
     p=subprocess.run([shutil.which('ffprobe') or 'ffprobe','-v','error','-show_entries','format=duration:stream=codec_type,width,height,duration,start_time','-of','json',str(path)],capture_output=True,text=True,timeout=30)
     if p.returncode:raise ValueError('Clip illisible par ffprobe')
     data=json.loads(p.stdout);streams=data.get('streams',[]);video=next((x for x in streams if x['codec_type']=='video'),{})
     errors=[];duration=float(data.get('format',{}).get('duration',0))
-    if not 7.5<=duration<=8.5:errors.append('Durée incompatible avec une scène de 8 secondes.')
+    if not expected[0]<=duration<=expected[1]:errors.append(f'Durée incompatible avec le moteur vidéo ({expected[0]:g} à {expected[1]:g} s attendues).')
     if video.get('height',0)<=video.get('width',0):errors.append('Vidéo absente ou non verticale.')
     audio=next((x for x in streams if x['codec_type']=='audio'),None)
     if not audio:errors.append('Piste audio absente.')
@@ -61,7 +73,7 @@ def analyse(j,folder):
     report={'fingerprint':fingerprint(j,folder),'hard_errors':[],'warnings':[],'clips':[],
             'limits':['La transcription peut se tromper, surtout sur les noms propres.','Identité du locuteur et synchronisation des lèvres non certifiées automatiquement.']}
     for i,scene in enumerate(j['scenes']):
-        result=technical(folder/scene['clip']);report['clips'].append(result)
+        result=technical(folder/scene['clip'],engines.spec(j)['range']);report['clips'].append(result)
         report['hard_errors'] += [f"Scène {i+1} : {x}" for x in result['hard_errors']]
         # Actual sampled frames, never the generated input still presented as clip evidence.
         sheet=f'quality-scene-{i:02}.jpg'
@@ -79,8 +91,10 @@ def analyse(j,folder):
     report['status']='review_required' if report['hard_errors'] or report['warnings'] else 'pass'
     return report
 
-def caption_events(scene,speech,offset,max_words=4,max_chars=30):
-    """Anchor script words to ASR matches, interpolating unmatched words explicitly."""
+def caption_events(scene,speech,offset,max_words=4,max_chars=30,length=8,karaoke=False):
+    """Anchor script words to ASR matches, interpolating unmatched words explicitly.
+
+    karaoke=True (P4-2): each caption carries ASS \\kf tags so every word lights up when it is spoken."""
     if not speech or speech.get('match',0)<.8:return None
     import captions
     original=' '.join(x['text'] for x in scene['dialogue']).split()
@@ -95,7 +109,7 @@ def caption_events(scene,speech,offset,max_words=4,max_chars=30):
         for k in range(size):
             i=owners[a+k];word=heard[heard_owners[b+k]]
             start,end=float(word['start']),float(word['end'])
-            if not 0<=start<end<=8:return None
+            if not 0<=start<end<=length:return None
             if i in anchors:start,end=min(start,anchors[i][0]),max(end,anchors[i][1])
             anchors[i]=(start,end)
     if not original or len(anchors)/len(original)<.8:return None
@@ -106,13 +120,24 @@ def caption_events(scene,speech,offset,max_words=4,max_chars=30):
         previous=max((x for x in anchors if x<i),default=-1)
         following=min((x for x in anchors if x>i),default=len(original))
         left=anchors[previous][1] if previous>=0 else 0
-        right=anchors[following][0] if following<len(original) else 7.9
+        right=anchors[following][0] if following<len(original) else length-.1
         if right<=left:return None
         step=(right-left)/(following-previous-1)
         spans.append((left+step*(i-previous-1),left+step*(i-previous)))
     if any(spans[i][0]<spans[i-1][1]-.05 for i in range(1,len(spans))):return None
-    return [(offset+spans[start][0],offset+spans[start+len(chunk)-1][1],' '.join(chunk))
-            for start,chunk in captions.chunks(original,max_words,max_chars)]
+    if not karaoke:
+        return [(offset+spans[start][0],offset+spans[start+len(chunk)-1][1],' '.join(chunk))
+                for start,chunk in captions.chunks(original,max_words,max_chars)]
+    clean=lambda w:re.sub(r'[\\{}\n]','',w)
+    events=[]
+    for start,chunk in captions.chunks(original,max_words,max_chars):
+        tagged=[];cursor=spans[start][0]
+        for k,word in enumerate(chunk):
+            a,b=spans[start+k]
+            pause='{\\k%d}'%round((a-cursor)*100) if a>cursor+.01 else ''  # silence before the word
+            tagged.append(pause+'{\\kf%d}%s'%(max(1,round((b-a)*100)),clean(word)));cursor=b
+        events.append((offset+spans[start][0],offset+spans[start+len(chunk)-1][1],' '.join(tagged)))
+    return events
 
 
 def visual_prompt(j):

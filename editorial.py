@@ -1,5 +1,6 @@
 """Editorial variety and observable similarity checks, not virality predictions."""
 import hashlib
+import engines
 import json
 import re
 import unicodedata
@@ -76,7 +77,7 @@ def retention_instructions(j):
 Une seule phrase immédiatement compréhensible, commencer à parler dès la première seconde sans accélérer artificiellement la diction. Pas de salutations, présentation, narrateur, logo, titre d'introduction ni fondu noir.
 L'image de la scène 1 est déjà le début de l'action : gros plan ou plan poitrine sur le visage qui réagit, avec l'objet ou le geste du conflit lisible. Évite le plan d'ensemble et les personnages entiers éloignés. Décris cette composition dans image_prompt ET video_prompt ; le clip doit pouvoir démarrer exactement depuis cette image.
 0–2 secondes : accusation, urgence ou découverte concrète avec réaction visible. 2–4 secondes : une réponse ou un geste change la situation. 4–8 secondes : un indice ou une décision ouvre la suite, sans attendre immobile. Conserve un mouvement de caméra continu par clip, sans demander des coupes impossibles dans le même plan.
-Au maximum 20 mots parlés par scène de 8 secondes, deux répliques au maximum, une seule personne parle à la fois. Dialogues naturels dans la langue choisie ; aucun échange ne répète une information connue. Les gestes et les réactions occupent le temps restant, pas de pause d'introduction.
+Au maximum """+str(engines.word_limit(j))+" mots parlés par scène de "+str(engines.spec(j)['seconds'])+""" secondes, deux répliques au maximum, une seule personne parle à la fois. Dialogues naturels dans la langue choisie ; aucun échange ne répète une information connue. Les gestes et les réactions occupent le temps restant, pas de pause d'introduction.
 Chaque nouvelle scène commence par une action ou une information nouvelle. Utilise si utile une alternance de cadrages entre les scènes ; conserve les identités, positions et accessoires cohérents. Révélation et conséquence visibles dans la dernière scène : histoire complète dans la durée sélectionnée, sans rallonge ni faux suspense pour une partie 2.
 """
 
@@ -129,8 +130,8 @@ def validate(s,j,jobs):
         if j.get('hook_version')!=1 and len(first.split())>8:raise Rejection('Raccourcir la première réplique à 8 mots maximum pour entrer immédiatement dans le conflit.')
         for scene in s['scenes']:
             lines=scene.get('dialogue',[])
-            if len(lines)>2 or sum(len(line['text'].split()) for line in lines)>20:
-                raise Rejection('Limiter chaque scène à deux répliques et 20 mots parlés maximum ; remplacer les répétitions par des actions visibles.')
+            if len(lines)>2 or sum(len(line['text'].split()) for line in lines)>engines.word_limit(j):
+                raise Rejection(f'Limiter chaque scène à deux répliques et {engines.word_limit(j)} mots parlés maximum ; remplacer les répétitions par des actions visibles.')
     if len(first.split())>12:raise Rejection('Raccourcir l’accroche à 12 mots maximum.')
     if j.get('hook_version')==1:validate_opening(s)
     signature=s.get('story_signature',{})
