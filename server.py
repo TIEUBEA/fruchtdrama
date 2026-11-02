@@ -374,6 +374,7 @@ def schedule(j):
                 language=j['config'].get('language','Deutsch (de-DE)')
                 prompt=f"One continuous shot, 8 seconds, portrait 9:16. No text, no music. Spoken language ONLY: {language}. Natural native voices in the requested language, no translation or extra narration. Preserve identity.\n{cast}\n{s['video_prompt']}\nExact dialogue in this order; only the named speaker moves their lips, all others stay silent:\n{dialog}"+correction(j.get('corrections',{}).get(f'clip:{i}'))
                 payload={'prompt':prompt,'attachments':[asset_url(j,flow_reference(j,s['image']))],'cost':cost,'balance':p['balance'],'seconds':8,**({'model':j['config']['flow_model'],'resolution':j['config'].get('flow_resolution','720p')} if j['config'].get('flow_model') else {})}
+                if j['config'].get('dry_run'):payload['dry_run']=True
                 target=flow_accounts.route(p) if STATE.get('settings',{}).get('flow_auto') else None
                 if target:
                     existing=j.get('flow_projects',{}).get(p['id'])
@@ -585,6 +586,10 @@ def apply_research(j,rows):
 def accept_task_result(t,result):
     j=job_by(t['job'])
     was_paused=j['status']=='paused'
+    if not result.get('ok') and t.get('kind')=='flow_video' and result.get('dry_run') is True and t.get('payload',{}).get('dry_run') and result.get('generation_submitted') is False:
+        t['status']='cancelled';t['dry_run_passed']=now();j['dry_run_passed']=now();j['status']='paused'
+        event(j,str(result.get('error','Essai à blanc réussi.'))[:600]+' Désactivez l’essai à blanc puis cliquez sur Reprendre pour générer réellement.')
+        return
     if not result.get('ok'):
         reservation=t.get('reservation')
         if t.get('kind')=='flow_video' and result.get('generation_submitted') is False and reservation and not reservation.get('refunded'):
@@ -756,6 +761,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             if any(other['kind'] in ('flow_video','flow_collect') and other['status']=='claimed' for other in STATE['tasks']):continue
                             p=profile_by(t['profile']); cost=t['payload']['cost']
                             if not p or p['balance']<cost: t['status']='cancelled'; j['status']='waiting_credit'; continue
+                            if t['payload'].get('dry_run'):
+                                # A dry run never sends: nothing to reserve (P1-4).
+                                t['status']='claimed'; t['client']=client; t['claimed']=now(); event(j,'Essai à blanc : préparation de '+t['slot']+' dans Flow, sans envoi.'); save(); return self.send_json(t)
                             p['balance']-=cost;t['reservation']={'profile':p['id'],'amount':cost,'refunded':False}; event(j,f"Réservation prudente de {cost} crédits sur {p['label']}. En cas d’échec, vérifier le solde réel avant de le réajuster.")
                         t['status']='claimed'; t['client']=client; t['claimed']=now(); event(j,'Connecteur en cours : '+t['slot']); save(); return self.send_json(t)
                     save(); return self.send_json(None)
@@ -952,6 +960,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     if cfg['flow_cost'] not in {'gemini_omni_flash':(12,), 'veo_3_1_lite':(10,5), 'veo_3_1_fast':(20,10), 'veo_3_1_quality':(100,)}[cfg['flow_model']]:raise ValueError('Coût incompatible avec le modèle Flow choisi. Le coût réel sera vérifié avant tout envoi.')
                     cfg['language']=creation_language(cfg.get('language','Deutsch (de-DE)'))
                     cfg['review_script']=bool(b.get('config',{}).get('review_script',False))
+                    cfg['dry_run']=bool(b.get('config',{}).get('dry_run',False))
                     requested_query=str(b.get('config',{}).get('query','')).strip()
                     # An omitted or untouched German default follows the chosen language.
                     cfg['query']=RESEARCH_QUERIES[cfg['language']] if not requested_query or requested_query in RESEARCH_QUERIES.values() else requested_query[:200]
@@ -1003,6 +1012,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         for t in STATE['tasks']:
                             if t['job']==id and t['status'] in ('queued','claimed'): t['status']='cancelled'
                         store_script(j,b['script']); schedule(j)
+                    elif action=='set_dry_run':
+                        if any(t['job']==id and t['status']=='claimed' for t in STATE['tasks']):raise ValueError('Une tâche est en cours : attendez sa fin avant de changer de mode')
+                        j['config']['dry_run']=bool(b.get('enabled'))
+                        for t in STATE['tasks']:
+                            # Queued Flow payloads were built for the previous mode.
+                            if t['job']==id and t['status']=='queued' and t['kind']=='flow_video':t['status']='cancelled'
+                        event(j,'Essai à blanc activé : les clips seront préparés dans Flow sans être envoyés.' if j['config']['dry_run'] else 'Production réelle : les prochains clips seront envoyés à Flow et consommeront des crédits.')
                     elif action=='redo':
                         redo(j,b.get('slot',''),b.get('note',''),bool(b.get('include_clip')))
                     elif action=='edit_script':

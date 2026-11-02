@@ -72,9 +72,10 @@ class BrowserInterfaceTests(unittest.TestCase):
         self.assertIn('Relisez l’histoire avant de payer les images', html); self.assertIn('Histoire à relire', html)
         self.assertIn('data-speaker="orange"', html); self.assertIn('value="Hallo"', html)
         self.assertIn('value="WER FÄHRT?"', html); self.assertIn('data-action="approveScript"', html)
+        self.assertIn('data-dry-run="1"', html, 'dry run can be enabled before clips')
 
     def test_create_form_offers_review_option(self):
-        self.assertIn('name="review_script"', self.dom())
+        html = self.dom(); self.assertIn('name="review_script"', html); self.assertIn('name="dry_run"', html)
 
     def test_public_state_hides_token_and_lists_uncertain_scenes(self):
         state = json.load(urllib.request.urlopen(f'http://127.0.0.1:{self.port}/api/state', timeout=5))

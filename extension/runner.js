@@ -84,7 +84,10 @@ async function run(task,attachments){
  let send=null;const buttonStart=Date.now();while(Date.now()-buttonStart<(attachments?.length?180000:25000)){blocked();checkFlowAccount();editor=findEditor()||editor;send=findSend();if(send)break;await sleep(700)}
  if(!send){const diagnostic=globalThis.FruchtComposer.diagnostic(document,editor);return {ok:false,error:'Envoi bloqué : '+(diagnostic.editor?.length?'texte présent, commande inactive ou non reconnue.':'le texte n’a pas été accepté par l’éditeur.')+' Diagnostic technique : '+JSON.stringify(diagnostic),diagnostic};}
  if(isFlow&&/buy|acheter|upgrade|abonn|subscribe|purchase/i.test(send.innerText+' '+send.getAttribute('aria-label')))throw Error('Achat interdit par le budget zéro.');
- checkFlowAccount();requireLiveExtension();const intent=await chrome.runtime.sendMessage({type:'submission-intent',task:task.id});if(!intent?.ok)throw Error('Envoi suspendu : association de la tâche perdue. Aucun prompt envoyé.');send.click();globalThis.fruchtRunState.submitted=true;await sleep(2500);
+ checkFlowAccount();requireLiveExtension();
+ // Dry run (P1-4): everything is configured and verified in Flow, nothing is sent or charged.
+ if(isFlow&&task.payload.dry_run===true)return {ok:false,dry_run:true,generation_submitted:false,error:'Essai à blanc réussi : modèle, coût ('+task.payload.cost+' crédits), format, image et prompt prêts dans Flow. Rien n’a été envoyé ni facturé.'};
+ const intent=await chrome.runtime.sendMessage({type:'submission-intent',task:task.id});if(!intent?.ok)throw Error('Envoi suspendu : association de la tâche perdue. Aucun prompt envoyé.');send.click();globalThis.fruchtRunState.submitted=true;await sleep(2500);
  if(task.kind==='chat_text'){
   return collectScenario(task);
  }
