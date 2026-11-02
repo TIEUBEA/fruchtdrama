@@ -1180,11 +1180,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     cfg['review_script']=bool(b.get('config',{}).get('review_script',False))
                     cfg['dry_run']=bool(b.get('config',{}).get('dry_run',False))
                     cfg['karaoke']=bool(b.get('config',{}).get('karaoke',True))
+                    source=str(b.get('source_url','')).strip()
+                    if source:
+                        # Atelier-like "create from a link": the given TikTok video replaces the research step.
+                        u=urllib.parse.urlparse(source)
+                        if u.scheme!='https' or u.hostname not in ('www.tiktok.com','tiktok.com','vm.tiktok.com','m.tiktok.com') or u.username or u.password:raise ValueError('Lien TikTok attendu (https://www.tiktok.com/@compte/video/…)')
                     requested_query=str(b.get('config',{}).get('query','')).strip()
                     # An omitted or untouched German default follows the chosen language.
                     cfg['query']=RESEARCH_QUERIES[cfg['language']] if not requested_query or requested_query in RESEARCH_QUERIES.values() else requested_query[:200]
                     if cfg['scene_count'] not in (3,4,6,8) or not 1<=cfg['flow_cost']<=100 or cfg['provider'] not in ('chatgpt','claude'): raise ValueError('Réglages invalides')
-                    j={'id':uid(),'title':'Nouvel épisode','brief':str(b.get('brief',''))[:4000], 'config':cfg,'editorial_version':2,'retention_version':1,'hook_version':1,'quality_version':1,'cover_style':'family_poster_v3','character_sheet':1,'flow_profile':b.get('flow_profile'),'status':'running','stage':'research','created':now(),'updated':now(),'events':[],'candidates':[],'characters':[],'scenes':[]}; STATE['jobs'].insert(0,j); event(j,'Projet créé. Recherche préalable et comparaison de cinq concepts obligatoires.'); schedule(j)
+                    j={'id':uid(),'title':'Nouvel épisode','brief':str(b.get('brief',''))[:4000], 'config':cfg,'editorial_version':2,'retention_version':1,'hook_version':1,'quality_version':1,'cover_style':'family_poster_v3','character_sheet':1,'flow_profile':b.get('flow_profile'),'status':'running','stage':'research','created':now(),'updated':now(),'events':[],'candidates':[],'characters':[],'scenes':[]}; STATE['jobs'].insert(0,j)
+                    if source:
+                        j['selected']={'title':'Vidéo fournie par le propriétaire','url':urllib.parse.urlunparse(('https',u.hostname,u.path,'','','')),'source':'owner_link'};j['stage']='script';event(j,'Projet créé d’après le lien fourni : recherche sautée, histoire originale inspirée de cette vidéo (sans copier dialogues ni plans).')
+                    else:event(j,'Projet créé. Recherche préalable et comparaison de cinq concepts obligatoires.')
+                    schedule(j)
                 elif path.startswith('/api/job/'):
                     id=path.split('/')[-1]; j=job_by(id)
                     if not j: raise ValueError('Projet inconnu')

@@ -5,3 +5,18 @@
 .pill.waiting_quota,.pill.waiting_night{background:#eef4fb;color:#3d5a7a}.pill.waiting_account,.pill.waiting_review{background:#fdecea;color:#8a3a2f}.guide-new{margin-top:20px}.guide-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px;margin-top:12px}.guide-grid h3{font-size:16px}.engine-badge{margin-top:12px}[hidden]{display:none!important}
 /* Large media (owner request): assets, clips and covers shown big, click to enlarge. */
 .assets{grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:18px}.asset img{display:block;width:100%;height:auto;aspect-ratio:9/16;object-fit:cover;cursor:zoom-in;background:#f0f2ec}.asset video{max-height:none;width:100%;aspect-ratio:9/16;background:#101810;border-radius:4px}.asset-placeholder{height:auto;aspect-ratio:9/16}.final-video{max-height:80vh}.project-thumb{width:64px;height:84px}.cover-preview{width:320px;max-width:100%;border-radius:10px;cursor:zoom-in}#lightbox{border:0;padding:0;background:transparent;max-width:96vw;max-height:96vh}#lightbox::backdrop{background:#0b120dcc}#lightbox img{display:block;max-width:94vw;max-height:94vh;border-radius:10px}
+/* Atelier-like navigation with subtitles and dark theme (owner request). */
+nav button span small{display:block;font-size:12px;font-weight:400;color:var(--muted);margin-top:2px}nav button.active span small{color:#9b87c4}
+.filon-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}.filon-card{border:1px solid var(--line);border-radius:12px;padding:18px;background:#fff;display:grid;gap:12px}.filon-card a{font-weight:600;text-decoration:none;line-height:1.5}.filon-metrics{display:flex;gap:14px;flex-wrap:wrap;color:var(--muted);font-size:14px}
+body.dark{--bg:#23262e;--ink:#e8e9ee;--muted:#a3a8b3;--line:#3a3f4a;background:#23262e;color:#e8e9ee}
+body.dark aside{background:#1e2027;border-color:#33363f}body.dark header{background:#23262eee;border-color:#33363f}body.dark header b,body.dark .avatar>span{color:#e8e9ee}
+body.dark .panel,body.dark .project,body.dark .stat,body.dark .asset,body.dark .profile-card,body.dark .filon-card,body.dark dialog,body.dark details,body.dark .empty{background:#2b2e37;border-color:#3a3f4a;color:#e8e9ee}
+body.dark input,body.dark select,body.dark textarea{background:#1f2128;border-color:#3f4450;color:#e8e9ee}
+body.dark .hint,body.dark .muted,body.dark .logs,body.dark label{color:#b5bac4}body.dark h1,body.dark h2,body.dark h3{color:#f3f4f7}
+body.dark nav button{color:#b5bac4}body.dark nav button.active{background:#353047;color:#fff}
+body.dark .primary{background:#8b6cf0;border-color:#8b6cf0}body.dark .primary:hover{background:#7657e6}body.dark .secondary{background:#2f323b;border-color:#454a56;color:#e3e5ea}
+body.dark .hero{background:#2c3330;border-color:#3a4540}body.dark .hero h2{color:#e8f0e2}body.dark .hero p{color:#b8c2b0}
+body.dark .detail-note,body.dark pre,body.dark .project:hover,body.dark .project.selected{background:#30343d;color:#dfe2e8}body.dark .pill{background:#383c46;color:#cfd3db}
+body.dark .notice{background:#302c3c;border-color:#433c55;color:#d8d0ea}body.dark .brand{color:#c9b8ff}body.dark .badge{background:#2b2e37;border-color:#454a56;color:#b5d3a6}
+body.dark .timeline .step{border-color:#3d424d;color:#9aa0ab}body.dark .timeline .step.past{border-color:#7e9b6c;color:#b6d1a3}body.dark .timeline .step.current{border-color:#a78bfa;color:#c9b8ff}
+body.dark a{color:#c9b8ff}body.dark .stat-icon{background:#353947}

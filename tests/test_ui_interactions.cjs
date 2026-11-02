@@ -18,7 +18,7 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
    config:{provider:'chatgpt',scene_count:2,language:'Deutsch (de-DE)',flow_model:'gemini_omni_flash',flow_cost:12,review_script:true},
    characters:[{id:'orange',name:'Oma',appearance:'a',voice:'v',image_prompt:'p'}],scenes,
    script:{title:'Histoire QA',cover_title:'WER FÄHRT?',description:'Beschreibung',characters:[{id:'orange',name:'Oma',appearance:'a',voice:'v',image_prompt:'p'}],scenes}},
-  {id:done,title:'Épisode terminé QA',brief:'b',stage:'done',status:'done',created:now,updated:now,events:[],candidates:[],flow_profile:null,
+  {id:done,title:'Épisode terminé QA',brief:'b',stage:'done',status:'done',created:now,updated:now,events:[],candidates:[{url:'https://www.tiktok.com/@oma/video/42',title:'Oma Orange verliert ihren Kuchen',views:1200000,metric_kind:'views',age_days:2,score:600000,basis:'vues/jour'}],flow_profile:null,
    config:{provider:'chatgpt',scene_count:2,language:'Deutsch (de-DE)',flow_model:'gemini_omni_flash',flow_cost:12},
    characters:[{id:'orange',name:'Oma',appearance:'a',voice:'v',image_prompt:'p',file:'ref.png'}],scenes:scenes.map((x,i)=>({...x,image:'scene'+i+'.png',clip:'clip'+i+'.mp4'})),
    cover_file:'cover.png',cover:'/media/'+done+'/cover.png',final:'/media/'+done+'/final.mp4',
@@ -121,7 +121,17 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   assert.ok(await evaluate(`[...document.querySelectorAll('#createForm .flow-only')].every(x=>x.hidden)`),'Flow-only fields hidden for Grok');
   await evaluate(`(()=>{const sel=document.querySelector('#createForm [name=video_engine]');sel.value='flow';sel.dispatchEvent(new Event('change',{bubbles:true}));return true})()`);
   assert.ok(await evaluate(`[...document.querySelectorAll('#createForm .flow-only')].every(x=>!x.hidden)`),'Flow fields back');
+  // 11. Atelier-like interface: dark theme by default, Le Filon, creation from a found video.
+  assert.ok(await evaluate(`document.body.classList.contains('dark')`),'dark theme by default');
+  await evaluate(`document.querySelector('#theme').click()`);assert.ok(await evaluate(`!document.body.classList.contains('dark')`),'light theme on demand');
+  await evaluate(`document.querySelector('#theme').click()`);
+  await evaluate(`document.querySelector('nav [data-page="filon"]').click()`);
+  await waitFor(()=>evaluate(`document.querySelector('.filon-card')?.innerText.includes('1.2 M vues')`),10000,'Filon');
+  await evaluate(`document.querySelector('.filon-card [data-action="new"]').click()`);
+  assert.equal(await waitFor(()=>evaluate(`document.querySelector('#createDialog').open&&document.querySelector('#createForm [name=source_url]').value`),5000,'formulaire prérempli'),'https://www.tiktok.com/@oma/video/42');
+  assert.ok(await evaluate(`[...document.querySelectorAll('nav small')].map(x=>x.textContent).join('|').includes('les vidéos virales')`),'nav subtitles');
+  await evaluate(`document.querySelector('#createDialog').close()`);
   assert.deepEqual(errors,[]);ws.close();
-  console.log('Interactions navigateur : correction conservée au rafraîchissement, enregistrement, refus visible, confirmation de sortie, validation, « Refaire la couverture », changement de compte guidé, ajout d’un compte Grok, file de nuit, guide des nouveautés et formulaire par moteur vérifiés.');
+  console.log('Interactions navigateur : correction conservée au rafraîchissement, enregistrement, refus visible, confirmation de sortie, validation, « Refaire la couverture », changement de compte guidé, ajout d’un compte Grok, file de nuit, guide des nouveautés, formulaire par moteur, thème sombre, Filon et création depuis un lien vérifiés.');
  }finally{cleanup();}
 })().catch(e=>{console.error(e);process.exitCode=1;});
