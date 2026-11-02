@@ -10,7 +10,7 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
 
 (async()=>{
  const temp=fs.mkdtempSync(path.join(os.tmpdir(),'frucht-ui-')),data=path.join(temp,'data');fs.mkdirSync(data);
- const now=new Date().toISOString(),job='c1b2c3d4e5f60718',done='d1b2c3d4e5f60718';
+ const now=new Date().toISOString(),job='c1b2c3d4e5f60718',done='d1b2c3d4e5f60718',switching='e1b2c3d4e5f60718';
  const scenes=[0,1].map(i=>({characters:['orange'],meaning:'Moment '+i,image_prompt:'p',video_prompt:'v',dialogue:[{speaker:'orange',text:'Hallo'}]}));
  fs.writeFileSync(path.join(data,'state.json'),JSON.stringify({version:1,token:'t',pair_code:'abcd1234',profiles:[],clients:{},tasks:[],
   settings:{provider:'chatgpt',language:'Deutsch (de-DE)',scene_count:4,clip_seconds:8,flow_model:'gemini_omni_flash',flow_resolution:'720p',flow_cost:12,query:'q',daily_budget:50},
@@ -22,7 +22,11 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
    config:{provider:'chatgpt',scene_count:2,language:'Deutsch (de-DE)',flow_model:'gemini_omni_flash',flow_cost:12},
    characters:[{id:'orange',name:'Oma',appearance:'a',voice:'v',image_prompt:'p',file:'ref.png'}],scenes:scenes.map((x,i)=>({...x,image:'scene'+i+'.png',clip:'clip'+i+'.mp4'})),
    cover_file:'cover.png',cover:'/media/'+done+'/cover.png',final:'/media/'+done+'/final.mp4',
-   script:{title:'Épisode terminé QA',cover_title:'WER?',description:'d',characters:[],scenes}}]}));
+   script:{title:'Épisode terminé QA',cover_title:'WER?',description:'d',characters:[],scenes}},
+  {id:switching,title:'Changement de compte QA',brief:'b',stage:'cover',status:'waiting_account',created:now,updated:now,events:[],candidates:[],flow_profile:null,
+   config:{provider:'chatgpt',scene_count:2,language:'Deutsch (de-DE)',video_engine:'grok',flow_cost:12},account_switch:{engine:'grok',from:'a@x.com',to:'b@x.com',label:'Second'},
+   characters:[{id:'orange',name:'Oma',appearance:'a',voice:'v',image_prompt:'p',file:'ref.png'}],scenes:scenes.map((x,i)=>({...x,image:'scene'+i+'.png',clip:'clip'+i+'.mp4'})),
+   script:{title:'Changement de compte QA',cover_title:'WER?',description:'d',characters:[],scenes}}]}));
  const port=await freePort(),base='http://127.0.0.1:'+port;
  const server=spawn('python3',[path.join(root,'server.py')],{cwd:root,env:{...process.env,FRUCHT_DATA:data,FRUCHT_PORT:String(port)},stdio:'ignore'});
  let chrome;
@@ -78,7 +82,19 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   assert.ok(dialogs.some(m=>m.startsWith('Refaire la couverture')),'correction asked');
   assert.equal(redone.j.final,undefined);assert.equal(redone.j.corrections.cover,'plus de lumière');
   assert.deepEqual(redone.s.tasks.filter(t=>t.job===done&&t.status==='queued').map(t=>t.slot),['cover']);
+  // 7. P5-08: guided account change, confirmed from the production.
+  await send('Page.navigate',{url:base+'/#job='+switching});
+  await waitFor(()=>evaluate(`document.body.innerText.includes('b@x.com')&&!!document.querySelector('[data-action="accountSwitched"]')`),15000,'bandeau changement de compte');
+  await evaluate(`document.querySelector('[data-action="accountSwitched"]').click()`);
+  await waitFor(async()=>(await (await fetch(base+'/api/state')).json()).jobs.find(x=>x.id===switching).status==='running',10000,'changement confirmé');
+  // 8. P5-07: add a Grok account from Connexions (address only).
+  await evaluate(`document.querySelector('nav [data-page="connections"]').click()`);
+  await waitFor(()=>evaluate("!!document.querySelector('#engineAccountForm')"),10000,'formulaire comptes');
+  await evaluate(`(()=>{const f=document.querySelector('#engineAccountForm');f.engine.value='grok';f.email.value='Second@x.com';f.requestSubmit();return true})()`);
+  const accounts=await waitFor(async()=>{const st=await (await fetch(base+'/api/state')).json();return st.engine_accounts?.length&&st.engine_accounts;},10000,'compte ajouté');
+  assert.equal(accounts[0].email,'second@x.com');assert.equal(accounts[0].engine,'grok');
+  await waitFor(()=>evaluate(`document.body.innerText.includes('second@x.com')`),10000,'compte affiché');
   assert.deepEqual(errors,[]);ws.close();
-  console.log('Interactions navigateur : correction conservée au rafraîchissement, enregistrement, refus visible, confirmation de sortie, validation et « Refaire la couverture » vérifiés.');
+  console.log('Interactions navigateur : correction conservée au rafraîchissement, enregistrement, refus visible, confirmation de sortie, validation, « Refaire la couverture », changement de compte guidé et ajout d’un compte Grok vérifiés.');
  }finally{cleanup();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

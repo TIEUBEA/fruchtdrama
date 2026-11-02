@@ -9,6 +9,26 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 Prochain : P5 lots 2 à 5 (moteurs Grok et Arena, comptes par moteur, changement de compte guidé), puis P2 lots 2 à 5. Voir `docs/sudf/REPRISE.md`.
 
+## 0.1.49 — 2026-11-02 (branche `sudf`) — P5 lots 3 à 5 : Grok, Arena et changement de compte
+
+Détail : `docs/sudf/P5-fenetre-moteurs.md` (P5-07 à P5-11).
+
+### Ajouté
+- **Connecteurs Grok Imagine et LMArena vidéo** (`extension/engine-video.js`), dans la fenêtre FruchtDrama : vérification de la connexion et du compte attendu, mode vidéo, image de départ, prompt, intention d'envoi puis envoi unique, détection de la nouvelle vidéo, téléchargement. Erreurs typées : connexion, mauvais compte, limite (avec délai annoncé), modération, délai dépassé. Aucun bouton d'achat n'est jamais cliqué. **Expérimental** : écrit sur fixtures, à vérifier en essai à blanc sur vos comptes.
+- **Comptes Grok et Arena** dans Connexions (adresse seulement, jamais de mot de passe) (`engine_accounts.py`, route `/api/engine-account`).
+- **Changement de compte guidé** : quand un compte atteint sa limite, il est marqué (heure de renouvellement lue ou 3 h par défaut), le compte suivant est proposé (statut « Changement de compte ») ; vous vous connectez vous-même dans l'onglet, puis « J'ai changé de compte » ; l'identité affichée est vérifiée avant tout envoi.
+- **Attente automatique** : si tous les comptes sont à leur limite, statut « Limite atteinte, reprise automatique » et reprise seule à l'heure de renouvellement. Bouton « Oublier la limite » par compte.
+- Essai à blanc pour Grok et Arena (aucun compte requis).
+
+### Modifié
+- Grok et Arena sont sélectionnables à la création (marqués expérimental). Nouvelles autorisations d'hôtes : grok.com, lmarena.ai (recharger l'extension).
+
+### Mode d'emploi
+- Sections 7, 8, 9 et 12 de `docs/MODE-EMPLOI.md`.
+
+### Tests
+- `tests/test_engine_video.cjs` (connecteurs sur fixtures DOM, vérifiés par mutation), `tests/test_p5_accounts.py` (unitaires + HTTP), `tests/test_ui_interactions.cjs` étendu (Chrome réel : changement de compte guidé, ajout d'un compte Grok).
+
 ## 0.1.48 — 2026-11-02 (branche `sudf`) — P5 lot 2 : moteur vidéo par production
 
 Détail : `docs/sudf/P5-fenetre-moteurs.md` (P5-06).

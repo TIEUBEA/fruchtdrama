@@ -7,7 +7,7 @@ ENGINES = {
     'arena': {'label': 'LMArena (vidéo)', 'seconds': 8, 'range': (4.0, 10.5), 'home': 'https://lmarena.ai/'},
 }
 # Engines whose browser connector is available in this version.
-AVAILABLE = ('flow',)
+AVAILABLE = ('flow', 'grok', 'arena')
 
 
 def validate(name):

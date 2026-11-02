@@ -9,6 +9,7 @@ import covers
 import quality
 import errors
 import engines
+import engine_accounts
 import sys
 import traceback
 
@@ -154,7 +155,19 @@ def log_error(context,error,interval=60):
     print(f'[{now()}] {context} : '+''.join(traceback.format_exception(type(error),error,error.__traceback__)),file=sys.stderr,flush=True)
     return True
 
+def wake_waiting(moment=None):
+    """P5-08: productions waiting for a quota renewal resume by themselves."""
+    moment=moment or time.time();woken=[]
+    with LOCK:
+        for j in STATE['jobs']:
+            if j.get('status')=='waiting_quota' and (j.get('wait_until') or 0)<=moment:
+                j['status']='running';j.pop('wait_until',None);event(j,'Limite renouvelée : reprise automatique.');schedule(j);woken.append(j['id'])
+        if woken:save()
+    return woken
+
 def dispatch_once():
+    try:wake_waiting()
+    except Exception as e:log_error('Réveil des productions en attente',e)
     try:flow_dispatch_tick()
     except Exception as e:
         # An unavailable account must not stop the HTTP server, but the failure must stay diagnosable.
@@ -336,7 +349,7 @@ Recompose a tight chest-up confrontation with clearly visible expressive faces: 
 Bold clean condensed sans serif headline: white first line, warm yellow emphasis on second line, restrained dark outline and shadow. Place text in the lower middle BELOW faces, inside the central 80 percent width; leave the top 15 percent and bottom 20 percent free of important text for cropping. Never cover eyes. No large dark banner across faces. No logos, watermarks, arrows, interface, fake evidence, extra characters or sensational claims not present in the story. Generate the finished image now, not a tutorial."""
 
 def schedule(j):
-    if j['status'] in ('paused','attention','done','rendering','waiting_research','waiting_script','waiting_credit','waiting_review'): return
+    if j['status'] in ('paused','attention','done','rendering','waiting_research','waiting_script','waiting_credit','waiting_review','waiting_quota','waiting_account'): return
     if any(t['job']==j['id'] and t['status'] in ('queued','claimed') for t in STATE['tasks']): return
     step=j['stage']
     if step=='research':
@@ -373,6 +386,19 @@ def schedule(j):
                 seconds=engines.spec(j)['seconds'];language=j['config'].get('language','Deutsch (de-DE)')
                 prompt=f"One continuous shot, {seconds} seconds, portrait 9:16. Animate the attached image. No text, no music. Spoken language ONLY: {language}. Natural native voices, no translation or extra narration. Preserve identity.\n{cast}\n{s['video_prompt']}\nExact dialogue in this order; only the named speaker moves their lips, all others stay silent:\n{dialog}"+correction(j.get('corrections',{}).get(f'clip:{i}'))
                 payload={'engine':engines.of(j),'prompt':prompt,'attachments':[asset_url(j,flow_reference(j,s['image']))],'seconds':seconds}
+                engine=engines.of(j)
+                if engine_accounts.accounts(STATE,engine) and not j['config'].get('dry_run'):
+                    moment=time.time();account=engine_accounts.choose(STATE,engine,j.get('engine_account'),moment)
+                    if not account:
+                        # P5-08: every registered account is at its limit: wait for the first renewal.
+                        j['status']='waiting_quota';j['wait_until']=engine_accounts.next_free(STATE,engine,moment)
+                        event(j,'Tous les comptes '+engines.ENGINES[engine]['label']+' sont à leur limite. Reprise automatique vers '+engine_accounts.stamp(j['wait_until'])[11:16]+' UTC, ou ajoutez un compte.');return
+                    if j.get('engine_account') and account['id']!=j['engine_account']:
+                        previous=engine_accounts.by_id(STATE,j['engine_account'])
+                        j['engine_account']=account['id'];j['status']='waiting_account'
+                        j['account_switch']={'engine':engine,'from':(previous or {}).get('email'),'to':account['email'],'label':account['label']}
+                        event(j,'Compte '+engines.ENGINES[engine]['label']+' suivant : connectez-vous vous-même à '+account['email']+' dans l’onglet de la fenêtre FruchtDrama, puis cliquez « J’ai changé de compte ». Clips reçus conservés.');return
+                    j['engine_account']=account['id'];payload['account']={'email':account['email'],'label':account['label']}
                 if j['config'].get('dry_run'):payload['dry_run']=True
                 add_task(j,'engine_video',payload,f'clip:{i}');return
             if not s.get('clip'):
@@ -612,6 +638,15 @@ def accept_task_result(t,result):
             p=profile_by(reservation['profile'])
             if p:p['balance']+=reservation['amount'];reservation['refunded']=True;event(j,'Réservation locale de crédits annulée : aucune génération n’a été envoyée à Flow.')
         t['status']='failed'; j['status']='paused' if was_paused else 'attention'; event(j,errors.message(kind,result.get('error')))
+        if t.get('kind')=='engine_video' and kind=='quota' and not was_paused:
+            # P5-08: the account reached its limit: remember it, then switch account or wait.
+            moment=time.time();account=engine_accounts.by_id(STATE,j.get('engine_account'))
+            if account:engine_accounts.wall(account,moment,errors.retry_after(result),result.get('error',''))
+            if account or engine_accounts.accounts(STATE,t['payload']['engine']):j['status']='running';schedule(j)
+            else:
+                j['status']='waiting_quota';j['wait_until']=moment+(errors.retry_after(result) or engine_accounts.DEFAULT_WALL)
+                event(j,'Limite atteinte sur ce compte. Reprise automatique vers '+engine_accounts.stamp(j['wait_until'])[11:16]+' UTC. Enregistrez d’autres comptes dans Connexions pour changer de compte.')
+            return
         if t.get('kind')=='flow_video' and result.get('generation_submitted') is False and result.get('flow_blocked')=='credits' and t.get('payload',{}).get('flow_route'):
             p=profile_by(t.get('profile'))
             if p:p['blocked']='credits'
@@ -977,6 +1012,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         if 'auto_enabled' in b:p['auto_enabled']=bool(b['auto_enabled'])
                         if 'chrome_profile' in b:p['chrome_profile']=flow_accounts.chrome_profile(b['chrome_profile'])
                     else: STATE['profiles'].append({'id':uid(),'label':str(b.get('label','Flow'))[:60],'balance':balance,'checked':now()})
+                elif path=='/api/engine-account':
+                    if b.get('delete'):
+                        a=engine_accounts.by_id(STATE,b.get('id'))
+                        if not a:raise ValueError('Compte inconnu')
+                        if any(t['status']=='claimed' and t['kind']=='engine_video' and t['payload'].get('account',{}).get('email')==a['email'] for t in STATE['tasks']):raise ValueError('Ce compte génère un clip : attendez la fin')
+                        STATE['engine_accounts'].remove(a)
+                    elif b.get('forget_wall'):
+                        a=engine_accounts.by_id(STATE,b.get('id'))
+                        if not a:raise ValueError('Compte inconnu')
+                        engine_accounts.forget(a)
+                        for j in STATE['jobs']:
+                            if j.get('status')=='waiting_quota' and engines.of(j)==a['engine']:j['wait_until']=0
+                    else:
+                        engine=engines.validate(b.get('engine'))
+                        if engine=='flow':raise ValueError('Les comptes Flow se gèrent avec leurs crédits ci-dessus')
+                        engine_accounts.add(STATE,engine,b.get('label'),b.get('email'))
                 elif path=='/api/flow-auto':
                     STATE['settings']['flow_auto']=bool(b.get('enabled'))
                 elif path=='/api/job':
@@ -1056,6 +1107,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     elif action=='approve_script':
                         if not review_pending(j) or j.get('stage')!='characters':raise ValueError('Aucune histoire en attente de validation')
                         j['script_approved']=now();j['status']='running';event(j,'Histoire validée par le propriétaire : création des images lancée.');schedule(j)
+                    elif action=='account_switched':
+                        if j['status']!='waiting_account':raise ValueError('Aucun changement de compte en attente')
+                        switch=j.pop('account_switch',{});j['status']='running'
+                        event(j,'Changement de compte confirmé ('+str(switch.get('to'))+'). Le connecteur vérifie l’identité affichée avant tout envoi.');schedule(j)
                     elif action=='provider':
                         if b.get('provider') not in ('chatgpt','claude'): raise ValueError('IA inconnue')
                         j['config']['provider']=b['provider']; event(j,'IA de scénario modifiée ; médias conservés.')

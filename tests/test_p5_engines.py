@@ -115,6 +115,7 @@ class HttpTests(unittest.TestCase):
     def test_engine_is_validated_and_gated_until_its_connector_ships(self):
         self.req({'brief': 'x', 'config': {}})
         self.assertEqual(s.STATE['jobs'][0]['config']['video_engine'], 'flow'); self.assertEqual(s.STATE['jobs'][0]['config']['clip_seconds'], 8)
+        engines.AVAILABLE = ('flow',)
         with self.assertRaises(urllib.error.HTTPError) as e:
             self.req({'brief': 'x', 'config': {'video_engine': 'grok'}})
         self.assertIn('pas encore livré', json.load(e.exception)['error'])

@@ -1,6 +1,6 @@
 # FruchtDrama — Mode d'emploi détaillé
 
-Version du logiciel décrite : **0.1.48** (branche `sudf`). Ce guide est mis à jour à chaque version ;
+Version du logiciel décrite : **0.1.49** (branche `sudf`). Ce guide est mis à jour à chaque version ;
 la section 12 liste, version par version, ce qui change pour vous.
 
 Sommaire
@@ -110,6 +110,13 @@ Toujours **vous-même**, dans la fenêtre FruchtDrama. Le studio ne demande ni n
 3. Onglet **Passerelle** → **Mémoriser le compte Flow de cet onglet**. Le dernier onglet Flow consulté est utilisé.
 4. Vérifier l'adresse e-mail affichée dans Connexions.
 
+**Grok Imagine et LMArena (expérimental)**
+1. Dans la fenêtre FruchtDrama, ouvrir https://grok.com/imagine (ou https://lmarena.ai) et se connecter soi-même.
+2. Studio → **Connexions** → section **Comptes Grok et Arena** : choisir le moteur, saisir l'**adresse** du compte (jamais de mot de passe), **Ajouter ce compte**. Répéter pour chaque compte, dans l'ordre d'utilisation voulu.
+3. Quand un compte atteint sa limite, la production passe « Changement de compte » : dans l'onglet du site, se déconnecter, se connecter au compte indiqué dans le bandeau, puis cliquer **J'ai changé de compte**. Le connecteur vérifie le compte affiché avant d'envoyer.
+4. Si tous les comptes sont à leur limite : « Limite atteinte, reprise automatique » ; la production repart seule à l'heure indiquée. **Oublier la limite** (Connexions) force une nouvelle tentative.
+5. Toujours commencer par un **essai à blanc** : ces sites changent souvent et les connecteurs n'ont pas encore été vérifiés sur vos comptes.
+
 **Plusieurs comptes Flow dans la même fenêtre** (passage automatique quand les crédits s'épuisent)
 1. Dans la fenêtre FruchtDrama, menu du compte Google (photo en haut à droite d'une page Google) → **Ajouter un compte** ; répéter pour chaque compte.
 2. Pour chaque compte : ouvrir Flow avec ce compte (l'adresse contient `/u/0/`, `/u/1/`, `/u/2/`…), ouvrir un projet, puis **Mémoriser le compte Flow de cet onglet**.
@@ -126,7 +133,7 @@ Studio → **Nouvelle production** :
 | IA de scénario | ChatGPT ou Claude. Les images passent toujours par ChatGPT. |
 | Format | 4 scènes (32 s) pour commencer. |
 | Langue | Deutsch, Français ou English : dialogues, voix, sous-titres, couverture. |
-| Moteur vidéo | **Google Flow** (8 s par clip, crédits Flow). Grok Imagine (6 s) et LMArena (4 à 10 s) apparaissent « bientôt » : ils seront activés avec leurs connecteurs. La longueur des dialogues s'adapte au moteur. |
+| Moteur vidéo | **Google Flow** (8 s par clip, crédits Flow). Grok Imagine (6 s) et LMArena (4 à 10 s) sont **expérimentaux** : essai à blanc d'abord ; comptes à enregistrer dans Connexions (section 7). La longueur des dialogues s'adapte au moteur. |
 | Modèle vidéo Flow | Omni 12 crédits, Lite 10, Fast 20, Quality 100 par clip (Ultra : Lite 5, Fast 10). Le coût affiché dans Flow est vérifié avant tout envoi. |
 | Relire et corriger l'histoire avant de payer les images | **Recommandé** au début : la production s'arrête pour que vous relisiez les dialogues. |
 | Essai à blanc des clips Flow | **Recommandé pour le premier essai** : tout est préparé dans Flow mais rien n'est envoyé, aucun crédit consommé. |
@@ -145,6 +152,8 @@ Lien direct vers une production : `http://127.0.0.1:8840/#job=<identifiant>`.
 | En pause | Vous avez mis en pause, ou essai à blanc réussi. | **Reprendre**. Après un essai à blanc : désactiver l'essai, puis Reprendre. |
 | Crédits insuffisants | Aucun compte Flow n'a assez de crédits. | Mettre à jour le solde dans Connexions ou ajouter un compte. |
 | À vérifier | Un problème demande votre regard (voir bandeaux ci-dessous). | Lire le dernier message, corriger, **Reprendre**. |
+| Changement de compte | Un compte Grok/Arena a atteint sa limite. | Se connecter au compte indiqué dans l'onglet du site, puis **J'ai changé de compte**. |
+| Limite atteinte, reprise automatique | Tous les comptes du moteur sont à leur limite. | Rien : reprise seule à l'heure indiquée. Ou ajouter un compte. |
 | Montage en cours | Montage local ffmpeg. | Attendre. |
 | Prêt à télécharger | Vidéo finale disponible. | **Télécharger le MP4** et **Télécharger la description**. |
 
@@ -172,6 +181,7 @@ Bandeaux possibles :
 
 | Version | Ce qui change pour vous |
 |---|---|
+| 0.1.49 | **Grok et Arena utilisables** (expérimental) ; comptes Grok/Arena dans Connexions ; changement de compte guidé et reprise automatique après limite. Recharger l'extension (nouvelles autorisations grok.com et lmarena.ai). |
 | 0.1.48 | Nouveau champ **Moteur vidéo** à la création (Flow seul actif pour l'instant). Recharger l'extension après mise à jour. |
 | 0.1.47 | L'icône ouvre la **fenêtre FruchtDrama** où tout se passe (section 6). Le panneau de l'extension devient l'onglet **Passerelle**. Plusieurs comptes Flow dans la même fenêtre (section 7). Recharger l'extension après mise à jour. |
 | 0.1.46 | Bandeau rouge **Action de votre part requise** (connexion, anti-robot). Un refus de ChatGPT sur une image est signalé en quelques secondes. |

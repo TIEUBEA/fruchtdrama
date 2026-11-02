@@ -7,7 +7,7 @@ async function call(path,body){
  const data=await r.json();if(!r.ok)throw Error(data.error||'Studio inaccessible');return data;
 }
 async function ready(id,task,targetUrl){
- const expected=task.kind==='flow_video'?['flow.google.com','labs.google']:task.kind==='tiktok_search'?['www.tiktok.com','tiktok.com']:[task.payload.provider==='claude'?'claude.ai':'chatgpt.com'];
+ const expected=task.kind==='flow_video'?['flow.google.com','labs.google']:task.kind==='engine_video'?FruchtEngines.hosts(task.payload.engine):task.kind==='tiktok_search'?['www.tiktok.com','tiktok.com']:[task.payload.provider==='claude'?'claude.ai':'chatgpt.com'];
  for(let i=0;i<180;i++){
   const tab=await chrome.tabs.get(id);let host;
   try{host=new URL(tab.url).hostname;}catch{}
@@ -15,7 +15,7 @@ async function ready(id,task,targetUrl){
    // Sites may keep loading trackers after the editor is already usable.
    // This probe only reads the DOM; it never fills or submits anything.
    try{
-    const probes=await chrome.scripting.executeScript({target:{tabId:id},args:[targetUrl||tab.url,task.kind==='tiktok_search'],func:(expectedUrl,isSearch)=>{
+    const probes=await chrome.scripting.executeScript({target:{tabId:id},args:[targetUrl||tab.url,['tiktok_search','engine_video'].includes(task.kind)],func:(expectedUrl,isSearch)=>{
      if(location.href!==expectedUrl)return false;
      if(!['interactive','complete'].includes(document.readyState))return false;
      if(isSearch)return !!document.body?.innerText;
@@ -49,7 +49,7 @@ async function receiveMedia(task,result){
   mime=r.headers.get('Content-Type')||mime;bytes=new Uint8Array(await r.arrayBuffer());
  }
  if(bytes.length>100*1024*1024)throw Error('Média limité à 100 Mo.');
- const ext=mime?.includes('webm')?'webm':['flow_video','flow_collect'].includes(task.kind)?'mp4':mime?.includes('jpeg')?'jpg':mime?.includes('webp')?'webp':'png';
+ const ext=mime?.includes('webm')?'webm':['flow_video','flow_collect','engine_video'].includes(task.kind)?'mp4':mime?.includes('jpeg')?'jpg':mime?.includes('webp')?'webp':'png';
  const cfg=await chrome.storage.local.get('token');
  const r=await fetch(`${BASE}/api/bridge/upload?job=${task.job}&slot=${encodeURIComponent(task.slot)}&ext=${ext}`,{method:'POST',headers:{Authorization:'Bearer '+cfg.token},body:bytes});
  const data=await r.json();if(!r.ok)throw Error(data.error);return {ok:true,file:data.file};
@@ -224,7 +224,7 @@ async function begin(task,tab,cfg){
   const identity=await chrome.tabs.sendMessage(tab.id,{type:'frucht-flow-verify',target:task.payload.flow_route});
   if(!identity?.ok)throw Error('Compte Flow différent ou connexion expirée. Reconnectez le compte enregistré ; aucun envoi effectué.');
  }
- const inject=()=>chrome.scripting.executeScript({target:{tabId:tab.id},files:['composer.js','response.js','media.js','flow-controls.js','flow-session.js','research.js','chat-session.js','runner.js']});
+ const inject=()=>chrome.scripting.executeScript({target:{tabId:tab.id},files:['composer.js','response.js','media.js','flow-controls.js','flow-session.js','research.js','chat-session.js','engine-video.js','runner.js']});
  await inject();
  let previous;
  try{previous=await chrome.tabs.sendMessage(tab.id,{type:'frucht-status'});}catch{}
@@ -290,6 +290,8 @@ async function poll(){
     tab=await FruchtWorkspace.adopt(chrome,tabs.find(t=>t.url?.includes('/project/'))||tabs[0]);
    }
    if(!tab)throw Error('Ouvrez un projet Flow, réglez vidéo 9:16, huit secondes et x1.');
+  }else if(task.kind==='engine_video'){
+   tab=await FruchtEngines.tabFor(task,chrome);
   }else if(FruchtChats.isAI(task)){
    tab=await FruchtChats.tabFor(task,cfg,chrome);
   }else{

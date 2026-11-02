@@ -18,11 +18,11 @@ Priorité : passe devant les lots 2 à 5 de P2 (qui restent valables, voir `REPR
 | P5-04 | « Mémoriser le compte Flow » et « Récupérer la réponse » visent le dernier onglet consulté dans la fenêtre (l'onglet actif est désormais la passerelle). | Fait (0.1.47) |
 | P5-05 | Plusieurs comptes Google dans la même fenêtre : comptes ajoutés au même profil Chrome, projets Flow en `/u/N/`, passage automatique au compte suivant quand les crédits manquent (mécanisme existant, désormais dans la fenêtre). | Fait (0.1.47, documenté dans INSTALLATION.md) |
 | P5-06 | Moteur vidéo au choix par production : `flow`, `grok`, `arena`. Durée de clip propre au moteur (Flow 8 s, Grok 6 s, Arena 4 à 10 s), prise en compte par le prompt, la limite de mots, le contrôle qualité et le montage. Grok et Arena restent verrouillés tant que leur connecteur n'est pas livré. | Fait (0.1.48) |
-| P5-07 | Comptes par moteur : chaque profil porte un `engine`. Flow : crédits (existant). Grok et Arena : pas de solde lisible, murs de quota appris par compte (P2 lot 3). | À faire |
-| P5-08 | Changement de compte Grok/Arena : une seule session à la fois par site dans un profil Chrome, donc changement **guidé** dans la fenêtre : la production attend (`waiting_account`), le bandeau indique le compte suivant, le propriétaire se connecte lui-même dans l'onglet, l'extension vérifie l'identité affichée, puis reprend. Jamais de mot de passe stocké ni saisi par l'extension. | À faire |
-| P5-09 | Adaptateur Grok (`extension/grok.js`, grok.com/imagine) : image de départ, prompt, mode vidéo, envoi unique avec intention d'envoi, détection de la nouvelle vidéo, téléchargement, erreurs typées (connexion, anti-robot, quota, modération). | À faire |
-| P5-10 | Adaptateur Arena (`extension/arena.js`, lmarena.ai, arène vidéo image vers vidéo) : deux vidéos anonymes A/B, la première terminée est retenue, l'autre gardée comme variante ; erreurs typées. | À faire |
-| P5-11 | Essai à blanc (P1-4) disponible pour Grok et Arena : tout préparé, rien envoyé. | À faire |
+| P5-07 | Comptes par moteur : chaque profil porte un `engine`. Flow : crédits (existant). Grok et Arena : pas de solde lisible, murs de quota appris par compte (P2 lot 3). | Fait (0.1.49) |
+| P5-08 | Changement de compte Grok/Arena : une seule session à la fois par site dans un profil Chrome, donc changement **guidé** dans la fenêtre : la production attend (`waiting_account`), le bandeau indique le compte suivant, le propriétaire se connecte lui-même dans l'onglet, l'extension vérifie l'identité affichée, puis reprend. Jamais de mot de passe stocké ni saisi par l'extension. | Fait (0.1.49) |
+| P5-09 | Adaptateur Grok (`extension/grok.js`, grok.com/imagine) : image de départ, prompt, mode vidéo, envoi unique avec intention d'envoi, détection de la nouvelle vidéo, téléchargement, erreurs typées (connexion, anti-robot, quota, modération). | Fait (0.1.49) |
+| P5-10 | Adaptateur Arena (`extension/arena.js`, lmarena.ai, arène vidéo image vers vidéo) : deux vidéos anonymes A/B, la première terminée est retenue, l'autre gardée comme variante ; erreurs typées. | Fait (0.1.49) |
+| P5-11 | Essai à blanc (P1-4) disponible pour Grok et Arena : tout préparé, rien envoyé. | Fait (0.1.49) |
 
 ## Conception de la fenêtre (fait)
 

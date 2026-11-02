@@ -15,7 +15,7 @@ globalThis.fruchtRunnerHandler=(m,s,reply)=>{
  if(m.type!=='frucht-run')return false;
  if(globalThis.fruchtRunState?.state==='running'){reply({accepted:false,error:'Une tâche est déjà en cours dans cet onglet.'});return false;}
  globalThis.fruchtRunState={state:'running',task:m.task.id};
- run(m.task,m.attachments).then(result=>{if(m.task.kind==='flow_video')result.generation_submitted=globalThis.fruchtRunState.submitted===true;globalThis.fruchtRunState={...globalThis.fruchtRunState,state:'completed',task:m.task.id,result};return notifyResult(m.task.id);}).catch(e=>{globalThis.fruchtRunState={...globalThis.fruchtRunState,state:'completed',task:m.task.id,result:{ok:false,error:e.message,...(e.kind?{error_kind:e.kind}:{}),...(e.retryAfter?{retry_after:e.retryAfter}:{}),...(m.task.kind==='flow_video'?{generation_submitted:globalThis.fruchtRunState.submitted===true,...(e.flowBlocked?{flow_blocked:e.flowBlocked}:{})}:{})}};return notifyResult(m.task.id);});
+ run(m.task,m.attachments).then(result=>{if(['flow_video','engine_video'].includes(m.task.kind))result.generation_submitted=globalThis.fruchtRunState.submitted===true;globalThis.fruchtRunState={...globalThis.fruchtRunState,state:'completed',task:m.task.id,result};return notifyResult(m.task.id);}).catch(e=>{globalThis.fruchtRunState={...globalThis.fruchtRunState,state:'completed',task:m.task.id,result:{ok:false,error:e.message,...(e.kind?{error_kind:e.kind}:{}),...(e.retryAfter?{retry_after:e.retryAfter}:{}),...(['flow_video','engine_video'].includes(m.task.kind)?{generation_submitted:globalThis.fruchtRunState.submitted===true,...(e.flowBlocked?{flow_blocked:e.flowBlocked}:{})}:{})}};return notifyResult(m.task.id);});
  reply({accepted:true,task:m.task.id});return false;
 };chrome.runtime.onMessage.addListener(globalThis.fruchtRunnerHandler);
 }
@@ -41,6 +41,12 @@ async function run(task,attachments){
  const count=s=>{if(!s)return null;const v=s.trim().replace(/\s/g,'').replace(',','.');const m=v.match(/^(\d+(?:\.\d+)?)\s*([kmb])?$/i);return m?Number(m[1])*({k:1e3,m:1e6,b:1e9}[m[2]?.toLowerCase()]||1):null};
  await sleep(1500);blocked();
  if(task.kind==='chat_collect')return collectScenario(task);
+ // P5-09/P5-10: Grok Imagine and LMArena video.
+ if(task.kind==='engine_video')return globalThis.FruchtEngines.run(task,attachments,{document,sleep,fill,blocked,fail,DataTransfer,File,Event,atob,now:()=>Date.now(),
+  intent:async()=>(await chrome.runtime.sendMessage({type:'submission-intent',task:task.id}))?.ok===true,
+  submitted:()=>{globalThis.fruchtRunState.submitted=true;},
+  videoPayload:v=>globalThis.FruchtMedia.videoPayload(v),
+  retryAfter:t=>globalThis.FruchtComposer.retryAfter?.(t)||null});
  if(task.kind==='tiktok_search'){
   await waitFor(()=>document.querySelector('a[href*="/video/"]'),45000);
   return {ok:true,candidates:globalThis.FruchtResearch.extract(document)};
