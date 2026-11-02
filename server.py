@@ -160,7 +160,15 @@ def flow_dispatch_loop():
         dispatch_once()
         time.sleep(3)
 def image_assets(j):
-    return [asset_url(j,p['file']) for p in j.get('characters',[]) if p.get('file')]
+    # A shared character sheet is attached once, not once per character.
+    return list(dict.fromkeys(asset_url(j,p['file']) for p in j.get('characters',[]) if p.get('file')))
+
+def sheet_prompt(j):
+    cast='\n'.join(f"- {c['name']} ({c['id']}): {c['appearance']}. {c['image_prompt']}" for c in j['characters'])
+    return ('Create ONE character reference sheet image containing every character below, side by side, full body, front view, '
+            'same scale, neutral light background, consistent premium 3D animation style, portrait 9:16. '
+            'Each character appears exactly once, clearly separated, with a small plain name label under each one. '
+            'No other text, no scene, no props unless part of the outfit.\n'+cast)
 
 def image_fingerprint(j,file):
     from PIL import Image
@@ -339,6 +347,9 @@ def schedule(j):
         if review_pending(j):
             # Nothing is paid before the owner has read the story (P1-1).
             j['status']='waiting_review';event(j,'Histoire prête : relisez et corrigez les dialogues, puis validez pour lancer les images.');return
+        if j.get('character_sheet')==1 and len(j['characters'])>1 and not any(c.get('file') for c in j['characters']):
+            # P1-2: one image for the whole cast instead of one paid image per character.
+            add_task(j,'chat_image',{'provider':'chatgpt','prompt':sheet_prompt(j),'attachments':[]},'characters');return
         for c in j['characters']:
             if not c.get('file'):
                 add_task(j,'chat_image',{'provider':'chatgpt','prompt':c['image_prompt']+' Create one full-body character reference image. No text. Premium 3D animation, 9:16.','attachments':[]},f"character:{c['id']}"); return
@@ -422,7 +433,7 @@ def schedule_quality(j):
         j['status']='attention';event(j,'Contrôle des paroles à vérifier : '+report['warnings'][0]+' Aucun clip ne sera régénéré automatiquement.');return
     visual=report.get('visual')
     if not visual:
-        attachments=[asset_url(j,c['file']) for c in j['characters'] if c.get('file')]
+        attachments=image_assets(j)
         attachments += [asset_url(j,c['sheet']) for c in report['clips'] if c.get('sheet')]
         add_task(j,'chat_text',{'provider':'chatgpt','prompt':quality.visual_prompt(j),'attachments':attachments,'response_kind':'quality_review','scene_count':len(j['scenes']),'fingerprint':key},'quality_review');return
     issues=[x for x in [*visual['scenes'],visual['continuity']] if x['status']!='pass']
@@ -552,6 +563,9 @@ def accept_task_result(t,result):
         file=result.get('file','')
         if not re.fullmatch(r'[a-zA-Z0-9_.-]+',file) or not (job_dir(j)/file).is_file(): raise ValueError('Fichier média reçu absent')
         if slot.startswith('character:'): next(c for c in j['characters'] if c['id']==slot.split(':')[1])['file']=file
+        elif slot=='characters':
+            j['character_sheet_file']=file
+            for c in j['characters']:c['file']=file
         elif slot.startswith('image:'):
             index=int(slot.split(':')[1])
             if duplicate_scene_source(j,file,index):raise ValueError('Image rejetée : copie exacte d’une référence ou d’une autre scène. Attente de la véritable image générée.')
@@ -706,7 +720,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         j=job_by(t['job']);key=(j['id'],t['slot'])
                         if key in seen or j['status']!='attention' or j['stage'] not in ('characters','images','cover') or not client_accepts(c,t):continue
                         if any(x['job']==j['id'] and x['status'] in ('queued','claimed') for x in STATE['tasks']):continue
-                        if t['slot'].startswith('character:'):
+                        if t['slot']=='characters':missing=not any(x.get('file') for x in j['characters'])
+                        elif t['slot'].startswith('character:'):
                             item=next((x for x in j['characters'] if x['id']==t['slot'].split(':')[1]),None);missing=item and not item.get('file')
                         elif t['slot']=='cover':missing=not j.get('cover_file')
                         else:missing=t['slot'].startswith('image:') and not j['scenes'][int(t['slot'].split(':')[1])].get('image')
@@ -752,9 +767,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     if not j: raise ValueError('Projet inconnu')
                     ext=q.get('ext',[''])[0].lower()
                     if ext not in ('png','jpg','jpeg','webp','mp4','webm'): raise ValueError('Type média non accepté')
-                    if not re.fullmatch(r'(?:cover|character:[a-z][a-z0-9_]{0,24}|image:\d+|clip:\d+)',slot): raise ValueError('Emplacement média invalide')
+                    if not re.fullmatch(r'(?:cover|characters|character:[a-z][a-z0-9_]{0,24}|image:\d+|clip:\d+)',slot): raise ValueError('Emplacement média invalide')
                     if slot.startswith('character:') and not any(c['id']==slot.split(':')[1] for c in j['characters']): raise ValueError('Personnage inconnu')
-                    if slot!='cover' and not slot.startswith('character:') and int(slot.split(':')[1])>=len(j['scenes']): raise ValueError('Scène inconnue')
+                    if slot not in ('cover','characters') and not slot.startswith('character:') and int(slot.split(':')[1])>=len(j['scenes']): raise ValueError('Scène inconnue')
                     if slot.startswith('clip:') and ext not in ('mp4','webm'): raise ValueError('Un clip doit être une vidéo MP4 ou WebM')
                     if not slot.startswith('clip:') and ext not in ('png','jpg','jpeg','webp'): raise ValueError('Une image est attendue')
                     name=re.sub('[^a-zA-Z0-9_-]','_',slot)+'_'+uid()+'.'+ext; (job_dir(j)/name).write_bytes(raw)
@@ -886,7 +901,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     # An omitted or untouched German default follows the chosen language.
                     cfg['query']=RESEARCH_QUERIES[cfg['language']] if not requested_query or requested_query in RESEARCH_QUERIES.values() else requested_query[:200]
                     if cfg['scene_count'] not in (3,4,6,8) or not 1<=cfg['flow_cost']<=100 or cfg['provider'] not in ('chatgpt','claude'): raise ValueError('Réglages invalides')
-                    j={'id':uid(),'title':'Nouvel épisode','brief':str(b.get('brief',''))[:4000], 'config':cfg,'editorial_version':2,'retention_version':1,'hook_version':1,'quality_version':1,'cover_style':'family_poster_v3','flow_profile':b.get('flow_profile'),'status':'running','stage':'research','created':now(),'updated':now(),'events':[],'candidates':[],'characters':[],'scenes':[]}; STATE['jobs'].insert(0,j); event(j,'Projet créé. Recherche préalable et comparaison de cinq concepts obligatoires.'); schedule(j)
+                    j={'id':uid(),'title':'Nouvel épisode','brief':str(b.get('brief',''))[:4000], 'config':cfg,'editorial_version':2,'retention_version':1,'hook_version':1,'quality_version':1,'cover_style':'family_poster_v3','character_sheet':1,'flow_profile':b.get('flow_profile'),'status':'running','stage':'research','created':now(),'updated':now(),'events':[],'candidates':[],'characters':[],'scenes':[]}; STATE['jobs'].insert(0,j); event(j,'Projet créé. Recherche préalable et comparaison de cinq concepts obligatoires.'); schedule(j)
                 elif path.startswith('/api/job/'):
                     id=path.split('/')[-1]; j=job_by(id)
                     if not j: raise ValueError('Projet inconnu')

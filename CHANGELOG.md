@@ -4,6 +4,7 @@
 
 ### Ajouté
 - Relecture et correction de l’histoire avant de payer les images (option à la création, P1-1). Détail : `docs/sudf/P1-economies.md`.
+- Feuille de personnages unique pour les nouvelles productions à plusieurs personnages : une image payée au lieu d’une par personnage (P1-2).
 - Test d’interaction navigateur piloté par le protocole DevTools (`tests/test_ui_interactions.cjs`).
 
 ## 0.1.44 — 2026-11-02 (branche `sudf`)

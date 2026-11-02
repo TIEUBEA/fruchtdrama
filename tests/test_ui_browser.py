@@ -24,7 +24,7 @@ class BrowserInterfaceTests(unittest.TestCase):
                  'jobs': [{'id': cls.job, 'title': 'Épisode QA', 'brief': 'b', 'stage': 'clips', 'status': 'attention', 'created': now, 'updated': now,
                            'config': {'provider': 'chatgpt', 'scene_count': 2, 'language': 'Deutsch (de-DE)', 'flow_model': 'gemini_omni_flash', 'flow_cost': 12},
                            'events': [{'at': now, 'text': 'Redémarrage : génération précédente à vérifier avant de réessayer.'}],
-                           'candidates': [], 'characters': [{'id': 'orange', 'name': 'Oma', 'appearance': 'a', 'voice': 'v', 'image_prompt': 'p'}], 'scenes': scenes, 'flow_profile': 'flow'},
+                           'candidates': [], 'characters': [{'id': 'orange', 'name': 'Oma', 'appearance': 'a', 'voice': 'v', 'image_prompt': 'p', 'file': 'sheet.png'}, {'id': 'kiwi', 'name': 'Kiko', 'appearance': 'k', 'voice': 'v', 'image_prompt': 'p', 'file': 'sheet.png'}], 'character_sheet': 1, 'character_sheet_file': 'sheet.png', 'scenes': scenes, 'flow_profile': 'flow'},
                           {'id': cls.review, 'title': 'Histoire à relire QA', 'brief': 'b', 'stage': 'characters', 'status': 'waiting_review', 'created': now, 'updated': now,
                            'config': {'provider': 'chatgpt', 'scene_count': 2, 'language': 'Deutsch (de-DE)', 'flow_model': 'gemini_omni_flash', 'flow_cost': 12, 'review_script': True},
                            'events': [], 'candidates': [], 'flow_profile': 'flow', 'characters': [{'id': 'orange', 'name': 'Oma', 'appearance': 'a', 'voice': 'v', 'image_prompt': 'p'}], 'scenes': scenes,
@@ -64,6 +64,8 @@ class BrowserInterfaceTests(unittest.TestCase):
         self.assertIn('Envoi Flow incertain', html)
         self.assertIn('data-confirm-no-clip="clip:1"', html); self.assertIn('Scène 2 : aucun clip dans Flow', html)
         self.assertIn('Redémarrage : génération précédente à vérifier', html)
+        self.assertIn('Feuille commune : Oma, Kiko', html); self.assertEqual(html.count('data-upload="characters"'), 1)
+        self.assertNotIn('data-upload="character:kiwi"', html)
 
     def test_story_review_editor_before_images(self):
         html = self.dom('#job=' + self.review)
