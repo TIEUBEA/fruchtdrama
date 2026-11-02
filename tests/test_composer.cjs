@@ -42,3 +42,13 @@ assert.equal(helper.retryAfter('Limit erreicht. Bitte versuche es in 45 Minuten 
 assert.equal(helper.retryAfter('Limit erreicht. Erneut möglich in 45 Minuten.'),45*60);
 assert.equal(helper.retryAfter('Usage limit reached.'),null);
 console.log('Refus de contenu (nouvelle réponse seulement, FR/DE/EN) et délai de renouvellement vérifiés.');
+// Real check 02/11/2026: signed-out ChatGPT shows an editor; Cloudflare interstitial "Just a moment...".
+const btn=t=>element({innerText:t});
+const docB=list=>({querySelectorAll:()=>list.map(btn)});
+assert.equal(helper.loggedOut(docB(['Log in Log in','Sign up for free Sign up for free','Open sidebar'])),true,'signed-out ChatGPT (real labels)');
+assert.equal(helper.loggedOut(docB(['Se connecter','S’inscrire gratuitement'])),true);
+assert.equal(helper.loggedOut(docB(['Open sidebar','New chat','Share'])),false,'signed-in page');
+assert.equal(helper.loggedOut(docB(['Log in to Notion'])),false,'unrelated link');
+assert.equal(helper.challenge({title:'Just a moment...',body:{innerText:''},querySelectorAll:()=>[]}),true,'Cloudflare interstitial');
+assert.equal(helper.challenge({title:'ChatGPT',body:{innerText:'Hello'},querySelectorAll:()=>[]}),false);
+console.log('Constats réels : ChatGPT déconnecté et page Cloudflare reconnus.');

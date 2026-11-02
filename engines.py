@@ -4,7 +4,7 @@ ENGINES = {
     # seconds: duration asked in the prompt; range: accepted clip duration (QC) and montage clamp.
     'flow': {'label': 'Google Flow', 'seconds': 8, 'range': (7.5, 8.5), 'home': 'https://labs.google/fx/tools/flow'},
     'grok': {'label': 'Grok Imagine', 'seconds': 6, 'range': (5.5, 10.5), 'home': 'https://grok.com/imagine'},
-    'arena': {'label': 'LMArena (vidéo)', 'seconds': 8, 'range': (4.0, 10.5), 'home': 'https://lmarena.ai/'},
+    'arena': {'label': 'LMArena (vidéo)', 'seconds': 8, 'range': (4.0, 10.5), 'home': 'https://arena.ai/video'},
 }
 # Engines whose browser connector is available in this version.
 AVAILABLE = ('flow', 'grok', 'arena')

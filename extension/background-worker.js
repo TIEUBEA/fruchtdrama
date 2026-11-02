@@ -26,7 +26,7 @@ async function ready(id,task,targetUrl){
   }
   await delay(500);
  }
- throw Error('Page du fournisseur indisponible après 90 secondes : aucun prompt envoyé. Vérifiez son chargement dans l’onglet ouvert.');
+ throw Error('Page du fournisseur indisponible ou vide après 90 secondes (connexion requise, vérification anti-robot ou blocage) : aucun prompt envoyé. Ouvrez l’onglet dans la fenêtre FruchtDrama, connectez-vous vous-même, puis Reprendre.');
 }
 async function loadAttachments(paths){
  const files=[];

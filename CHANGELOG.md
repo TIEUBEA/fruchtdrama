@@ -9,6 +9,19 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 Prochain : P3 (séries, idées, kit de publication, veille, 16:9) et P4 (montage avancé, sous-titres karaoké, rapport de panne). Voir `docs/sudf/REPRISE.md`.
 
+## Branche `sudf-ui` — correctifs du test réel (02/11/2026)
+
+Test réel automatisé sur ce PC : serveur réel, Chromium avec l'extension, vrais sites (sans compte). Détail et liste de contrôle : `docs/ESSAI-REEL.md`.
+
+### Corrigé
+- ChatGPT/Claude déconnectés gardent un éditeur (chat anonyme) : le connecteur refuse maintenant d'envoyer (« non connecté »).
+- La page Cloudflare « Just a moment... » est reconnue comme vérification anti-robot.
+- LMArena redirige vers arena.ai : autorisations et page vidéo (arena.ai/video) mises à jour (recharger l'extension).
+- Message clair quand une page reste vide 90 s (connexion ou vérification à faire dans l'onglet).
+
+### Tests
+- `test_composer.cjs` et `test_engine_video.cjs` étendus avec les libellés réels observés.
+
 ## Branche `sudf-ui` (sur 0.1.52) — interface complète
 
 ### Amélioré

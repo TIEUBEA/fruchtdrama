@@ -10,7 +10,8 @@ globalThis.FruchtEngines={
    send:/^(?:submit|send|generate|create|make video|envoyer|générer|créer|senden|generieren|erstellen)$/i,
    quota:/rate limit|too many requests|limit reached|reached your (?:daily |video )?limit|upgrade to (?:supergrok|premium)|out of (?:free )?generations|limite atteinte|limite de (?:génération|vidéos)|Limit erreicht/i,
    refusal:/content moderated|moderated|violat\w* (?:our|the) (?:policy|policies|guidelines)|can.t generate (?:this|that)|unable to generate|contenu modéré|ne peut pas générer|Inhalt moderiert/i},
-  arena:{label:'LMArena vidéo',hosts:['lmarena.ai','www.lmarena.ai'],home:'https://lmarena.ai/?chat-modality=video',
+  // Real check 02/11/2026: lmarena.ai now redirects to arena.ai/video.
+  arena:{label:'LMArena vidéo',hosts:['arena.ai','www.arena.ai','lmarena.ai','www.lmarena.ai'],home:'https://arena.ai/video',
    login:/\b(?:sign in|log in)\b to (?:continue|generate|use video)|login required|se connecter pour|anmelden, um/i,
    loginSelector:'',
    videoMode:/^(?:video|vidéo)$/i,

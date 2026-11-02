@@ -41,6 +41,7 @@ async function run(task,attachments){
  const count=s=>{if(!s)return null;const v=s.trim().replace(/\s/g,'').replace(',','.');const m=v.match(/^(\d+(?:\.\d+)?)\s*([kmb])?$/i);return m?Number(m[1])*({k:1e3,m:1e6,b:1e9}[m[2]?.toLowerCase()]||1):null};
  await sleep(1500);blocked();
  if(task.kind==='chat_collect')return collectScenario(task);
+ if(['chat_text','chat_image'].includes(task.kind)&&globalThis.FruchtComposer.loggedOut?.(document))throw fail('login',(location.hostname==='claude.ai'?'Claude':'ChatGPT')+' : non connecté. Connectez-vous vous-même dans l’onglet de la fenêtre FruchtDrama, puis Reprendre. Aucun prompt envoyé.');
  // P5-09/P5-10: Grok Imagine and LMArena video.
  if(task.kind==='engine_video')return globalThis.FruchtEngines.run(task,attachments,{document,sleep,fill,blocked,fail,DataTransfer,File,Event,atob,now:()=>Date.now(),
   intent:async()=>(await chrome.runtime.sendMessage({type:'submission-intent',task:task.id}))?.ok===true,

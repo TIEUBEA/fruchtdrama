@@ -2,6 +2,8 @@
 globalThis.FruchtComposer = {
  challenge(doc){
   const text=doc.body?.innerText||'';
+  // Cloudflare interstitial seen on chatgpt.com in a real check (02/11/2026).
+  if(/^(?:just a moment|un instant|einen moment|nur einen moment)/i.test(String(doc.title||'').trim())||/checking (?:if the site connection is secure|your browser)|verifying you are human/i.test(text))return true;
   if(/verify you are human|vérifiez que vous êtes humain|bestätigen sie,? dass sie ein mensch sind|unusual activity|activité inhabituelle|ungewöhnliche aktivität/i.test(text))return true;
   return [...doc.querySelectorAll('iframe')].some(frame=>{
    const label=[frame.getAttribute('title'),frame.getAttribute('src')].filter(Boolean).join(' ');
@@ -9,6 +11,13 @@ globalThis.FruchtComposer = {
    const r=frame.getBoundingClientRect();
    return r.width>100&&r.height>70;
   });
+ },
+ // Signed-out ChatGPT/Claude still shows an editor (anonymous chat): never send there (real check 02/11/2026).
+ loggedOut(doc){
+  const labels=[...doc.querySelectorAll('button,a')].filter(b=>this.visible(b)).map(b=>[b.getAttribute('aria-label'),b.innerText].filter(Boolean).join(' ').replace(/\s+/g,' ').trim());
+  // Labels are often doubled ("Log in Log in"): text + aria-label.
+  return labels.some(l=>/^(log in|sign in|se connecter|connexion|anmelden|einloggen)(?: \1)?$/i.test(l))
+   &&labels.some(l=>/^(?:sign up(?: for free)?|s.inscrire(?: gratuitement)?|registrieren|kostenlos registrieren)/i.test(l));
  },
  // Assistant replies, oldest first. Used to read only replies that appear after our prompt.
  assistants(doc){
