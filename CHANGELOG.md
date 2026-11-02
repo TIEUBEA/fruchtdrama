@@ -6,7 +6,26 @@ correspondante (P0-xx, P1-x, P2-xx) détaillée dans `docs/sudf/`. Guide pour re
 
 ## Non publié (branche `sudf`)
 
-Automatisation sans surveillance (P2), lots 2 à 5 en cours : voir `docs/sudf/REPRISE.md`.
+Prochain : P5 lots 2 à 5 (moteurs Grok et Arena, comptes par moteur, changement de compte guidé), puis P2 lots 2 à 5. Voir `docs/sudf/REPRISE.md`.
+
+## 0.1.47 — 2026-11-02 (branche `sudf`) — P5 lot 1 : fenêtre unique
+
+Détail : `docs/sudf/P5-fenetre-moteurs.md` (P5-01 à P5-05).
+
+### Ajouté
+- Un clic sur l'icône de l'extension ouvre la **fenêtre FruchtDrama** (onglet passerelle épinglé + studio) ou la ramène au premier plan. Tout s'y passe : studio, ChatGPT, Claude, TikTok, Flow et ouverture des comptes (`extension/workspace.js`).
+- Les onglets de fournisseurs sont créés dans cette fenêtre ; un onglet déjà ouvert ailleurs (projet Flow mémorisé, recherche TikTok) y est déplacé avec sa session.
+- Plusieurs comptes Google dans la même fenêtre (`/u/0/`, `/u/1/`…) : passage au compte suivant quand les crédits manquent, sans changer de fenêtre (INSTALLATION.md, étape 5).
+
+### Amélioré
+- Fenêtre fermée : recréée automatiquement à la tâche suivante ; identifiant oublié au redémarrage du navigateur.
+- « Mémoriser le compte Flow » et « Récupérer la réponse » visent le dernier onglet consulté dans la fenêtre, et non plus l'onglet actif (qui est maintenant la passerelle).
+
+### Modifié
+- Le panneau popup de l'extension est remplacé par l'onglet passerelle de la fenêtre (même contenu). Aucune nouvelle permission.
+
+### Tests
+- `tests/test_workspace.cjs` (logique + contrôles statiques, vérifié par mutation) et `tests/test_workspace_chrome.cjs` (Chromium réel avec l'extension chargée, piloté par DevTools).
 
 ## 0.1.46 — 2026-11-02 (branche `sudf`) — P2 lot 1 : erreurs typées
 

@@ -67,8 +67,9 @@ globalThis.FruchtFlowSession={
    const saved=(await chrome.storage.local.get('flowTab')).flowTab;
    // Reuse only the tab previously owned by this connector.
    const owned=tabs.find(t=>t.id===saved);
-   tab=owned?await chrome.tabs.update(owned.id,{url,active:true}):await chrome.tabs.create({url,active:true});
+   tab=owned?await chrome.tabs.update(owned.id,{url,active:true}):await globalThis.FruchtWorkspace.createTab(chrome,{url,active:true});
   }
+  tab=await globalThis.FruchtWorkspace.adopt(chrome,tab);
   await chrome.storage.local.set({flowTab:tab.id});return tab;
  }
 };

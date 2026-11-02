@@ -21,7 +21,7 @@ globalThis.FruchtChats={
  async tabFor(task,cfg,chrome){
   const provider=this.provider(task);
   // No reuse or navigation of a previous conversation. Recovery keeps active.tabId.
-  return chrome.tabs.create({url:provider==='claude'?'https://claude.ai/new':'https://chatgpt.com/',active:true});
+  return globalThis.FruchtWorkspace.createTab(chrome,{url:provider==='claude'?'https://claude.ai/new':'https://chatgpt.com/',active:true});
  },
  async queueClose(active,chrome){
   if(!this.isAI(active.task))return;

@@ -22,6 +22,8 @@ Objectif de la branche `sudf` : automatisation de bout en bout, fiable et écono
 | P0 | Fiabilité (13 exigences) | Terminé | 0.1.44 | `P0-fiabilite.md` |
 | P1 | Économies : relecture, feuille unique, Refaire, essai à blanc | Terminé | 0.1.45 | `P1-economies.md` |
 | P2 lot 1 | Erreurs typées, détection refus, délai de quota | Terminé | 0.1.46 | `P2-automatisation.md` |
+| P5 lot 1 | Fenêtre unique : tout se passe dans la fenêtre FruchtDrama (P5-01..05) | Terminé | 0.1.47 | `P5-fenetre-moteurs.md` |
+| P5 lots 2-5 | Moteurs Grok et Arena, comptes par moteur, changement de compte guidé, essai à blanc (P5-06..11) | **Priorité suivante** | | `P5-fenetre-moteurs.md` |
 | P2 lot 2 | Reformulation anti-refus graduée (P2-05) | À faire | | `P2-automatisation.md` |
 | P2 lot 3 | Quotas appris, `waiting_quota`, réveil auto, oubli de mur (P2-06..08) | À faire | | `P2-automatisation.md` |
 | P2 lot 4 | Seuil paroles 0,85 + décision auto dans le rapport (P2-09) | À faire | | `P2-automatisation.md` |
@@ -29,7 +31,7 @@ Objectif de la branche `sudf` : automatisation de bout en bout, fiable et écono
 | P3 | Séries/parties, dix idées, kit publication, veille, 16:9 | À faire | | rapport `00-SYNTHESE.md` |
 | P4 | Transitions ffmpeg, sous-titres karaoké, contrôle hauteur de voix, rapport de panne, purge `state.json`, suppression de production | À faire | | rapport `00-SYNTHESE.md` |
 
-Avancement global estimé : environ 60 %.
+Avancement global estimé : environ 55 % (le périmètre a grandi avec P5). Ordre décidé par le propriétaire : P5 (fenêtre unique + moteurs Grok/Arena) avant la suite de P2.
 
 Décision du propriétaire pour le contrôle qualité automatique (02/11/2026) : continuer seul
 **uniquement si** transcription ≥ 85 % pour chaque clip, aucun défaut technique, revue visuelle
@@ -76,8 +78,8 @@ Décision du propriétaire pour le contrôle qualité automatique (02/11/2026) :
 ## 5. Lancer les vérifications
 
 ```bash
-python3 -m unittest discover -s tests -p 'test_*.py'      # 162 tests à la 0.1.46
-for f in tests/*.cjs; do node "$f" || echo "ÉCHEC $f"; done  # 23 suites JS
+python3 -m unittest discover -s tests -p 'test_*.py'      # 162 tests à la 0.1.47
+for f in tests/*.cjs; do node "$f" || echo "ÉCHEC $f"; done  # 25 suites JS (dont Chromium réel)
 python3 -m py_compile server.py errors.py quality.py editorial.py
 for f in extension/*.js web/app.js; do node --check "$f"; done
 git diff --check
@@ -102,5 +104,6 @@ changent souvent, seuls les tests sur fixtures DOM existent. Commencer par un **
 | `flow_accounts.py`, `flow_credits.py` | Comptes Flow, crédits, ouverture automatique |
 | `extension/runner.js` | Exécution d'une tâche dans l'onglet |
 | `extension/composer.js` | Éditeur, bouton d'envoi, défi, refus, délai de quota |
+| `extension/workspace.js` | Fenêtre unique : création, recentrage, onglets dedans (P5-1) |
 | `extension/background-worker.js` | Boucle de la passerelle (toutes les 30 s) |
 | `web/app.js` | Interface du studio |

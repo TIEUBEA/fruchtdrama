@@ -287,7 +287,7 @@ async function poll(){
    }
    else{
     const tabs=await chrome.tabs.query({url:['https://labs.google/*','https://flow.google.com/*']});
-    tab=tabs.find(t=>t.url?.includes('/project/'))||tabs[0];
+    tab=await FruchtWorkspace.adopt(chrome,tabs.find(t=>t.url?.includes('/project/'))||tabs[0]);
    }
    if(!tab)throw Error('Ouvrez un projet Flow, réglez vidéo 9:16, huit secondes et x1.');
   }else if(FruchtChats.isAI(task)){
@@ -296,8 +296,8 @@ async function poll(){
    const url='https://www.tiktok.com/search?q='+encodeURIComponent(task.payload.query);
    const saved=cfg.researchTab;let previous;
    if(saved)try{previous=await chrome.tabs.get(saved);}catch{}
-   if(previous&&/^https:\/\/(www\.)?tiktok\.com\//.test(previous.url||''))tab=await chrome.tabs.update(previous.id,{url,active:false});
-   else tab=await chrome.tabs.create({url,active:false});
+   if(previous&&/^https:\/\/(www\.)?tiktok\.com\//.test(previous.url||''))tab=await FruchtWorkspace.adopt(chrome,await chrome.tabs.update(previous.id,{url,active:false}));
+   else tab=await FruchtWorkspace.createTab(chrome,{url,active:false});
    await chrome.storage.local.set({researchTab:tab.id});
   }
   await begin(task,tab,cfg);
@@ -383,8 +383,8 @@ async function recover(job){
  try{
   cfg=await chrome.storage.local.get(null);if(!cfg.client||!cfg.token)throw Error('Appairez d’abord l’extension.');
   if(cfg.activeTask)throw Error('Une tâche est déjà suivie. Attendez sa fin avant de récupérer une autre réponse.');
-  const tab=(await chrome.tabs.query({active:true,currentWindow:true}))[0];
-  if(!tab||!/^https:\/\/(chatgpt\.com|claude\.ai)\//.test(tab.url||''))throw Error('Ouvrez d’abord l’onglet qui contient la réponse terminée, puis cliquez sur l’extension.');
+  const tab=await FruchtWorkspace.latest(chrome,/^https:\/\/(chatgpt\.com|claude\.ai)\//);
+  if(!tab)throw Error('Ouvrez d’abord, dans la fenêtre FruchtDrama, l’onglet qui contient la réponse terminée.');
   task=await call('/api/bridge/recover',{client:cfg.client,job});
   await begin(task,tab,cfg);return {ok:true,message:'Récupération lancée dans cet onglet. Aucun nouveau prompt envoyé.'};
  }catch(e){
@@ -410,8 +410,8 @@ async function registerFlow(){
  if(!cfg.client||!cfg.token)throw Error('Appairez d’abord la passerelle au studio.');
  if(cfg.activeTask||busy)throw Error('Attendez la fin de la tâche en cours avant de mémoriser ce compte.');
  if(cfg.role==='creation')throw Error('Ce navigateur est réservé à votre IA ; utilisez la passerelle Flow.');
- const tab=(await chrome.tabs.query({active:true,currentWindow:true}))[0];
- if(!FruchtFlowSession.project(tab?.url))throw Error('Ouvrez le projet Flow du compte à mémoriser, puis ce panneau.');
+ const tab=await FruchtWorkspace.latest(chrome,/^https:\/\/(flow\.google\.com|labs\.google)\/.*\/project\//);
+ if(!FruchtFlowSession.project(tab?.url))throw Error('Ouvrez, dans la fenêtre FruchtDrama, le projet Flow du compte à mémoriser, puis cliquez ici.');
  const base=FruchtFlowSession.project(tab.url);
  if(tab.url!==base){await chrome.tabs.update(tab.id,{url:base,active:true});await ready(tab.id,{kind:'flow_video',payload:{}},base);}
  await chrome.scripting.executeScript({target:{tabId:tab.id},files:['flow-session.js']});
@@ -424,6 +424,10 @@ function triggerPoll(){poll().catch(recordBackgroundError);}
 function createAlarm(){try{Promise.resolve(chrome.alarms.create('studio-poll',{periodInMinutes:.5})).catch(recordBackgroundError);}catch(e){recordBackgroundError(e);}}
 chrome.runtime.onInstalled.addListener(createAlarm);
 chrome.runtime.onStartup.addListener(createAlarm);
+chrome.runtime.onStartup.addListener(()=>FruchtWorkspace.reset(chrome).catch(recordBackgroundError));
+// P5-1: the icon opens the FruchtDrama window; everything happens inside it.
+chrome.action?.onClicked?.addListener(()=>FruchtWorkspace.open(chrome).catch(recordBackgroundError));
+chrome.windows?.onRemoved?.addListener(id=>FruchtWorkspace.closed(chrome,id).catch(recordBackgroundError));
 chrome.alarms.onAlarm.addListener(a=>{if(a.name==='studio-poll')triggerPoll();});
 chrome.downloads?.onCreated?.addListener(()=>triggerPoll());
 chrome.downloads?.onChanged?.addListener(change=>{if(change.state||change.error||change.filename)triggerPoll();});
