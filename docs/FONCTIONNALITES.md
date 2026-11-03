@@ -10,6 +10,8 @@
 | Automatisation | Reformulation des images refusées ; limites apprises et reprise automatique ; seuil qualité 85 % ; file de nuit ; anti-veille | 0.1.50 |
 | Montage | Durées réelles par moteur ; sous-titres karaoké ; son normalisé | 0.1.48–0.1.51 |
 | Comptes | Une adresse = plusieurs services (ChatGPT, Claude, Flow, Grok, Arena), ajoutée une seule fois ; clé du studio enregistrée seule et cachée | 0.1.53 |
+| Originalité | Score estimé avant publication, conseils pour s'éloigner de l'original ; alerte dès la fiche pour une recréation | 0.1.56 |
+| Filon | Chiffres réels (vues, vues/h, croissance, engagement, durée, compte), onglets Viral / Toutes / Comptes, filtres, suivi de comptes, vidéos lancées seules | 0.1.56 |
 | Séries | « Écrire la suite » avec personnages réutilisés | 0.1.52 |
 | Publication | Kit : titre, description, hashtags, premier commentaire, créneaux | 0.1.52 |
 | Assistance | Rapport de panne sans secret ; nettoyage avec sauvegarde ; suppression vers la corbeille | 0.1.51 |

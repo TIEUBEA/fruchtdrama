@@ -1,6 +1,6 @@
 # FruchtDrama — Flux de bout en bout : une vidéo entièrement automatisée
 
-Version 0.1.55 (branches `sudf` / `sudf-ui`). Ce document décrit ce qui se passe, étape par étape,
+Version 0.1.56 (branches `sudf` / `sudf-ui`). Ce document décrit ce qui se passe, étape par étape,
 quand vous lancez une production sans intervenir, et ce que vous devez préparer une seule fois.
 
 ## A. Préparation unique (environ 30 minutes)
@@ -28,6 +28,7 @@ quand vous lancez une production sans intervenir, et ce que vous devez préparer
 | 6 | Contrôle qualité | Local + ChatGPT | Durée, vertical, audio, transcription (faster-whisper), revue visuelle des images extraites. Continue seul si paroles ≥ 85 %, aucun défaut, revue visuelle sans réserve. | « À vérifier » : écouter, valider ou « Refaire » le clip. |
 | 7 | Couverture | ChatGPT | Couverture avec titre court, style de référence. | Refus : reformulation automatique. |
 | 8 | Montage | Local (ffmpeg) | Clips normalisés 720×1280, durée réelle par moteur, sous-titres karaoké calés sur la voix, son normalisé −14 LUFS. | Échec : « Reprendre » relance le montage sans régénérer. |
+| 8 bis | Originalité | Local | Score d'originalité estimé (images comparées aux vidéos du Filon, textes, origine, répétition, durée, mention IA), recommandation et changements conseillés. | « Corrigez avant de publier » ou « Publication déconseillée » : suivre les conseils, Refaire l'élément, Recalculer. |
 | 9 | Prêt | Studio | MP4, couverture, description, **kit de publication** (titre, hashtags, premier commentaire, créneaux). | — |
 
 Puis, au choix : **Écrire la suite** (partie N+1, mêmes personnages, rien repayé pour eux).

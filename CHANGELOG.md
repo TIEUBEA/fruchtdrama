@@ -9,6 +9,17 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 Prochain : P3 (séries, idées, kit de publication, veille, 16:9) et P4 (montage avancé, sous-titres karaoké, rapport de panne). Voir `docs/sudf/REPRISE.md`.
 
+## 0.1.56 — Filon détaillé, originalité avant publication, page épisode complétée (03/11/2026)
+
+### Ajouté
+- **Contrôle d'originalité** (`originality.py`) : TikTok ne publie pas sa méthode ; ses règles excluent les contenus copiés, repris avec de légères modifications ou faits des vidéos d'autres comptes, exigent l'étiquette IA, et la rémunération demande plus d'une minute. Le studio estime le risque : empreinte des images (dHash) comparée à la vidéo d'origine et à toutes les vidéos relevées, reprise de mots (titre, description, répliques), recréation d'une virale, répétition de nos propres épisodes, durée, mention IA. Score en %, verdict (publier / corriger / déconseillé), facteurs détaillés et changements conseillés. Calculé seul après le montage, bouton **Recalculer**. **Avant tout paiement**, la fiche d'une recréation signale les mots communs avec la vidéo d'origine.
+- **Le Filon détaillé comme l'Atelier** : chiffres réels lus sur la page publique de chaque vidéo (vues — et non plus les likes —, vues/h, croissance entre deux relevés, engagement, durée, ancienneté, langue, compte, abonnés, avatar) ; onglets **Viral / Toutes les vidéos / Comptes** (abonnés, vidéos relevées, vues médianes, meilleure, virales, Suivre) ; filtres 24 h / 3 jours / 7 jours / Tout, durée (dont « 1 à 3 min, monétisables »), tri (plus vues, plus rapides, croissance, engagement), comptes non suivis, recherche ; badges Viral, Recréée, durée ; **Voir ma recréation**.
+- Vidéos du Filon **lancées seules dès qu'elles sont visibles** (10 à la fois), la miniature haute qualité (720 px) reste dessous si TikTok refuse la lecture.
+- Page épisode : **Télécharger les images** (zip), **Le texte**, **Boucle complète**, liens **Refaire… / Générer** dans les cases d'étapes, **Miniature** : choix de la scène de base puis Faire / Refaire la miniature.
+
+### Tests
+- `tests/test_originality.py` (4), `tests/test_thumbs.py` (3 : fiche, historique, croissance, sans réseau), `test_ui_interactions.cjs` (lecture automatique, chiffres).
+
 ## 0.1.55 — interface façon Atelier : dix histoires, fiche de décision, pages refaites (03/11/2026)
 
 ### Ajouté

@@ -33,5 +33,31 @@ class ThumbTests(unittest.TestCase):
             thumbs.get('file:///etc/passwd', d, fetch)
 
 
+class FigureTests(unittest.TestCase):
+    def test_page_figures_history_and_growth(self):
+        item = {'id': '7689550752078908705', 'desc': 'Une fraise #fruitstory', 'createTime': '1000', 'textLanguage': 'fr',
+                'statsV2': {'playCount': '10000', 'diggCount': '600', 'commentCount': '30', 'shareCount': '20', 'collectCount': '5'},
+                'video': {'duration': 75, 'originCover': 'https://p16-sign.tiktokcdn.com/c.jpg'},
+                'author': {'uniqueId': 'oma', 'nickname': 'Oma', 'avatarThumb': 'https://p16-sign.tiktokcdn.com/a.jpg'}, 'authorStatsV2': {'followerCount': '557700'}}
+        views = [10000]
+        def fetch(u, timeout=8):
+            if 'tiktokcdn' in u:
+                return JPEG, 'image/jpeg'
+            item['statsV2']['playCount'] = str(views[0])
+            data = {'__DEFAULT_SCOPE__': {'webapp.video-detail': {'itemInfo': {'itemStruct': item}}}}
+            return ('<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__" type="application/json">' + json.dumps(data) + '</script>').encode(), 'text/html'
+        d = tempfile.mkdtemp(); clock = [1000 + 3600 * 10]
+        m = thumbs.refresh(URL, d, fetch, lambda: clock[0])
+        self.assertEqual((m['views'], m['duration'], m['account'], m['followers'], m['language']), (10000, 75, 'oma', 557700, 'fr'))
+        self.assertTrue(thumbs.get(URL, d, fetch, lambda: clock[0], kind='avatar').is_file())
+        views[0] = 13000; clock[0] += 1800
+        self.assertEqual(thumbs.refresh(URL, d, fetch, lambda: clock[0])['views'], 10000, 'not re-read before 2 h')
+        clock[0] += 7200
+        thumbs.refresh(URL, d, fetch, lambda: clock[0])
+        f = thumbs.all_figures(d, lambda: clock[0])['7689550752078908705']
+        self.assertEqual(f['growth'], 3000); self.assertEqual(f['engagement'], round(650 / 13000 * 100, 1))
+        self.assertEqual(f['per_hour'], round(13000 / ((clock[0] - 1000) / 3600)))
+
+
 if __name__ == '__main__':
     unittest.main()

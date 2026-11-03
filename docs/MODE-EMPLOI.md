@@ -196,6 +196,7 @@ Quand ChatGPT refuse une image, le studio la redemande seul deux fois avec une f
 
 | Version | Ce qui change pour vous |
 |---|---|
+| 0.1.56 | **Originalité** : un score avant publication (page de l'épisode) avec les changements conseillés ; alerte dès la fiche si vous refaites une virale. **Le Filon** : vrais chiffres, onglets Viral / Toutes / Comptes, filtres, vidéos lancées seules. Page épisode : télécharger les images, le texte, choisir la scène de la miniature. |
 | 0.1.55 | **Créer** est une page entière : choisir qui écrit, l'option (dix histoires, mon idée, refaire une virale, tout automatique), la **durée (30 s, 1 min, 2 min, 3 min)**, le moteur et la langue. **Dix histoires** puis **fiche de décision** à valider avant tout paiement. Studio en grandes cartes ; page épisode : étapes, scènes en vignettes, clic = planche et clip côte à côte. Le Filon s'ouvre en premier, miniatures immédiates. |
 | 0.1.54 | Plus d'onglet **Passerelle** : tout se fait dans le studio (Mes comptes › Navigateur : mémoriser le compte Flow, ranger les onglets, récupérer une réponse). Recharger l'extension. |
 | 0.1.53 | **Une adresse, plusieurs services** : ajoutée une seule fois dans Mes comptes. **Clé du studio** enregistrée seule au premier clic sur l'icône, jamais recopiée (section 6). Recharger l'extension. |

@@ -142,8 +142,8 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   await evaluate(`document.querySelector('#theme').click()`);assert.ok(await evaluate(`document.body.classList.contains('dark')`),'dark theme on demand');
   await evaluate(`document.querySelector('#theme').click()`);
   await evaluate(`document.querySelector('nav [data-page="filon"]').click()`);
-  await waitFor(()=>evaluate(`document.querySelector('.filon-card')?.innerText.includes('1.2 M')`),10000,'Filon');
-  assert.equal(await evaluate(`document.querySelector('.filon-card iframe.filon-player')?.src.split('?')[0]`),'https://www.tiktok.com/player/v1/4242424242','real TikTok player in the card');
+  await waitFor(()=>evaluate(`document.querySelector('.filon-card')?.innerText.includes('1,2 M')`),10000,'Filon');
+  assert.equal(await waitFor(()=>evaluate(`document.querySelector('.filon-card iframe.filon-player')?.src.split('?')[0]`),5000,'lecture automatique'),'https://www.tiktok.com/player/v1/4242424242','video plays by itself when visible');
   assert.ok(await evaluate(`document.querySelector('.filon-card img.filon-cover').src.includes('/api/thumb?url=')`),'cover loaded at once, no hover');
   await evaluate(`document.querySelector('.filon-card [data-action="new"]').click()`);
   assert.equal(await waitFor(()=>evaluate(`document.querySelector('#createForm [name=source_url]')?.value`),5000,'formulaire prérempli'),'https://www.tiktok.com/@oma/video/4242424242');

@@ -1,5 +1,5 @@
 // Line icons (Lucide-style geometry, ISC licence) drawn as inline SVG: one consistent, sober set.
-const ICONS={trend:'<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>',plus:'<path d="M12 5v14M5 12h14"/>',
+const ICONS={star:'<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',trend:'<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>',plus:'<path d="M12 5v14M5 12h14"/>',
 create:'<circle cx="12" cy="12" r="10"/><path d="M8 12h8M12 8v8"/>',studio:'<rect x="2" y="6" width="20" height="14" rx="2"/><path d="M2 10h20M6 6l2 4M11 6l2 4M16 6l2 4"/>',
 users:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
 library:'<path d="m16 6 4 14M12 6v14M8 8v12M4 4v16"/>',book:'<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
@@ -32,7 +32,7 @@ function nightPanel(){const n=state.night||{ids:[],log:[],active:false};if(!n.id
 // Atelier-like "Le Filon": every TikTok reference found by the research, best signal first.
 // Official TikTok embed player (oEmbed): real videos in Le Filon, muted, looping, no account needed.
 const tiktokId=u=>String(u||'').match(/\/video\/(\d{5,25})/)?.[1]||null;
-const player=id=>`<iframe class="filon-player" src="https://www.tiktok.com/player/v1/${id}?autoplay=1&muted=1&loop=1&controls=0&progress_bar=0&play_button=0&volume_control=0&fullscreen_button=0&timestamp=0&music_info=0&description=0&rel=0&native_context_menu=0&closed_caption=0" loading="lazy" allow="autoplay; encrypted-media" title="Aperçu TikTok"></iframe>`;
+const player=id=>`<iframe class="filon-player" src="https://www.tiktok.com/player/v1/${id}?autoplay=1&muted=1&loop=1&controls=0&progress_bar=0&play_button=0&volume_control=0&fullscreen_button=0&timestamp=0&music_info=0&description=0&rel=0&native_context_menu=0&closed_caption=0" loading="lazy" allow="autoplay; encrypted-media" title="Aperçu TikTok" onload="setTimeout(()=>this.classList.add('ready'),1800)"></iframe>`;
 function filon(){const seen=new Map();for(const j of [...state.jobs,...(state.filonJobs||[])])for(const c of j.candidates||[])if(!seen.has(c.url)||(c.score||0)>(seen.get(c.url).score||0))seen.set(c.url,c);
 const rows=[...seen.values()].sort((a,b)=>(b.score||0)-(a.score||0)).slice(0,60);const fmt=n=>n==null?'—':n>=1e6?(n/1e6).toFixed(1).replace('.0','')+' M':n>=1e3?Math.round(n/1e3)+' k':String(Math.round(n));
 const running=(state.filonJobs||[]).find(j=>!['done','attention','paused'].includes(j.status));const last=state.settings.filon_refreshed;

@@ -13,12 +13,13 @@ import engine_accounts
 import identities
 import ideas
 import thumbs
+import originality
 import refusal
 import quotas
 import power
 import maintenance
 import series
-VERSION='0.1.55'
+VERSION='0.1.56'
 import sys
 import traceback
 
@@ -462,6 +463,26 @@ Input image 1 is the scene: use it for identity and story. If a second image is 
 Recompose a tight chest-up confrontation with clearly visible expressive faces: dominant emotions and the main conflict instantly readable. Show the victim and opposing character large; a witness may be smaller. Simplify and softly blur the story setting. No empty floor or distant full-body framing. Sharp eyes, bright readable faces and cinematic 3D fruit textures.
 Bold clean condensed sans serif headline: white first line, warm yellow emphasis on second line, restrained dark outline and shadow. Place text in the lower middle BELOW faces, inside the central 80 percent width; leave the top 15 percent and bottom 20 percent free of important text for cropping. Never cover eyes. No large dark banner across faces. No logos, watermarks, arrows, interface, fake evidence, extra characters or sensational claims not present in the story. Generate the finished image now, not a tutorial."""
 
+def reference_text(j):
+    sel=j.get('selected') or {}
+    return ' '.join([(thumbs.cached(sel.get('url',''),DATA) or {}).get('desc',''),sel.get('title','')])
+
+def check_originality(j):
+    """Estimated originality before publishing (images, texts, origin, repetition, duration, AI label)."""
+    d=job_dir(j);images=[d/x['image'] for x in j['scenes'] if x.get('image')]+([d/j['cover_file']] if j.get('cover_file') else [])
+    def cover(url):
+        p=thumbs.cached(url,DATA,'cover')
+        return originality.dhash(p) if p else None
+    url=(j.get('selected') or {}).get('url','')
+    reference={'hash':cover(url),'text':reference_text(j)} if url else None
+    figs=thumbs.all_figures(DATA)
+    trends=[{'hash':cover(c['url']),'text':(figs.get(thumbs.video_id(c['url']) or '',{}) or {}).get('desc') or c.get('title','')} for c in {c['url']:c for x in STATE['jobs'] for c in x.get('candidates',[]) if c.get('url') and c.get('url')!=url}.values()]
+    own=[{'title':x.get('title',''),'signature':(x.get('script') or {}).get('story_signature'),'hash':originality.dhash(job_dir(x)/x['cover_file']) if x.get('cover_file') and (job_dir(x)/x['cover_file']).is_file() else None} for x in STATE['jobs'] if x is not j and x.get('status')=='done']
+    duration=len(j['scenes'])*int(j['config'].get('clip_seconds',8))
+    j['originality']={**originality.evaluate(j,images,reference,trends,own,duration),'at':now()}
+    event(j,'Contrôle d’originalité : '+str(j['originality']['score'])+' % · '+{'publish':'publication conseillée','fix':'corrections conseillées avant publication','hold':'publication déconseillée'}[j['originality']['verdict']]+'.')
+    return j['originality']
+
 def approve_sheet(j,sheet,title_index,hook_index,message):
     j['sheet']=sheet;j['sheet_approved']=now();j['sheet_choice']={'title':int(title_index),'hook':int(hook_index)}
     j['brief']=ideas.brief(sheet,title_index,hook_index);j['title']=sheet['titles'][min(int(title_index),len(sheet['titles'])-1)].capitalize()
@@ -563,7 +584,9 @@ def schedule(j):
         schedule_quality(j)
     elif step=='cover':
         if not j.get('cover_file'):
-            reference=next((scene['image'] for scene in j['scenes'] if scene.get('image')),None)
+            base=j.get('cover_base')
+            # Atelier-like: the owner picks the scene the cover is drawn from; first scene otherwise.
+            reference=j['scenes'][base]['image'] if isinstance(base,int) and 0<=base<len(j['scenes']) and j['scenes'][base].get('image') else next((scene['image'] for scene in j['scenes'] if scene.get('image')),None)
             attachments=[asset_url(j,reference)] if reference else image_assets(j)
             template=ROOT/('cover-reference-grid.png' if j.get('cover_style')=='family_poster_v3' else 'cover-proposal-v2.png')
             if template.is_file():
@@ -821,7 +844,9 @@ def accept_task_result(t,result):
         try:
             data=parse_json(result.get('text',''))
             if slot=='ideas':j['ideas']=ideas.validate_ideas(data)
-            else:j['sheet']=ideas.validate_sheet(data);j.pop('sheet_approved',None);j.pop('sheet_previous',None);j.pop('sheet_note',None)
+            else:
+                j['sheet']=ideas.validate_sheet(data);j.pop('sheet_approved',None);j.pop('sheet_previous',None);j.pop('sheet_note',None)
+                if (j.get('selected') or {}).get('source')=='owner_link':j['sheet_precheck']=originality.precheck(j['sheet'],reference_text(j))
             j.pop('start_attempts',None)
         except ValueError as e:
             t['status']='failed';t['error']=str(e);j['start_attempts']=j.get('start_attempts',0)+1
@@ -923,7 +948,7 @@ def render_job(id):
             else:
                 run_command([ff,'-y','-i',str(d/'final.mp4'),'-frames:v','1',str(d/'cover-frame.jpg')]);make_cover(d/'cover-frame.jpg',cover_path,j['script']['cover_title'])
         with LOCK:
-            actual=job_by(id); actual['stage']='done'; actual['status']='done'; actual['final']=asset_url(actual,'final.mp4'); actual['cover']=asset_url(actual,cover_file); actual['qc']={'export':'Réussi : MP4 vertical 720 × 1280, audio normalisé.','subtitles':f'{aligned_count}/{len(j["scenes"])} scènes calées sur reconnaissance vocale ; autres timings estimés. Contrôle à l’écoute nécessaire.','lips':'Synchronisation labiale non vérifiée automatiquement.','duration':len(j['scenes'])*8}; event(actual,'Export terminé. Un contrôle visuel et audio reste nécessaire avant publication.'); save()
+            actual=job_by(id); actual['stage']='done'; actual['status']='done'; actual['final']=asset_url(actual,'final.mp4'); actual['cover']=asset_url(actual,cover_file); actual['qc']={'export':'Réussi : MP4 vertical 720 × 1280, audio normalisé.','subtitles':f'{aligned_count}/{len(j["scenes"])} scènes calées sur reconnaissance vocale ; autres timings estimés. Contrôle à l’écoute nécessaire.','lips':'Synchronisation labiale non vérifiée automatiquement.','duration':len(j['scenes'])*8}; event(actual,'Export terminé. Un contrôle visuel et audio reste nécessaire avant publication.'); check_originality(actual); save()
             try:
                 kit=series.kit(actual);(d/'publication.json').write_text(json.dumps(kit,ensure_ascii=False,indent=2),'utf-8');(d/'publication.txt').write_text(series.kit_text(kit),'utf-8');actual['publication']=asset_url(actual,'publication.txt')
             except Exception as e:log_error('Kit de publication',e)
@@ -972,10 +997,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         try:
             self.local(); path=urllib.parse.urlparse(self.path).path
+            if path=='/api/filon/figures':
+                # Real figures read from each public video page (views, growth, engagement…).
+                return self.send_json(thumbs.all_figures(DATA))
             if path=='/api/thumb':
                 # Outside the lock: a network read must never block the studio.
-                url=urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get('url',[''])[0]
-                try:image=thumbs.get(url,DATA)
+                q=urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query);url=q.get('url',[''])[0]
+                try:image=thumbs.get(url,DATA,kind='avatar' if q.get('kind',[''])[0]=='avatar' else 'cover')
                 except ValueError as e:return self.send_json({'error':str(e)},400)
                 if not image:return self.send_json({'error':'Miniature indisponible'},404)
                 data=image.read_bytes();mime='image/png' if data[:4]==b'\x89PNG' else 'image/webp' if data[:4]==b'RIFF' else 'image/jpeg'
@@ -1059,6 +1087,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         if any(x['job']==j['id'] and x['status'] in ('queued','claimed') for x in STATE['tasks']):continue
                         if not j['scenes'][int(t['slot'].split(':')[1])].get('clip'):rows.append(t);seen.add(key)
                     return self.send_json(rows[:3])
+            m=re.fullmatch(r'/api/job/([a-f0-9]{16})/images\.zip',path)
+            if m:
+                # "Télécharger les images": character sheet, boards and cover in one archive.
+                with LOCK:
+                    j=job_by(m.group(1))
+                    if not j:return self.send_json({'error':'Projet inconnu'},404)
+                    files=[f for f in [j.get('character_sheet_file')]+[c.get('file') for c in j['characters']]+[x.get('image') for x in j['scenes']]+[j.get('cover_file')] if f]
+                import io
+                buf=io.BytesIO()
+                with zipfile.ZipFile(buf,'w',zipfile.ZIP_STORED) as z:
+                    for i,f in enumerate(dict.fromkeys(files)):
+                        src=safe_child(job_dir(j),f)
+                        if src.is_file():z.write(src,f'{i+1:02d}-{f}')
+                return self.send_bytes(buf.getvalue(),'application/zip',download=re.sub(r'[^\w-]+','-',j['title'])[:40]+'-images.zip')
             if path.startswith('/media/'):
                 parts=path.split('/')
                 if len(parts)!=4 or not re.fullmatch('[a-f0-9]{16}',parts[2]): raise ValueError('Média invalide')
@@ -1298,6 +1340,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     STATE['sites']=sites;save();return self.send_json({'ok':True})
                 elif path=='/api/settings':
                     if 'language' in b:STATE['settings']['language']=creation_language(b['language'])
+                    if 'follow' in b:
+                        # Followed TikTok accounts in Le Filon (star), like the Atelier.
+                        name=str(b['follow']).strip().lstrip('@')[:60];followed=STATE['settings'].setdefault('filon_follow',[])
+                        if not re.fullmatch(r'[\w.\-]+',name):raise ValueError('Compte TikTok invalide')
+                        followed.remove(name) if name in followed else followed.append(name)
                 elif path=='/api/flow-auto':
                     STATE['settings']['flow_auto']=bool(b.get('enabled'))
                 elif path=='/api/job':
@@ -1329,7 +1376,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     if not 3<=cfg['scene_count']<=30 or not 1<=cfg['flow_cost']<=100 or cfg['provider'] not in ('chatgpt','claude'): raise ValueError('Réglages invalides')
                     j={'id':uid(),'title':'Nouvel épisode','brief':str(b.get('brief',''))[:4000], 'config':cfg,'editorial_version':2,'retention_version':1,'hook_version':1,'quality_version':1,'cover_style':'family_poster_v3','character_sheet':1,'flow_profile':b.get('flow_profile'),'status':'running','stage':'research','created':now(),'updated':now(),'events':[],'candidates':[],'characters':[],'scenes':[]}; STATE['jobs'].insert(0,j)
                     if source:
-                        j['selected']={'title':'Vidéo fournie par le propriétaire','url':urllib.parse.urlunparse(('https',u.hostname,u.path,'','','')),'source':'owner_link'};j['stage']='script';event(j,'Projet créé d’après le lien fourni : recherche sautée, histoire originale inspirée de cette vidéo (sans copier dialogues ni plans).')
+                        j['selected']={'title':'Vidéo fournie par le propriétaire','url':urllib.parse.urlunparse(('https',u.hostname,u.path,'','','')),'source':'owner_link'};thumbs.warm([j['selected']['url']],DATA);j['stage']='script';event(j,'Projet créé d’après le lien fourni : recherche sautée, histoire originale inspirée de cette vidéo (sans copier dialogues ni plans).')
                     mode=b.get('mode')
                     if mode not in (None,'','link','ideas','idea','research'):raise ValueError('Option de création inconnue')
                     cfg['auto_sheet']=bool(b.get('config',{}).get('auto_sheet',False));cfg['niche']=str(b.get('config',{}).get('niche','Fruits'))[:40]
@@ -1394,6 +1441,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             # Queued Flow payloads were built for the previous mode.
                             if t['job']==id and t['status']=='queued' and t['kind'] in ('flow_video','engine_video'):t['status']='cancelled'
                         event(j,'Essai à blanc activé : les clips seront préparés dans Flow sans être envoyés.' if j['config']['dry_run'] else 'Production réelle : les prochains clips seront envoyés à Flow et consommeront des crédits.')
+                    elif action=='originality':
+                        if not j.get('scenes') or not any(x.get('image') for x in j['scenes']):raise ValueError('Rien à contrôler : aucune planche')
+                        check_originality(j)
+                    elif action=='cover_base':
+                        i=int(b.get('index',-1))
+                        if not 0<=i<len(j['scenes']) or not j['scenes'][i].get('image'):raise ValueError('Scène sans planche')
+                        j['cover_base']=i;event(j,'Miniature : base choisie, scène '+str(i+1)+'.')
+                        if b.get('make') and j.get('cover_file'):redo(j,'cover',b.get('note',''),False)
+                        elif b.get('make'):event(j,'La miniature sera faite après les clips, depuis cette scène.')
                     elif action=='redo':
                         redo(j,b.get('slot',''),b.get('note',''),bool(b.get('include_clip')))
                     elif action=='edit_script':
