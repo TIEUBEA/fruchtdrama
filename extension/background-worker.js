@@ -260,10 +260,19 @@ async function handleRequests(cfg){
   if(r.type==='check'){const sites=await FruchtSites.check(chrome,FruchtWorkspace);await call('/api/bridge/sites',{client:cfg.client,sites});}
  }
 }
+// Hidden key (Atelier-like): pair once with the local studio, never ask the owner to copy a code.
+async function autoPair(){
+ const cfg=await chrome.storage.local.get(['client','token']);if(cfg.client&&cfg.token)return false;
+ const r=await fetch(BASE+'/api/bridge/auto-pair',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({label:'Fenêtre FruchtDrama'})});
+ const b=await r.json();if(!r.ok)throw Error(b.error||'Appairage automatique impossible');
+ await chrome.storage.local.set({client:b.client,token:b.token,role:'all',ai_provider:'both',label:'Fenêtre FruchtDrama',enabled:true,auto_paired:true,status:b.enabled?'Appairé automatiquement au studio local.':'Appairé ; activez ce navigateur dans Mes comptes › Passerelle (un autre navigateur est déjà actif).'});
+ return true;
+}
 async function poll(){
  if(busy)return;busy=true;let claimed=null;let cfg;
  try{
   cfg=await chrome.storage.local.get(null);
+  if(!cfg.client||!cfg.token){try{if(await autoPair())cfg=await chrome.storage.local.get(null);}catch(e){recordBackgroundError(e);}}
   if(!cfg.client||!cfg.token)return;
   if(cfg.activeTask){await checkActive(cfg.activeTask);return;}
   if(cfg.enabled)try{await handleRequests(cfg);}catch(e){recordBackgroundError(e);}

@@ -157,6 +157,14 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   assert.equal(flow.balance,88);
   await evaluate(`document.querySelector('[data-account-tab="flow"]').click()`);
   await waitFor(()=>evaluate(`document.querySelector('table.accounts').innerText.includes('flow.qa@x.com')`),10000,'compte Flow affiché');
+  // 12 bis. Unified accounts: one address, several services, one row; hidden studio key.
+  await evaluate(`(()=>{const f=document.querySelector('#accountForm');f.email.value='Moi.QA@x.com';f.balance.value='40';[...f.querySelectorAll('[name=services]')].forEach(c=>c.checked=['chatgpt','flow','grok','arena'].includes(c.value));f.requestSubmit();return true})()`);
+  const unified=await waitFor(async()=>(await (await fetch(base+'/api/state')).json()).accounts.find(a=>a.email==='moi.qa@x.com'),10000,'compte unifié ajouté');
+  assert.deepEqual(unified.order,['chatgpt','flow','grok','arena']);assert.equal(unified.services.flow.balance,40);
+  await waitFor(()=>evaluate(`[...document.querySelectorAll('table.unified tbody tr')].filter(r=>r.innerText.includes('moi.qa@x.com')).length===1`),10000,'une ligne par adresse');
+  assert.ok(await evaluate(`document.querySelector('.key-panel').innerText.includes('Clé du studio')&&!document.querySelector('.key-panel').innerText.includes(${JSON.stringify('')}+'token')`),'key panel');
+  await evaluate(`document.querySelector('[data-add-service="moi.qa@x.com"][data-service="claude"]').click()`);
+  await waitFor(async()=>(await (await fetch(base+'/api/state')).json()).accounts.find(a=>a.email==='moi.qa@x.com').services.claude,10000,'service ajouté sur la ligne');
   const emoji=/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B50}\u{2B06}\u{2190}-\u{21FF}\u{25A0}-\u{25FF}]/u;
   for(const pageName of ['filon','studio','connections','library','guide']){
    await evaluate(`document.querySelector('[data-page="${pageName}"]').click()`);await sleep(400);

@@ -83,15 +83,10 @@ Si le message « Port 8840 utilisé par une autre installation » apparaît : un
 2. Une **nouvelle fenêtre** s'ouvre. **Tout se passe dans cette fenêtre** : le studio, ChatGPT, Claude, TikTok, Flow et l'ouverture des comptes. Elle contient :
    - un premier onglet épinglé **Passerelle** ;
    - l'onglet **Studio**.
-3. Dans le studio : menu **Mes comptes** → noter le **code d'appairage**.
-4. Dans l'onglet **Passerelle** :
-   - coller le code d'appairage ;
-   - nom du navigateur : par exemple « PC bureau » ;
-   - rôle : **Recherche, IA et Flow** ;
-   - IA connectée : ChatGPT, Claude ou les deux ;
-   - cliquer **Appairer / mettre à jour le profil** ;
-   - cocher **Autoriser les tâches en arrière-plan**.
-5. Le badge en haut du studio passe à « en ligne » sous 30 secondes.
+3. **Rien à copier** (depuis 0.1.53) : au premier clic, l'extension enregistre seule la clé du studio, la garde cachée et active les tâches. Mes comptes affiche « Clé du studio : Enregistrée ».
+4. Le badge en haut du studio passe à « en ligne » sous 30 secondes.
+5. Après une réinstallation de l'extension : Mes comptes → **Autoriser une nouvelle extension**, puis recliquer sur l'icône.
+6. Secours (autre ordinateur, ancienne extension) : Mes comptes → Passerelle → **Appairage manuel** ; coller le code dans l'onglet Passerelle, rôle **Recherche, IA et Flow**, **Appairer**, cocher **Autoriser les tâches**.
 
 Bon à savoir :
 - Recliquer sur l'icône ramène la fenêtre FruchtDrama au premier plan (jamais de deuxième fenêtre).
@@ -101,6 +96,8 @@ Bon à savoir :
 ## 7. Connecter vos comptes
 
 Toujours **vous-même**, dans la fenêtre FruchtDrama. Le studio ne demande ni ne stocke aucun mot de passe et ne contourne aucune vérification.
+
+**Ajouter une adresse une seule fois** (depuis 0.1.53) : Mes comptes → bloc **Mes comptes** → adresse, nom facultatif, cocher les services que cette adresse ouvre (ChatGPT, Claude, Google Flow, Grok, Arena), crédits Flow si connus → **Ajouter ce compte**. Une seule ligne par adresse ; « Ajouter » / « Retirer » dans une colonne pour un service, « Retirer » au bout de la ligne pour tout supprimer. Les étapes ci-dessous (connexion dans la fenêtre, mémoriser le compte Flow) restent nécessaires.
 
 **ChatGPT / Claude / TikTok** : ouvrir un onglet dans la fenêtre FruchtDrama, aller sur chatgpt.com (et claude.ai, tiktok.com), se connecter. C'est tout.
 
@@ -201,6 +198,7 @@ Quand ChatGPT refuse une image, le studio la redemande seul deux fois avec une f
 
 | Version | Ce qui change pour vous |
 |---|---|
+| 0.1.53 | **Une adresse, plusieurs services** : ajoutée une seule fois dans Mes comptes. **Clé du studio** enregistrée seule au premier clic sur l'icône, jamais recopiée (section 6). Recharger l'extension. |
 | sudf-ui | Interface façon Atelier : **Le Filon**, **Créer une vidéo** d'un lien TikTok ou d'une idée, thème sombre (◐), police et images agrandies (clic pour agrandir). |
 | 0.1.52 | **Écrire la suite** d'un épisode (série) ; **Kit de publication**. |
 | 0.1.51 | Sous-titres **karaoké** ; bouton **Supprimer…** (corbeille) ; rapport de panne et nettoyage dans Mes comptes. |

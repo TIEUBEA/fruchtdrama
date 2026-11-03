@@ -1,6 +1,6 @@
 # FruchtDrama — Flux de bout en bout : une vidéo entièrement automatisée
 
-Version 0.1.52 (branches `sudf` / `sudf-ui`). Ce document décrit ce qui se passe, étape par étape,
+Version 0.1.53 (branches `sudf` / `sudf-ui`). Ce document décrit ce qui se passe, étape par étape,
 quand vous lancez une production sans intervenir, et ce que vous devez préparer une seule fois.
 
 ## A. Préparation unique (environ 30 minutes)
@@ -9,10 +9,10 @@ quand vous lancez une production sans intervenir, et ce que vous devez préparer
 2. Lancer le studio : `Lancer-Studio.cmd` → http://127.0.0.1:8840.
 3. Charger l'extension : `chrome://extensions` → Mode développeur → **Charger l'extension non empaquetée** → dossier `extension`. Épingler l'icône.
 4. Cliquer sur l'icône : la **fenêtre FruchtDrama** s'ouvre (onglet Passerelle épinglé + Studio). Tout se passe dans cette fenêtre.
-5. Onglet Passerelle : code d'appairage (Studio → Connexions), rôle « Recherche, IA et Flow », **Appairer**, cocher **Autoriser les tâches**.
+5. Rien à copier : l'extension enregistre seule la clé cachée du studio au premier clic (Mes comptes affiche « Clé enregistrée »).
 6. Dans la fenêtre, se connecter soi-même à : ChatGPT, TikTok, Google Flow (et Grok / LMArena si utilisés).
 7. Flow : Mes comptes → profil avec solde réel ; ouvrir un projet Flow → Passerelle → **Mémoriser le compte Flow de cet onglet**. Répéter pour chaque compte Google (ajoutés au même profil Chrome). Cocher **Ouvrir Flow et passer au compte suivant automatiquement**.
-8. Grok / Arena (facultatif) : Mes comptes → **Comptes Grok et Arena** → adresse de chaque compte.
+8. Mes comptes → **Mes comptes** : chaque adresse une seule fois, services cochés (ChatGPT, Flow, Grok, Arena…), crédits Flow si connus.
 9. Chrome : autoriser les téléchargements multiples pour https://flow.google.com.
 10. **Premier essai : cocher « Essai à blanc »** pour vérifier les connecteurs sans rien dépenser.
 

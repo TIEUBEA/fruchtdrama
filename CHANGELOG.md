@@ -9,6 +9,22 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 Prochain : P3 (séries, idées, kit de publication, veille, 16:9) et P4 (montage avancé, sous-titres karaoké, rapport de panne). Voir `docs/sudf/REPRISE.md`.
 
+## 0.1.53 — comptes par adresse et clé cachée (03/11/2026)
+
+Sur le modèle de l'Atelier Gourmand : une adresse s'ajoute une seule fois, la clé ne se recopie jamais.
+
+### Ajouté
+- **Mes comptes › Mes comptes** : une ligne par adresse e-mail, une colonne par service (ChatGPT, Claude, Google Flow, Grok, Arena). Formulaire unique : adresse, nom affiché, services cochés, crédits Flow facultatifs. Le studio crée lui-même le profil Flow et les comptes de rotation Grok / Arena. Ajouter ou retirer un service directement dans la ligne ; « Retirer » supprime l'adresse et tout ce qui y est rattaché (refusé pendant un clip en cours). Module `identities.py`, route `POST /api/account`.
+- **Clé du studio cachée** : au premier clic sur l'icône, l'extension s'appaire seule (`POST /api/bridge/auto-pair`, réservé à une origine `chrome-extension://`), garde la clé et ne la montre plus. Rôle complet, tâches autorisées. La première extension liée est mémorisée ; une autre (réinstallation) demande « Autoriser une nouvelle extension » (`POST /api/key/reset`). Un deuxième navigateur appairé alors qu'un autre est en ligne démarre désactivé.
+
+### Amélioré
+- Les anciens profils Flow et comptes Grok / Arena sont regroupés automatiquement par adresse (soldes additionnés).
+- Code d'appairage manuel replié dans « Appairage manuel (secours) ».
+- `public_state` ne publie ni la clé ni l'origine de l'extension (`key_saved` seulement).
+
+### Tests
+- `tests/test_unified_accounts.py` (7 : ajout multi-services sans doublon, regroupement des anciens comptes, limites, suppression refusée pendant un clip, API, appairage automatique unique et origine mémorisée, second navigateur désactivé), `tests/test_auto_pair.cjs`, étape 12 bis de `tests/test_ui_interactions.cjs` (Chrome réel).
+
 ## Branche `sudf-ui` — test réel de bout en bout (02/11/2026)
 
 Parcours réel dans le Chrome dédié : fenêtre unique, appairage, compte Flow rattaché (solde réel lu : 50 crédits), création d'après un lien TikTok, histoire validée, feuille de personnages, 4 images de scènes, projet Flow créé, **essai à blanc du clip réussi** (rien facturé).

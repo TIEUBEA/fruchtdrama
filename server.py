@@ -10,12 +10,13 @@ import quality
 import errors
 import engines
 import engine_accounts
+import identities
 import refusal
 import quotas
 import power
 import maintenance
 import series
-VERSION='0.1.52'
+VERSION='0.1.53'
 import sys
 import traceback
 
@@ -99,6 +100,8 @@ def public_state():
     for public,j in zip(s['jobs'],STATE['jobs']):
         public['uncertain_clips']=sorted({int(t['slot'].split(':')[1]) for t in uncertain_clip_tasks(j)})
     s['quota_status']=quotas.summary(STATE,time.time());s['version']=VERSION
+    s['accounts']=identities.view(STATE,time.time());s.pop('extension_origin',None)
+    s['key_saved']=any(c.get('auto') or c.get('token_seen') for c in STATE['clients'].values())
     s['ffmpeg']=bool(shutil.which('ffmpeg')); return s
 def safe_child(parent, name):
     target=(parent/name).resolve()
@@ -1030,9 +1033,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         try:
             self.local(); path=urllib.parse.urlparse(self.path).path
-            bridge=path.startswith('/api/bridge/') and path!='/api/bridge/pair'
+            bridge=path.startswith('/api/bridge/') and path not in ('/api/bridge/pair','/api/bridge/auto-pair')
             if bridge and not self.auth_bridge(): return self.send_json({'error':'Appairage requis'},401)
-            if not bridge and path!='/api/bridge/pair' and not self.origin_ok(): return self.send_json({'error':'Origine interdite'},403)
+            if not bridge and path not in ('/api/bridge/pair','/api/bridge/auto-pair') and not self.origin_ok(): return self.send_json({'error':'Origine interdite'},403)
             length=int(self.headers.get('Content-Length',0))
             if length>100*1024*1024: raise ValueError('Fichier limité à 100 Mo')
             raw=self.rfile.read(length)
@@ -1059,6 +1062,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     return self.send_json({'file':name})
             b=json.loads(raw or b'{}')
             with LOCK:
+                if path=='/api/bridge/auto-pair':
+                    # Atelier-like hidden key: the local extension pairs itself once; the code is never shown or typed.
+                    origin=self.headers.get('Origin','')
+                    if not origin.startswith('chrome-extension://'):return self.send_json({'error':'Réservé à l’extension FruchtDrama'},403)
+                    # The first extension that pairs is remembered; another one needs the owner's approval in Mes comptes.
+                    if STATE.get('extension_origin') and STATE['extension_origin']!=origin:return self.send_json({'error':'Une autre extension est déjà liée. Autorisez la nouvelle dans Mes comptes › Clé du studio.'},403)
+                    STATE['extension_origin']=origin
+                    others=[c for c in STATE['clients'].values() if not c.get('disabled') and c.get('role') in ('all','flow') and time.time()-flow_credits.seconds(c.get('seen'))<75]
+                    client=b.get('client') if b.get('client') in STATE['clients'] else uid()
+                    STATE['clients'][client]={'id':client,'label':str(b.get('label','Fenêtre FruchtDrama'))[:60],'flow_profile':None,'role':'all','ai_provider':'both','seen':now(),'disabled':bool(others),'auto':True}
+                    save();return self.send_json({'client':client,'token':STATE['token'],'enabled':not others})
                 if path=='/api/bridge/pair':
                     if not hmac.compare_digest(str(b.get('code','')),STATE['pair_code']): return self.send_json({'error':'Code incorrect'},403)
                     role=b.get('role','all');provider=b.get('ai_provider','both')
@@ -1164,11 +1178,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         if 'auto_enabled' in b:p['auto_enabled']=bool(b['auto_enabled'])
                         if 'chrome_profile' in b:p['chrome_profile']=flow_accounts.chrome_profile(b['chrome_profile'])
                     else: STATE['profiles'].append({'id':uid(),'label':str(b.get('label','Flow'))[:60],'balance':balance,'checked':now()})
+                elif path=='/api/account':
+                    if b.get('delete'):identities.delete(STATE,b.get('email'),delete_profile)
+                    elif b.get('remove_service'):identities.remove_service(STATE,b.get('email'),b.get('remove_service'),delete_profile)
+                    else:identities.add(STATE,b.get('email'),b.get('services'),b.get('label',''),b.get('balance',0),uid)
+                elif path=='/api/key/reset':
+                    # Owner allows a reinstalled extension (new identifier) to pair itself again.
+                    STATE.pop('extension_origin',None)
                 elif path=='/api/engine-account':
                     if b.get('delete'):
                         a=engine_accounts.by_id(STATE,b.get('id'))
                         if not a:raise ValueError('Compte inconnu')
-                        if any(t['status']=='claimed' and t['kind']=='engine_video' and t['payload'].get('account',{}).get('email')==a['email'] for t in STATE['tasks']):raise ValueError('Ce compte génère un clip : attendez la fin')
+                        if engine_accounts.busy(STATE,a):raise ValueError('Ce compte génère un clip : attendez la fin')
                         STATE['engine_accounts'].remove(a)
                     elif b.get('forget_wall'):
                         a=engine_accounts.by_id(STATE,b.get('id'))

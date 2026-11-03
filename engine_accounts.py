@@ -62,3 +62,10 @@ def forget(account):
 def next_free(state, engine, now):
     times = [a['wall']['until'] for a in accounts(state, engine) if walled(a, now)]
     return min(times) if times else None
+
+
+def busy(state, account):
+    """True while a clip is being generated with this account."""
+    return any(t['status'] == 'claimed' and t['kind'] == 'engine_video'
+               and t['payload'].get('account', {}).get('email') == account['email']
+               and t['payload'].get('engine') == account['engine'] for t in state.get('tasks', []))
