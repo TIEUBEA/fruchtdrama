@@ -130,7 +130,7 @@ def view(state, now, clip_cost=12):
             blocked = any(p.get('blocked') for p in profiles)
             low = total < clip_cost
             services['flow'] = {'state': 'blocked' if blocked or total <= 0 else 'low' if low else 'live' if (sites.get('flow') or {}).get('email') == email else 'ok',
-                                'text': f'{total} crédits' + (' · solde bas' if low and total > 0 else ' · épuisé' if total <= 0 else ''),
+                                'text': f'{total} crédits' + (' · solde bas' if low and total > 0 else ' · épuisé' if total <= 0 else ' · ouvert' if (sites.get('flow') or {}).get('email') == email else ''),
                                 'balance': total, 'profiles': [p['id'] for p in profiles]}
         for engine in ('grok', 'arena'):
             account = next((a for a in engine_accounts.accounts(state, engine) if a['email'] == email), None)
