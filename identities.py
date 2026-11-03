@@ -93,7 +93,7 @@ def delete(state, email, delete_profile):
     state['identities'] = [i for i in state.setdefault('identities', []) if i['email'] != email]
 
 
-def view(state, now):
+def view(state, now, clip_cost=12):
     """One row per address, merging older Flow profiles and Grok / Arena accounts."""
     emails = []
     for i in state.setdefault('identities', []):
@@ -108,21 +108,37 @@ def view(state, now):
     for email in dict.fromkeys(emails):
         identity = stored(state, email) or {}
         services = {}
+        sites = state.get('sites') or {}
+
+        def session(site):
+            # The window holds one session per site: say whether it is this address, another one, or unknown.
+            seen = sites.get(site) or {}
+            if not seen.get('connected'):
+                return 'off', 'Pas connecté'
+            if seen.get('email') == email:
+                return 'live', 'Connecté'
+            if seen.get('email'):
+                return 'idle', 'Enregistré · autre compte ouvert'
+            return 'idle', 'Enregistré'
         for s in identity.get('services', []):
             if s in ('chatgpt', 'claude'):
-                services[s] = {'state': 'ok', 'text': 'Connexion dans la fenêtre FruchtDrama'}
+                st, text = session(s)
+                services[s] = {'state': st, 'text': text}
         profiles = flow_profiles(state, email)
         if profiles:
             total = sum(int(p.get('balance') or 0) for p in profiles)
             blocked = any(p.get('blocked') for p in profiles)
-            services['flow'] = {'state': 'blocked' if blocked or total <= 0 else 'ok', 'text': f'{total} crédits',
+            low = total < clip_cost
+            services['flow'] = {'state': 'blocked' if blocked or total <= 0 else 'low' if low else 'live' if (sites.get('flow') or {}).get('email') == email else 'ok',
+                                'text': f'{total} crédits' + (' · solde bas' if low and total > 0 else ' · épuisé' if total <= 0 else ''),
                                 'balance': total, 'profiles': [p['id'] for p in profiles]}
         for engine in ('grok', 'arena'):
             account = next((a for a in engine_accounts.accounts(state, engine) if a['email'] == email), None)
             if account:
                 walled = engine_accounts.walled(account, now)
-                services[engine] = {'state': 'wall' if walled else 'ok', 'account': account['id'],
-                                    'text': 'Limite jusqu’à ' + engine_accounts.stamp(account['wall']['until'])[11:16] + ' UTC' if walled else 'Disponible'}
+                st, text = session(engine)
+                services[engine] = {'state': 'wall' if walled else 'live' if st == 'live' else 'ok', 'account': account['id'],
+                                    'text': 'Limite jusqu’à ' + engine_accounts.stamp(account['wall']['until'])[11:16] + ' UTC' if walled else 'Connecté' if st == 'live' else 'Disponible'}
         label = identity.get('label') or next((a['label'] for a in state['engine_accounts'] if a['email'] == email), email)
         rows.append({'email': email, 'label': label, 'services': services,
                      'order': [s for s in SERVICES if s in services]})

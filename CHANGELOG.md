@@ -18,6 +18,7 @@ Prochain : P3 (séries, idées, kit de publication, veille, 16:9) et P4 (montage
 
 ### Changé
 - Contrôle qualité et import des clips vérifient l'orientation attendue (verticale ou horizontale).
+- Mes comptes : statuts fidèles. Flow « solde bas » (orange) quand le solde ne paie pas un clip, « épuisé » à 0 ; ChatGPT, Claude, Grok, Arena : « Connecté » (vert) seulement pour l’adresse ouverte dans la fenêtre, « Enregistré · autre compte ouvert » sinon, « Pas connecté » (rouge) si le site est déconnecté.
 
 ### Tests
 - `tests/test_variants.py` (3), `test_flow_models.cjs` (16:9 choisi, vérifié, refusé si absent).

@@ -31,6 +31,14 @@ class UnitTests(unittest.TestCase):
         self.assertEqual([r['email'] for r in rows], ['a@x.com'])
         self.assertEqual(rows[0]['services']['flow']['balance'], 40); self.assertIn('grok', rows[0]['services'])
 
+    def test_truthful_statuses(self):
+        st = {'profiles': [], 'engine_accounts': [], 'sites': {'chatgpt': {'connected': True, 'email': 'a@x.com'}, 'flow': {'connected': True, 'email': 'b@x.com'}}}
+        identities.add(st, 'a@x.com', ['chatgpt', 'flow'], balance=2); identities.add(st, 'b@x.com', ['chatgpt', 'flow', 'claude'], balance=50)
+        rows = {r['email']: r['services'] for r in identities.view(st, time.time())}
+        self.assertEqual(rows['a@x.com']['chatgpt']['state'], 'live'); self.assertEqual(rows['b@x.com']['chatgpt']['text'], 'Enregistré · autre compte ouvert')
+        self.assertEqual(rows['a@x.com']['flow']['state'], 'low', '2 credits cannot pay a 12-credit clip'); self.assertIn('solde bas', rows['a@x.com']['flow']['text'])
+        self.assertEqual(rows['b@x.com']['flow']['state'], 'live'); self.assertEqual(rows['b@x.com']['claude']['state'], 'off')
+
     def test_walls_and_errors(self):
         st = {'profiles': [], 'engine_accounts': []}
         identities.add(st, 'b@x.com', ['grok'])

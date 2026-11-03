@@ -105,7 +105,7 @@ def public_state():
     for public,j in zip(s['jobs'],STATE['jobs']):
         public['uncertain_clips']=sorted({int(t['slot'].split(':')[1]) for t in uncertain_clip_tasks(j)})
     s['quota_status']=quotas.summary(STATE,time.time());s['version']=VERSION
-    s['accounts']=identities.view(STATE,time.time());s.pop('extension_origin',None)
+    s['accounts']=identities.view(STATE,time.time(),int(STATE['settings'].get('flow_cost',12)));s.pop('extension_origin',None)
     s['key_saved']=bool(STATE['clients'])  # an extension holds the key once it has paired, manually or automatically
     s['ffmpeg']=bool(shutil.which('ffmpeg')); return s
 def safe_child(parent, name):
