@@ -9,6 +9,25 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 Prochain : P3 (séries, idées, kit de publication, veille, 16:9) et P4 (montage avancé, sous-titres karaoké, rapport de panne). Voir `docs/sudf/REPRISE.md`.
 
+## 0.1.55 — interface façon Atelier : dix histoires, fiche de décision, pages refaites (03/11/2026)
+
+### Ajouté
+- **Dix histoires** (option « Pas d'idée ») : titre, pitch, pourquoi ça accroche, inspirés des titres du Filon ; un clic = la demande ; « Dix autres ». Module `ideas.py`, étape `ideas`.
+- **Fiche de décision** avant tout paiement (étape `sheet`) : l'histoire en une phrase, moteur, obstacle, twist, image d'ouverture, question du spectateur, 3 titres, 3 premières répliques, appel de fin, casting ; modifiable ; **Valider et écrire l'épisode** ou **Revoir avec mes remarques**. En production automatique : premier titre, première réplique, premier appel (comme l'Atelier). La fiche validée devient la consigne du scénario (première réplique imposée).
+- **Page Créer en pleine page** (plus de petite fenêtre) : qui écrit, quatre options (Pas d'idée, J'ai une idée, Refaire une virale, Décide tout à ma place), niche, **durées fixes 30 s / 1 min / 2 min / 3 min** (1 min = minimum de monétisation TikTok ; nombre de plans et coût Flow estimé affichés), moteur, langue, format, fabrication automatique ou validée.
+- **Miniatures du Filon chargées tout de suite** : couverture lue sur la page publique de la vidéo TikTok, réduite et gardée en local (`thumbs.py`, `GET /api/thumb`), préchargée après chaque relevé ; grille plus dense (moins de défilement) ; titres qui ne sont qu'un compteur remplacés par le compte.
+- **Logo** FruchtDrama (page, onglet, icônes de l'extension).
+
+### Changé
+- Le Filon ouvre l'application ; menu à quatre entrées avec sous-titres vivants (vidéos relevées, à écrire / à dessiner / à tourner) ; la Bibliothèque devient le filtre « Prêtes » du Studio.
+- **Studio** : grandes cartes illustrées (badge Prête / À finir, barre en 5 segments, prochaine action), compteurs, filtres.
+- **Page épisode** : cinq grandes cases d'étapes, barre de progression en %, personnages, mur de scènes (une vignette par scène, titre court) ; un clic ouvre la **planche et le clip côte à côte** avec les répliques et les boutons Remplacer / Refaire ; réglages et journal repliés.
+- **Mes comptes** : plus de formulaires en double ni de synthèse redondante ; un seul tableau d'adresses, puis trois onglets (Navigateur, Crédits et limites, Assistance).
+- Scénario : titre court par scène demandé à l'IA. Nombre de scènes accepté de 3 à 30.
+
+### Tests
+- `tests/test_ideas.py` (6), `tests/test_thumbs.py` (2, sans réseau), `test_ui_browser.py` et `test_ui_interactions.cjs` réécrits pour les nouvelles pages.
+
 ## 0.1.54 — tout dans la page du studio, plus d'onglet Passerelle (03/11/2026)
 
 Comme l'Atelier : l'extension n'a plus de page à elle ; tout se règle dans le studio.

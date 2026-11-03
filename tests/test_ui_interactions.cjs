@@ -78,13 +78,17 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   await waitFor(()=>evaluate(`!!document.querySelector('[data-redo="cover"]')`),15000,'bouton refaire');
   // Owner request: larger type, large images, click to enlarge.
   assert.ok(await evaluate(`parseFloat(getComputedStyle(document.body).fontSize)>=16`),'body text at least 16 px');
-  assert.ok(await evaluate(`parseFloat(getComputedStyle(document.querySelector('.hint')).fontSize)>=14`),'hints at least 14 px');
-  const sizes=await evaluate(`JSON.stringify([...document.querySelectorAll('.asset img')].map(i=>Math.round(i.getBoundingClientRect().width)).concat([Math.round(document.querySelector('.assets').getBoundingClientRect().width),innerWidth]))`);
-  assert.ok(JSON.parse(sizes)[0]>=200,'scene images shown large '+sizes);
-  await evaluate(`document.querySelector('.asset img').click()`);
-  assert.ok(await waitFor(()=>evaluate(`!!document.querySelector('#lightbox[open] img')`),5000,'agrandissement'));
-  await evaluate(`document.querySelector('#lightbox').close()`);
-  assert.ok(await evaluate(`!!document.querySelector('[data-redo="clip:0"]')&&!!document.querySelector('[data-redo="image:1"][data-has-clip="1"]')`),'redo buttons on scenes');
+  assert.ok(await evaluate(`parseFloat(getComputedStyle(document.querySelector('.episode-title p')).fontSize)>=14`),'secondary text at least 14 px');
+  // Atelier-like episode page: step cards, a wall of scenes; a scene opens its board and clip side by side.
+  assert.equal(await evaluate(`document.querySelectorAll('.tracker .track').length`),5,'five step cards');
+  assert.equal(await evaluate(`document.querySelectorAll('.scene-wall .scene-tile').length`),2,'one tile per scene');
+  await evaluate(`document.querySelectorAll('[data-scene-open]')[1].click()`);
+  await waitFor(()=>evaluate(`!!document.querySelector('#sceneBox[open] .scene-pair img')&&!!document.querySelector('#sceneBox[open] .scene-pair video')`),5000,'planche et clip côte à côte');
+  const sizes=await evaluate(`JSON.stringify([...document.querySelectorAll('#sceneBox .scene-pair img,#sceneBox .scene-pair video')].map(i=>Math.round(i.getBoundingClientRect().width)))`);
+  assert.ok(JSON.parse(sizes).every(w=>w>=200),'board and clip shown large '+sizes);
+  assert.ok(await evaluate(`!!document.querySelector('#sceneBox [data-redo="clip:1"]')&&!!document.querySelector('#sceneBox [data-redo="image:1"][data-has-clip="1"]')`),'redo buttons in the scene');
+  await evaluate(`document.querySelector('[data-scene-close]').click()`);
+  await waitFor(()=>evaluate(`!document.querySelector('#sceneBox[open]')`),5000,'fermeture');
   await evaluate(`document.querySelector('[data-redo="cover"]').click()`);
   const redone=await waitFor(async()=>{const s=await (await fetch(base+'/api/state')).json();const j=s.jobs.find(x=>x.id===done);return j.stage==='cover'&&{s,j};},10000,'refaire couverture');
   assert.ok(dialogs.some(m=>m.startsWith('Refaire la couverture')),'correction asked');
@@ -99,17 +103,18 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   assert.ok(await evaluate(`document.querySelector('.engine-badge')?.textContent.includes('Grok Imagine')&&document.querySelector('#jobProfile').closest('label').hidden`),'engine badge and Flow selector hidden');
   // 8. P5-07: add a Grok account from Connexions (address only).
   await evaluate(`document.querySelector('nav [data-page="connections"]').click()`);
-  await waitFor(()=>evaluate("!!document.querySelector('#engineAccountForm')"),10000,'formulaire comptes');
-  await evaluate(`(()=>{const f=document.querySelector('#engineAccountForm');f.engine.value='grok';f.email.value='Second@x.com';f.requestSubmit();return true})()`);
+  await waitFor(()=>evaluate("!!document.querySelector('#accountForm')"),10000,'formulaire comptes');
+  await evaluate(`(()=>{const f=document.querySelector('#accountForm');f.email.value='Second@x.com';[...f.querySelectorAll('[name=services]')].forEach(c=>c.checked=c.value==='grok');f.requestSubmit();return true})()`);
   const accounts=await waitFor(async()=>{const st=await (await fetch(base+'/api/state')).json();return st.engine_accounts?.length&&st.engine_accounts;},10000,'compte ajouté');
   assert.equal(accounts[0].email,'second@x.com');assert.equal(accounts[0].engine,'grok');
-  await evaluate(`document.querySelector('[data-account-tab="grok"]').click()`);
+  await evaluate(`document.querySelector('[data-account-tab="limits"]').click()`);
   await waitFor(()=>evaluate(`document.body.innerText.includes('second@x.com')`),10000,'compte affiché');
   // 9. P2-10: add a production to the night queue, then start the queue from the studio page.
   await send('Page.navigate',{url:base+'/#job='+job});
   await waitFor(()=>evaluate(`!!document.querySelector('[data-night="add"]')`),15000,'bouton file de nuit');
   await evaluate(`document.querySelector('[data-night="add"]').click()`);
   await waitFor(async()=>(await (await fetch(base+'/api/state')).json()).night?.ids?.includes(job),10000,'ajout file de nuit');
+  await evaluate(`document.querySelector('[data-back-studio]').click()`);
   await waitFor(()=>evaluate(`!!document.querySelector('[data-night="start"]')`),10000,'panneau file de nuit');
   await evaluate(`document.querySelector('[data-night="start"]').click()`);
   await waitFor(async()=>(await (await fetch(base+'/api/state')).json()).night?.active===true||(await (await fetch(base+'/api/state')).json()).night?.log?.some(x=>x.text.includes('démarrée')),10000,'file démarrée');
@@ -118,10 +123,20 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   const guideText=await waitFor(()=>evaluate(`document.querySelector('.guide-new')?.innerText`),10000,'guide');
   for(const word of ['Fenêtre FruchtDrama','Trois moteurs vidéo','Changement de compte','File de nuit','Séries et publication','Assistance'])assert.ok(guideText.includes(word),word);
   assert.match(guideText,/version 0\.1\.\d+/);
-  await evaluate(`(()=>{const sel=document.querySelector('#createForm [name=video_engine]');sel.value='grok';sel.dispatchEvent(new Event('change',{bubbles:true}));return true})()`);
-  assert.ok(await evaluate(`[...document.querySelectorAll('#createForm .flow-only')].every(x=>x.hidden)`),'Flow-only fields hidden for Grok');
-  await evaluate(`(()=>{const sel=document.querySelector('#createForm [name=video_engine]');sel.value='flow';sel.dispatchEvent(new Event('change',{bubbles:true}));return true})()`);
-  assert.ok(await evaluate(`[...document.querySelectorAll('#createForm .flow-only')].every(x=>!x.hidden)`),'Flow fields back');
+  // 10 bis. Full-page creation like the Atelier: fixed durations, engine choice, ten stories first.
+  await evaluate(`document.querySelector('nav [data-action="new"]').click()`);
+  await waitFor(()=>evaluate(`!!document.querySelector('#createForm.create-page')`),5000,'page Créer');
+  await evaluate(`document.querySelector('[data-choice="engine"][data-value="grok"]').click()`);
+  assert.ok(await evaluate(`document.querySelector('#createForm .flow-settings').hidden`),'Flow settings hidden for Grok');
+  await evaluate(`document.querySelector('[data-choice="engine"][data-value="flow"]').click()`);
+  assert.ok(await evaluate(`!document.querySelector('#createForm .flow-settings').hidden`),'Flow settings back');
+  await evaluate(`document.querySelector('[data-choice="duration"][data-value="180"]').click()`);
+  assert.ok(await evaluate(`document.querySelector('#createForm').innerText.includes('23 plans de 8 s')`),'3 min = 23 clips of 8 s');
+  await evaluate(`document.querySelector('[data-choice="duration"][data-value="60"]').click()`);
+  await evaluate(`document.querySelector('#createForm').requestSubmit()`);
+  const ideasJob=await waitFor(async()=>(await (await fetch(base+'/api/state')).json()).jobs.find(j=>j.stage==='ideas'),10000,'dix histoires demandées');
+  assert.equal(ideasJob.config.scene_count,8);assert.equal(ideasJob.config.duration,60);
+  await waitFor(()=>evaluate(`document.querySelector('.ideas,.notice')?.innerText.includes('dix histoires')`),10000,'page épisode : attente des histoires');
   // 11. Atelier-like interface: dark theme by default, Le Filon, creation from a found video.
   assert.ok(await evaluate(`!document.body.classList.contains('dark')`),'light theme by default');
   await evaluate(`document.querySelector('#theme').click()`);assert.ok(await evaluate(`document.body.classList.contains('dark')`),'dark theme on demand');
@@ -129,14 +144,14 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   await evaluate(`document.querySelector('nav [data-page="filon"]').click()`);
   await waitFor(()=>evaluate(`document.querySelector('.filon-card')?.innerText.includes('1.2 M')`),10000,'Filon');
   assert.equal(await evaluate(`document.querySelector('.filon-card iframe.filon-player')?.src.split('?')[0]`),'https://www.tiktok.com/player/v1/4242424242','real TikTok player in the card');
+  assert.ok(await evaluate(`document.querySelector('.filon-card img.filon-cover').src.includes('/api/thumb?url=')`),'cover loaded at once, no hover');
   await evaluate(`document.querySelector('.filon-card [data-action="new"]').click()`);
-  assert.equal(await waitFor(()=>evaluate(`document.querySelector('#createDialog').open&&document.querySelector('#createForm [name=source_url]').value`),5000,'formulaire prérempli'),'https://www.tiktok.com/@oma/video/4242424242');
-  // Paste a TikTok link anywhere on the page: the creation dialog opens, prefilled.
-  await evaluate(`document.querySelector('#createDialog').close()`);
+  assert.equal(await waitFor(()=>evaluate(`document.querySelector('#createForm [name=source_url]')?.value`),5000,'formulaire prérempli'),'https://www.tiktok.com/@oma/video/4242424242');
+  // Paste a TikTok link anywhere on the page: the creation page opens, prefilled.
+  await evaluate(`document.querySelector('nav [data-page="filon"]').click()`);
   await evaluate(`(()=>{const d=new DataTransfer();d.setData('text/plain','regarde https://www.tiktok.com/@x/video/77 !');document.body.dispatchEvent(new ClipboardEvent('paste',{clipboardData:d,bubbles:true}));return true})()`);
-  assert.equal(await waitFor(()=>evaluate(`document.querySelector('#createDialog').open&&document.querySelector('#createForm [name=source_url]').value`),5000,'collage'),'https://www.tiktok.com/@x/video/77');
-  assert.ok(await evaluate(`[...document.querySelectorAll('nav small')].map(x=>x.textContent).join('|').includes('les vidéos virales')`),'nav subtitles');
-  await evaluate(`document.querySelector('#createDialog').close()`);
+  assert.equal(await waitFor(()=>evaluate(`document.querySelector('#createForm [name=source_url]')?.value`),5000,'collage'),'https://www.tiktok.com/@x/video/77');
+  assert.ok(await evaluate(`[...document.querySelectorAll('nav small')].map(x=>x.textContent).join('|').includes('vidéo(s) relevée(s)')`),'live nav subtitles');
   // 12 a. Atelier-like site cards: six sites, Re-check queues a request, default language follows into the form.
   await evaluate(`document.querySelector('[data-page="connections"]').click()`);
   await waitFor(()=>evaluate(`document.querySelectorAll('.site-card').length===6`),10000,'cartes des sites');
@@ -146,16 +161,15 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   await evaluate(`document.querySelector('[data-default-language="English (en-US)"]').click()`);
   await waitFor(async()=>(await (await fetch(base+'/api/state')).json()).settings.language==='English (en-US)',5000,'langue');
   await waitFor(()=>evaluate(`document.querySelector('[data-default-language="English (en-US)"]').classList.contains('primary')`),5000,'langue affichée');
-  await evaluate(`document.querySelector('[data-action="new"]').click()`);
-  assert.equal(await waitFor(()=>evaluate(`document.querySelector('#createDialog').open&&document.querySelector('#createForm [name=language]').value`),5000,'langue préremplie'),'English (en-US)');
-  await evaluate(`document.querySelector('#createDialog').close()`);
+  await evaluate(`document.querySelector('nav [data-action="new"]').click()`);
+  assert.ok(await waitFor(()=>evaluate(`document.querySelector('[data-choice="language"][data-value="English (en-US)"]')?.classList.contains('on')`),5000,'langue préremplie'));
   // 12. Accounts like the Atelier: one form for every platform, tables per platform; no emoji icons anywhere.
   await evaluate(`document.querySelector('nav [data-page="connections"]').click()`);
-  await waitFor(()=>evaluate(`document.querySelectorAll('[data-account-tab]').length===6&&!!document.querySelector('table.accounts')`),10000,'tableaux de comptes');
-  await evaluate(`(()=>{const f=document.querySelector('#engineAccountForm');f.engine.value='flow';f.engine.dispatchEvent(new Event('change',{bubbles:true}));f.email.value='flow.qa@x.com';f.balance.value='88';f.requestSubmit();return true})()`);
+  await waitFor(()=>evaluate(`document.querySelectorAll('[data-account-tab]').length===3&&!!document.querySelector('table.accounts')`),10000,'tableaux de comptes');
+  await evaluate(`(()=>{const f=document.querySelector('#accountForm');f.email.value='flow.qa@x.com';[...f.querySelectorAll('[name=services]')].forEach(c=>c.checked=c.value==='flow');f.balance.value='88';f.requestSubmit();return true})()`);
   const flow=await waitFor(async()=>(await (await fetch(base+'/api/state')).json()).profiles.find(p=>p.label==='flow.qa@x.com'),10000,'compte Flow ajouté');
   assert.equal(flow.balance,88);
-  await evaluate(`document.querySelector('[data-account-tab="flow"]').click()`);
+  await evaluate(`document.querySelector('[data-account-tab="limits"]').click()`);
   await waitFor(()=>evaluate(`document.querySelector('table.accounts').innerText.includes('flow.qa@x.com')`),10000,'compte Flow affiché');
   // 12 bis. Unified accounts: one address, several services, one row; hidden studio key.
   await evaluate(`(()=>{const f=document.querySelector('#accountForm');f.email.value='Moi.QA@x.com';f.balance.value='40';[...f.querySelectorAll('[name=services]')].forEach(c=>c.checked=['chatgpt','flow','grok','arena'].includes(c.value));f.requestSubmit();return true})()`);
@@ -172,12 +186,12 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   await waitFor(async()=>(await (await fetch(base+'/api/state')).json()).bridge_requests?.some(r=>r.type==='register_flow'),5000,'demande transmise');
   await waitFor(()=>evaluate(`document.querySelector('.bridge-notice')?.innerText.includes('Demande envoyée')`),10000,'retour affiché');
   const emoji=/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B50}\u{2B06}\u{2190}-\u{21FF}\u{25A0}-\u{25FF}]/u;
-  for(const pageName of ['filon','studio','connections','library','guide']){
+  for(const pageName of ['filon','studio','connections','guide']){
    await evaluate(`document.querySelector('[data-page="${pageName}"]').click()`);await sleep(400);
    const text=await evaluate('document.body.innerText');assert.ok(!emoji.test(text),'no emoji icon on '+pageName+': '+(text.match(emoji)||[])[0]);
   }
-  assert.ok(await evaluate(`document.querySelectorAll('nav svg.ico').length===5`),'nav uses the line-icon set');
+  assert.ok(await evaluate(`document.querySelectorAll('nav svg.ico').length===4`),'nav uses the line-icon set');
   assert.deepEqual(errors,[]);ws.close();
-  console.log('Interactions navigateur : correction conservée au rafraîchissement, enregistrement, refus visible, confirmation de sortie, validation, « Refaire la couverture », changement de compte guidé, ajout d’un compte Grok, file de nuit, guide des nouveautés, formulaire par moteur, thème sombre, Filon et création depuis un lien vérifiés.');
+  console.log('Interactions navigateur : correction conservée au rafraîchissement, enregistrement, refus visible, confirmation de sortie, validation, « Refaire la couverture », changement de compte guidé, ajout d’un compte Grok, file de nuit, guide, page Créer (durées, moteur, dix histoires), page épisode (étapes, scènes, planche et clip côte à côte), thème sombre, Filon (miniatures immédiates) et création depuis un lien vérifiés.');
  }finally{cleanup();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

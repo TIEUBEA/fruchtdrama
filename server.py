@@ -11,12 +11,14 @@ import errors
 import engines
 import engine_accounts
 import identities
+import ideas
+import thumbs
 import refusal
 import quotas
 import power
 import maintenance
 import series
-VERSION='0.1.54'
+VERSION='0.1.55'
 import sys
 import traceback
 
@@ -28,7 +30,7 @@ BUSY = set()
 QUALITY_BUSY = set()
 DOWNLOADS_ROOT = pathlib.Path(os.environ.get('FRUCHT_DOWNLOADS',pathlib.Path.home()/'Downloads')).resolve()
 STEPS = ['research', 'script', 'characters', 'images', 'clips', 'quality', 'cover', 'edit', 'done']
-LABELS = {'research':'Recherche', 'script':'Scénario', 'characters':'Personnages', 'images':'Scènes', 'clips':'Animation Flow', 'quality':'Contrôle qualité', 'cover':'Couverture', 'edit':'Montage', 'done':'Terminé'}
+LABELS = {'ideas':'Dix histoires', 'sheet':'Fiche de décision', 'research':'Recherche', 'script':'Scénario', 'characters':'Personnages', 'images':'Scènes', 'clips':'Animation Flow', 'quality':'Contrôle qualité', 'cover':'Couverture', 'edit':'Montage', 'done':'Terminé'}
 CREATION_LANGUAGES=('Deutsch (de-DE)','Français (fr-FR)','English (en-US)')
 # Default research query per creation language (same values as the web form).
 SITES=('chatgpt','flow','tiktok','grok','arena','claude')
@@ -51,6 +53,8 @@ def read_state():
         state['settings'].update(flow_model='gemini_omni_flash',flow_resolution='720p',flow_cost=12)
     return state
 STATE=read_state()
+if not os.environ.get('FRUCHT_NO_THUMBS'):
+    thumbs.warm([c['url'] for j in STATE['jobs'] for c in j.get('candidates',[])],DATA)
 def save():
     p=DATA/'state.tmp'
     p.write_text(json.dumps(STATE, ensure_ascii=False, indent=2),'utf-8'); p.replace(DATA/'state.json')
@@ -418,7 +422,7 @@ def parse_json(text):
 def script_prompt(j):
     ref=j['selected']; n=j['config']['scene_count']
     language=j['config'].get('language','Deutsch (de-DE)')
-    schema={'production_id':j['id'],'title':'Titre dans la langue choisie','cover_title':'Question courte dans la langue choisie','description':'Description TikTok dans la langue choisie, mentionnant la création par IA','characters':[{'id':'fruit_a','name':'Prénom dans la langue choisie','appearance':'Design de fruit et vêtements cohérents','voice':'Voix native de la langue choisie, âge, timbre','image_prompt':'Prompt de référence dans la langue choisie'}],'scenes':[{'characters':['fruit_a'],'meaning':'Action compréhensible sans le son','image_prompt':'Prompt d’image dans la langue choisie, 9:16','video_prompt':'Animation, caméra, action, position des locuteurs, lèvres et personnages silencieux','dialogue':[{'speaker':'fruit_a','text':'Réplique courte dans la langue choisie'}]}]}
+    schema={'production_id':j['id'],'title':'Titre dans la langue choisie','cover_title':'Question courte dans la langue choisie','description':'Description TikTok dans la langue choisie, mentionnant la création par IA','characters':[{'id':'fruit_a','name':'Prénom dans la langue choisie','appearance':'Design de fruit et vêtements cohérents','voice':'Voix native de la langue choisie, âge, timbre','image_prompt':'Prompt de référence dans la langue choisie'}],'scenes':[{'title':'Titre court de la scène (2 à 4 mots, langue choisie)','characters':['fruit_a'],'meaning':'Action compréhensible sans le son','image_prompt':'Prompt d’image dans la langue choisie, 9:16','video_prompt':'Animation, caméra, action, position des locuteurs, lèvres et personnages silencieux','dialogue':[{'speaker':'fruit_a','text':'Réplique courte dans la langue choisie'}]}]}
     guidance=''
     # Announce the limit the validators actually enforce (editorial.validate: 20 for retention productions).
     word_limit=engines.word_limit(j,20 if j.get('editorial_version')==2 and j.get('retention_version')==1 else 25)
@@ -458,11 +462,28 @@ Input image 1 is the scene: use it for identity and story. If a second image is 
 Recompose a tight chest-up confrontation with clearly visible expressive faces: dominant emotions and the main conflict instantly readable. Show the victim and opposing character large; a witness may be smaller. Simplify and softly blur the story setting. No empty floor or distant full-body framing. Sharp eyes, bright readable faces and cinematic 3D fruit textures.
 Bold clean condensed sans serif headline: white first line, warm yellow emphasis on second line, restrained dark outline and shadow. Place text in the lower middle BELOW faces, inside the central 80 percent width; leave the top 15 percent and bottom 20 percent free of important text for cropping. Never cover eyes. No large dark banner across faces. No logos, watermarks, arrows, interface, fake evidence, extra characters or sensational claims not present in the story. Generate the finished image now, not a tutorial."""
 
+def approve_sheet(j,sheet,title_index,hook_index,message):
+    j['sheet']=sheet;j['sheet_approved']=now();j['sheet_choice']={'title':int(title_index),'hook':int(hook_index)}
+    j['brief']=ideas.brief(sheet,title_index,hook_index);j['title']=sheet['titles'][min(int(title_index),len(sheet['titles'])-1)].capitalize()
+    j.pop('sheet_previous',None);j.pop('sheet_note',None);j['stage']='script';j['status']='running';event(j,message);schedule(j)
+
 def schedule(j):
     if j['status'] in ('paused','attention','done','rendering','waiting_research','waiting_script','waiting_credit','waiting_review','waiting_quota','waiting_account','waiting_night'): return
     if any(t['job']==j['id'] and t['status'] in ('queued','claimed') for t in STATE['tasks']): return
     step=j['stage']
-    if step=='research':
+    if step=='ideas':
+        if j.get('ideas'):
+            j['status']='waiting_review';event(j,'Dix histoires proposées : choisissez celle qui deviendra votre épisode.');return
+        avoid=[x['title'] for x in STATE['jobs'] if x is not j and x.get('title') not in (None,'Nouvel épisode') and not x.get('filon_only')][:20]
+        add_task(j,'chat_text',{'provider':j['config']['provider'],'prompt':ideas.ideas_prompt(j['config']['language'],j['config'].get('niche','Fruits'),ideas.trends(STATE['jobs']),j.get('brief','') if j.get('brief','').strip() else '',avoid),'response_kind':'ideas'},'ideas')
+    elif step=='sheet':
+        if j.get('sheet') and not j.get('sheet_approved'):
+            if j['config'].get('auto_sheet'):
+                # Like the Atelier in automatic mode: first title, first hook, first call.
+                approve_sheet(j,j['sheet'],0,0,'Fiche validée automatiquement : premier titre, première réplique et premier appel.');return
+            j['status']='waiting_review';event(j,'Fiche de décision prête : relisez, choisissez le titre et la première réplique, puis validez.');return
+        add_task(j,'chat_text',{'provider':j['config']['provider'],'prompt':ideas.sheet_prompt(j['config']['language'],j['brief'],j['config']['scene_count'],engines.spec(j)['seconds'],j.get('sheet_note',''),j.get('sheet_previous')),'response_kind':'sheet'},'sheet')
+    elif step=='research':
         query=j['config']['query']
         if j.get('editorial_version')==2:
             j.setdefault('research_queries',editorial.queries(j,STATE['jobs']))
@@ -722,6 +743,7 @@ def apply_research(j,rows):
     if j.get('filon_only'):
         # Filon refresh: keep the gallery, never start a story.
         j['candidates']=rank_candidates(rows,j['config'].get('language','Deutsch (de-DE)'))[:60];j['stage']='done';j['status']='done'
+        thumbs.warm([c['url'] for c in j['candidates']],DATA)
         STATE.setdefault('settings',{})['filon_refreshed']=now();event(j,'Filon actualisé : '+str(len(j['candidates']))+' vidéo(s).');return
     if j.get('editorial_version')!=2:
         ranked=rank_candidates(rows,j['config'].get('language','Deutsch (de-DE)'));j['candidates']=ranked
@@ -795,6 +817,17 @@ def accept_task_result(t,result):
         j['quality_report']['visual']=review
         (job_dir(j)/'quality-report.json').write_text(json.dumps(j['quality_report'],ensure_ascii=False,indent=2),'utf-8')
         event(j,'Revue visuelle IA reçue ; lèvres et identité des voix restent non certifiées.')
+    elif slot in ('ideas','sheet'):
+        try:
+            data=parse_json(result.get('text',''))
+            if slot=='ideas':j['ideas']=ideas.validate_ideas(data)
+            else:j['sheet']=ideas.validate_sheet(data);j.pop('sheet_approved',None);j.pop('sheet_previous',None);j.pop('sheet_note',None)
+            j.pop('start_attempts',None)
+        except ValueError as e:
+            t['status']='failed';t['error']=str(e);j['start_attempts']=j.get('start_attempts',0)+1
+            j['status']='paused' if was_paused else 'running' if j['start_attempts']<=2 else 'attention'
+            event(j,('Histoires' if slot=='ideas' else 'Fiche')+' inexploitable : '+str(e)+(' Nouvelle demande envoyée.' if j['status']=='running' else ''))
+            schedule(j);return
     elif slot=='script':
         try:store_script(j,parse_json(result.get('text','')))
         except ValueError as e:
@@ -939,6 +972,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         try:
             self.local(); path=urllib.parse.urlparse(self.path).path
+            if path=='/api/thumb':
+                # Outside the lock: a network read must never block the studio.
+                url=urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get('url',[''])[0]
+                try:image=thumbs.get(url,DATA)
+                except ValueError as e:return self.send_json({'error':str(e)},400)
+                if not image:return self.send_json({'error':'Miniature indisponible'},404)
+                data=image.read_bytes();mime='image/png' if data[:4]==b'\x89PNG' else 'image/webp' if data[:4]==b'RIFF' else 'image/jpeg'
+                return self.send_bytes(data,mime)
             with LOCK:
                 if path=='/api/bridge/requests':
                     # Owner requests waiting for the browser gateway (open a site, re-check accounts).
@@ -1266,6 +1307,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     cfg['video_engine']=engines.validate(b.get('config',{}).get('video_engine','flow'))
                     if cfg['video_engine'] not in engines.AVAILABLE:raise ValueError('Connecteur '+engines.ENGINES[cfg['video_engine']]['label']+' pas encore livré : choisissez Google Flow.')
                     cfg['flow_resolution']='720p';cfg['clip_seconds']=engines.ENGINES[cfg['video_engine']]['seconds']
+                    duration=b.get('config',{}).get('duration')
+                    if duration is not None:
+                        # Atelier-like fixed durations (TikTok monetisation needs more than one minute).
+                        if int(duration) not in (30,60,120,180):raise ValueError('Durée inconnue')
+                        cfg['duration']=int(duration);cfg['scene_count']=max(3,min(30,-(-int(duration)//cfg['clip_seconds'])))
                     cfg['flow_cost']=int(b.get('config',{}).get('flow_cost',{'gemini_omni_flash':12,'veo_3_1_lite':10,'veo_3_1_fast':20,'veo_3_1_quality':100}[cfg['flow_model']]))
                     if cfg['flow_cost'] not in {'gemini_omni_flash':(12,), 'veo_3_1_lite':(10,5), 'veo_3_1_fast':(20,10), 'veo_3_1_quality':(100,)}[cfg['flow_model']]:raise ValueError('Coût incompatible avec le modèle Flow choisi. Le coût réel sera vérifié avant tout envoi.')
                     cfg['language']=creation_language(cfg.get('language','Deutsch (de-DE)'))
@@ -1280,11 +1326,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     requested_query=str(b.get('config',{}).get('query','')).strip()
                     # An omitted or untouched German default follows the chosen language.
                     cfg['query']=RESEARCH_QUERIES[cfg['language']] if not requested_query or requested_query in RESEARCH_QUERIES.values() else requested_query[:200]
-                    if cfg['scene_count'] not in (3,4,6,8) or not 1<=cfg['flow_cost']<=100 or cfg['provider'] not in ('chatgpt','claude'): raise ValueError('Réglages invalides')
+                    if not 3<=cfg['scene_count']<=30 or not 1<=cfg['flow_cost']<=100 or cfg['provider'] not in ('chatgpt','claude'): raise ValueError('Réglages invalides')
                     j={'id':uid(),'title':'Nouvel épisode','brief':str(b.get('brief',''))[:4000], 'config':cfg,'editorial_version':2,'retention_version':1,'hook_version':1,'quality_version':1,'cover_style':'family_poster_v3','character_sheet':1,'flow_profile':b.get('flow_profile'),'status':'running','stage':'research','created':now(),'updated':now(),'events':[],'candidates':[],'characters':[],'scenes':[]}; STATE['jobs'].insert(0,j)
                     if source:
                         j['selected']={'title':'Vidéo fournie par le propriétaire','url':urllib.parse.urlunparse(('https',u.hostname,u.path,'','','')),'source':'owner_link'};j['stage']='script';event(j,'Projet créé d’après le lien fourni : recherche sautée, histoire originale inspirée de cette vidéo (sans copier dialogues ni plans).')
-                    else:event(j,'Projet créé. Recherche préalable et comparaison de cinq concepts obligatoires.')
+                    mode=b.get('mode')
+                    if mode not in (None,'','link','ideas','idea','research'):raise ValueError('Option de création inconnue')
+                    cfg['auto_sheet']=bool(b.get('config',{}).get('auto_sheet',False));cfg['niche']=str(b.get('config',{}).get('niche','Fruits'))[:40]
+                    if mode=='ideas' and not source:
+                        # Atelier "Pas d'idée": ten stories first, nothing paid before the sheet is validated.
+                        j['stage']='ideas';j['selected']={'title':'Histoire originale choisie parmi dix propositions','source':'ideas'};event(j,'Projet créé : dix histoires demandées à '+('Claude' if cfg['provider']=='claude' else 'ChatGPT')+'.')
+                    elif mode=='idea' and not source:
+                        if len(j['brief'].strip())<15:raise ValueError('Décrivez votre idée en quelques phrases')
+                        j['stage']='sheet';j['selected']={'title':'Idée du propriétaire','source':'owner_idea'};event(j,'Projet créé d’après votre idée : fiche de décision en cours.')
+                    elif not source:event(j,'Projet créé. Recherche préalable et comparaison de cinq concepts obligatoires.')
                     schedule(j)
                 elif path.startswith('/api/job/'):
                     id=path.split('/')[-1]; j=job_by(id)
@@ -1346,6 +1401,27 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     elif action=='approve_script':
                         if not review_pending(j) or j.get('stage')!='characters':raise ValueError('Aucune histoire en attente de validation')
                         j['script_approved']=now();j['status']='running';event(j,'Histoire validée par le propriétaire : création des images lancée.');schedule(j)
+                    elif action=='pick_idea':
+                        if j.get('stage')!='ideas' or not j.get('ideas'):raise ValueError('Aucune histoire à choisir')
+                        i=int(b.get('index',-1))
+                        if not 0<=i<len(j['ideas']):raise ValueError('Histoire inconnue')
+                        idea=j['ideas'][i];j['idea_choice']=i;j['brief']=idea['title']+' : '+idea['pitch']+(' '+str(b.get('note',''))[:500] if b.get('note') else '')
+                        j['stage']='sheet';j['status']='running';event(j,'Histoire choisie : « '+idea['title']+' ». Fiche de décision en cours.');schedule(j)
+                    elif action=='more_ideas':
+                        if j.get('stage')!='ideas':raise ValueError('Étape terminée')
+                        j['ideas']=[];j['status']='running';event(j,'Dix autres histoires demandées.');schedule(j)
+                    elif action=='approve_sheet':
+                        if j.get('stage')!='sheet' or not j.get('sheet'):raise ValueError('Aucune fiche à valider')
+                        sheet=ideas.apply_edits(j['sheet'],b.get('sheet') or {})
+                        ti,hi=int(b.get('title',0)),int(b.get('hook',0))
+                        if not (0<=ti<len(sheet['titles']) and 0<=hi<len(sheet['hooks'])):raise ValueError('Titre ou réplique inconnu')
+                        approve_sheet(j,sheet,ti,hi,'Fiche validée : « '+sheet['titles'][ti]+' ». Écriture des plans en cours.')
+                    elif action=='revise_sheet':
+                        if j.get('stage')!='sheet' or not j.get('sheet'):raise ValueError('Aucune fiche à revoir')
+                        note=str(b.get('note','')).strip()[:800]
+                        if not note:raise ValueError('Écrivez vos remarques')
+                        j['sheet_previous']=ideas.apply_edits(j['sheet'],b.get('sheet') or {});j['sheet_note']=note;j['sheet']=None
+                        j['status']='running';event(j,'Fiche renvoyée avec vos remarques.');schedule(j)
                     elif action=='account_switched':
                         if j['status']!='waiting_account':raise ValueError('Aucun changement de compte en attente')
                         switch=j.pop('account_switch',{});j['status']='running'

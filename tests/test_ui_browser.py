@@ -54,8 +54,9 @@ class BrowserInterfaceTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr[-500:]); return result.stdout
 
     def test_studio_renders_productions_and_online_connector(self):
-        html = self.dom()
-        self.assertIn('Le studio de vos histoires.', html); self.assertIn('Épisode QA', html)
+        self.assertIn('Le Filon', self.dom(), 'Le Filon opens the application, like the Atelier')
+        html = self.dom('#page=studio')
+        self.assertIn('Tes épisodes, de l’idée à la vidéo finale.', html); self.assertIn('class="studio-card"', html); self.assertIn('Épisode QA', html)
         self.assertIn('1 connecteur(s) en ligne', html); self.assertIn('À vérifier', html)
         self.assertNotIn('Studio inaccessible', html)
 
@@ -75,7 +76,9 @@ class BrowserInterfaceTests(unittest.TestCase):
         self.assertIn('data-dry-run="1"', html, 'dry run can be enabled before clips')
 
     def test_create_form_offers_review_option(self):
-        html = self.dom(); self.assertIn('name="review_script"', html); self.assertIn('name="dry_run"', html)
+        html = self.dom('#page=create'); self.assertIn('id="createForm"', html); self.assertIn('name="auto"', html); self.assertIn('name="dry_run"', html)
+        for word in ('Pas d’idée', 'J’ai une idée', 'Refaire une virale', '1 min', '2 min', '3 min', 'Propose-moi dix histoires'):
+            self.assertIn(word, html)
 
     def test_public_state_hides_token_and_lists_uncertain_scenes(self):
         state = json.load(urllib.request.urlopen(f'http://127.0.0.1:{self.port}/api/state', timeout=5))
