@@ -9,6 +9,17 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 Prochain : P3 (séries, idées, kit de publication, veille, 16:9) et P4 (montage avancé, sous-titres karaoké, rapport de panne). Voir `docs/sudf/REPRISE.md`.
 
+## 0.1.57 — bandeau de limite, « En cours », contrôles et thèmes (03/11/2026)
+
+### Ajouté
+- **Bandeau de limite sur toutes les pages** (comme l'Atelier) : « Limite ChatGPT images / Grok vidéos… atteinte : ça revient vers HH:MM (estimation). Rien n'est perdu. » avec **Ouvrir** le site et **J'ai changé de compte**.
+- **« En cours »** en bas du menu : la production en train d'être faite, sa prochaine action et sa progression ; un clic l'ouvre.
+- **Contrôles des clips** (Mes comptes) : **Refaire tout seul** (un clip signalé par les paroles ou la revue visuelle est refait une fois, puis le propriétaire décide), **Signaler seulement** (défaut), **Pas de contrôle**. S'applique aux nouveaux épisodes.
+- **Thèmes** : Clair (défaut), Sombre, Ardoise, Cinéma, Lagon, Papier ; gardés sur l'ordinateur.
+
+### Tests
+- `test_p2_quality.py` (+2 : sans contrôle, refait une fois puis arrêt), `test_ui_browser.py` (bandeau de limite).
+
 ## 0.1.56 — Filon détaillé, originalité avant publication, page épisode complétée (03/11/2026)
 
 ### Ajouté

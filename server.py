@@ -19,7 +19,7 @@ import quotas
 import power
 import maintenance
 import series
-VERSION='0.1.56'
+VERSION='0.1.57'
 import sys
 import traceback
 
@@ -671,8 +671,20 @@ def redo(j,slot,note='',include_clip=False):
     event(j,'À refaire : '+slot+(' — correction : '+note if note else '')+'. Fichier précédent conservé.')
     schedule(j)
 
+def auto_redo(j,report,issues=()):
+    """Atelier-like "Refaire tout seul": a clip flagged by the checks is regenerated once, then the owner decides."""
+    bad=sorted({i for i,c in enumerate(report.get('clips',[])) if (c.get('speech') or {}).get('match') is not None and c['speech']['match']<quality.MIN_MATCH}|{x['index'] for x in issues if isinstance(x.get('index'),int)})
+    done=set(j.setdefault('auto_redone',[]));todo=[i for i in bad if i not in done and i<len(j['scenes'])]
+    for i in todo:
+        j['auto_redone'].append(i);redo(j,'clip:'+str(i),'Refait automatiquement après le contrôle qualité : respecter exactement le dialogue et la continuité.')
+    if todo:event(j,'Contrôle qualité : clip(s) '+', '.join(str(i+1) for i in todo)+' refait(s) une fois, automatiquement.')
+    return bool(todo)
+
 def schedule_quality(j):
     folder=job_dir(j);key=quality.fingerprint(j,folder);report=j.get('quality_report',{})
+    if j['config'].get('controls')=='none':
+        # "Pas de contrôle": the owner chose to skip the checks and go straight to the cover.
+        j['stage']='cover';event(j,'Contrôles désactivés par le propriétaire : passage direct à la miniature.');schedule(j);return
     if report.get('fingerprint')!=key:
         if j['id'] not in QUALITY_BUSY:
             QUALITY_BUSY.add(j['id']);event(j,'Contrôle local des clips, transcription et préparation des images de revue démarrés.')
@@ -682,6 +694,7 @@ def schedule_quality(j):
     if report.get('hard_errors'):
         j['status']='attention';event(j,'Contrôle qualité bloquant : '+report['hard_errors'][0]+' Les clips sont conservés.');return
     if report.get('warnings') and j.get('quality_speech_approval')!=key and j.get('quality_approval')!=key:
+        if j['config'].get('controls')=='redo' and auto_redo(j,report):return
         j['status']='attention';event(j,'Contrôle des paroles à vérifier : '+report['warnings'][0]+' Aucun clip ne sera régénéré automatiquement.');return
     visual=report.get('visual')
     if not visual:
@@ -690,6 +703,7 @@ def schedule_quality(j):
         add_task(j,'chat_text',{'provider':'chatgpt','prompt':quality.visual_prompt(j),'attachments':attachments,'response_kind':'quality_review','scene_count':len(j['scenes']),'fingerprint':key},'quality_review');return
     issues=[x for x in [*visual['scenes'],visual['continuity']] if x['status']!='pass']
     if issues and j.get('quality_approval')!=key:
+        if j['config'].get('controls')=='redo' and auto_redo(j,report,issues):return
         j['status']='attention';event(j,'Cohérence visuelle à vérifier : '+issues[0]['detail']+' Médias conservés, aucun nouvel envoi Flow.');return
     report['status']='approved_with_reservations' if report.get('warnings') or issues else 'checked'
     report['auto']=quality.decision(report,issues)
@@ -1340,6 +1354,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     STATE['sites']=sites;save();return self.send_json({'ok':True})
                 elif path=='/api/settings':
                     if 'language' in b:STATE['settings']['language']=creation_language(b['language'])
+                    if 'controls' in b:
+                        if b['controls'] not in ('redo','report','none'):raise ValueError('Réglage de contrôle inconnu')
+                        STATE['settings']['controls']=b['controls']
                     if 'follow' in b:
                         # Followed TikTok accounts in Le Filon (star), like the Atelier.
                         name=str(b['follow']).strip().lstrip('@')[:60];followed=STATE['settings'].setdefault('filon_follow',[])

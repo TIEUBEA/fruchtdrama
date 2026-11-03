@@ -19,6 +19,7 @@ class BrowserInterfaceTests(unittest.TestCase):
         cls.job = 'a1b2c3d4e5f60718'; cls.review = 'b1b2c3d4e5f60718'
         scenes = [{'characters': ['orange'], 'meaning': 'm', 'image_prompt': 'i', 'video_prompt': 'v', 'dialogue': [{'speaker': 'orange', 'text': 'Hallo'}]} for _ in range(2)]
         state = {'version': 1, 'token': 'test-token', 'pair_code': 'abcd1234', 'profiles': [{'id': 'flow', 'label': 'flow@example.com', 'balance': 40}],
+                 'engine_accounts': [{'id': 'g1', 'engine': 'grok', 'label': 'g@x.com', 'email': 'g@x.com', 'wall': {'at': now, 'until': time.time() + 7200, 'until_text': now, 'message': 'limit'}}],
                  'clients': {'c1': {'id': 'c1', 'label': 'Navigateur QA', 'role': 'all', 'ai_provider': 'both', 'seen': now}},
                  'settings': {'provider': 'chatgpt', 'language': 'Deutsch (de-DE)', 'scene_count': 4, 'clip_seconds': 8, 'flow_model': 'gemini_omni_flash', 'flow_resolution': '720p', 'flow_cost': 12, 'query': 'q', 'daily_budget': 50},
                  'jobs': [{'id': cls.job, 'title': 'Épisode QA', 'brief': 'b', 'stage': 'clips', 'status': 'attention', 'created': now, 'updated': now,
@@ -59,6 +60,7 @@ class BrowserInterfaceTests(unittest.TestCase):
         self.assertIn('Tes épisodes, de l’idée à la vidéo finale.', html); self.assertIn('class="studio-card"', html); self.assertIn('Épisode QA', html)
         self.assertIn('1 connecteur(s) en ligne', html); self.assertIn('À vérifier', html)
         self.assertNotIn('Studio inaccessible', html)
+        self.assertIn('Limite Grok vidéos atteinte', html, 'wall banner on every page'); self.assertIn('data-forget-wall="g1"', html)
 
     def test_uncertain_clip_notice_and_confirmation_button(self):
         html = self.dom('#job=' + self.job)

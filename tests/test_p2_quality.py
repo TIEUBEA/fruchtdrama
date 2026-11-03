@@ -61,6 +61,18 @@ class ScheduleTests(unittest.TestCase):
         j['quality_speech_approval'] = key; j['status'] = 'running'; s.schedule_quality(j)
         self.assertEqual(j['stage'], 'cover'); self.assertEqual(j['quality_report']['auto']['approved_by'], 'owner')
 
+    def test_controls_none_skips_checks(self):
+        j = self.job(visual='uncertain'); j['config']['controls'] = 'none'; s.schedule_quality(j)
+        self.assertEqual(j['stage'], 'cover'); self.assertIn('Contrôles désactivés', j['events'][-1]['text'] if j['events'][-1]['text'].startswith('Contrôles') else j['events'][-2]['text'])
+
+    def test_controls_redo_regenerates_once_then_asks(self):
+        j = self.job(visual='uncertain'); j['config']['controls'] = 'redo'; s.schedule_quality(j)
+        self.assertEqual(j['stage'], 'clips'); self.assertEqual(j['auto_redone'], [0]); self.assertNotIn('clip', j['scenes'][0])
+        self.assertTrue(any('refait(s) une fois' in e['text'] for e in j['events']))
+        j['scenes'][0]['clip'] = 'c.mp4'; j['stage'] = 'quality'; j['status'] = 'running'
+        j['quality_report']['fingerprint'] = quality.fingerprint(j, s.job_dir(j)); s.schedule_quality(j)
+        self.assertEqual(j['status'], 'attention', 'second failure: the owner decides')
+
 
 if __name__ == '__main__':
     unittest.main()

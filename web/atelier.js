@@ -16,12 +16,21 @@ function navSubtitles(){const set=(p,t)=>{const s=document.querySelector(`nav [d
  const rows=filonRows();set('filon',rows.length?rows.length+' vidéo(s) relevée(s)':'les vidéos virales');
  const g=state.jobs.reduce((a,j)=>(a[stageGroup(j)]=(a[stageGroup(j)]||0)+1,a),{});
  set('studio',(g.draw||g.shoot||g.write)?[(g.write?g.write+' à écrire':''),(g.draw?g.draw+' à dessiner':''),(g.shoot?g.shoot+' à tourner':'')].filter(Boolean).join(' · '):g.ready?g.ready+' prête(s)':'où en est ton épisode');}
+// Atelier-like wall banner on every page: which service is at its limit, when it comes back.
+function wallBanner(){const now=Date.now()/1000,hh=t=>new Date(t*1000).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}),rows=[];
+ for(const q of state.quota_status||[])if(q.blocked)rows.push({label:q.label,until:q.retry_at,site:q.service.startsWith('claude')?'claude':'chatgpt',siteLabel:q.service.startsWith('claude')?'Claude':'ChatGPT',forget:`data-forget-quota="${esc(q.service)}"`});
+ for(const engine of ['grok','arena']){const acc=(state.engine_accounts||[]).filter(a=>a.engine===engine);if(acc.length&&acc.every(a=>a.wall&&a.wall.until>now)){const until=Math.min(...acc.map(a=>a.wall.until));rows.push({label:engine==='grok'?'Grok vidéos':'Arena vidéos',until,site:engine,siteLabel:engine==='grok'?'Grok':'Arena',forget:`data-forget-wall="${acc.find(a=>a.wall.until===until).id}"`});}}
+ return rows.map(r=>`<div class="wall"><span><b>Limite ${esc(r.label)} atteinte</b> : ça revient vers ${hh(r.until)} (estimation). Rien n’est perdu. Tu peux attendre, ou changer de compte ${esc(r.siteLabel)}.</span><div class="actions"><button class="secondary" data-site-open="${r.site}">Ouvrir ${esc(r.siteLabel)}</button><button class="secondary ok" ${r.forget}>J’ai changé de compte</button></div></div>`).join('')}
+// "En cours" in the menu, like the Atelier: the production being made right now.
+function runWidget(){const box=$('#runWidget');if(!box)return;const t=state.tasks.find(t=>t.status==='claimed'&&state.jobs.some(j=>j.id===t.job))||state.tasks.find(t=>t.status==='queued'&&state.jobs.some(j=>j.id===t.job&&j.status==='running'));
+ if(!t){box.innerHTML='';return}const j=state.jobs.find(j=>j.id===t.job),pc=progress(j);
+ box.innerHTML=`<small>EN COURS</small><button data-job="${j.id}" data-page-studio="1"><b>${esc(j.title)}</b><span>${esc(nextAction(j))}</span><i style="--p:${pc}%"></i></button>`;}
 function render(){if(!state)return;
  document.querySelectorAll('nav button,header [data-page]').forEach(b=>b.classList.toggle('active',b.dataset.page===page||(b.dataset.action==='new'&&page==='create')));
  $('#breadcrumb').innerHTML=`Espace de travail / <b>${({filon:'Le Filon',create:'Créer une vidéo',studio:selected?'Studio / Épisode':'Studio',connections:'Mes comptes',guide:'Mode d’emploi',library:'Studio'})[page]||'Studio'}</b>`;
  {const sub=document.querySelector('nav [data-page="connections"] small');if(sub&&state.sites){const n=siteMissing();sub.textContent=n?n+' à connecter':'tout est prêt';}}
  navSubtitles();paintIcons();
- $('#content').innerHTML=page==='filon'?filon():page==='create'?createPage():page==='connections'?connections():page==='guide'?guide():studio();
+ $('#content').innerHTML=wallBanner()+(page==='filon'?filon():page==='create'?createPage():page==='connections'?connections():page==='guide'?guide():studio());runWidget();
  if(page==='create')syncCreate();watchFilon();}
 
 // --- Le Filon: every cover loaded at once (local cache), denser grid ----------------------------
