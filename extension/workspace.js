@@ -13,22 +13,20 @@ globalThis.FruchtWorkspace={
  async ensure(chrome,{focus=false}={}){
   let id=await this.windowId(chrome);
   if(id===null){
-   const w=await chrome.windows.create({url:[this.settingsUrl(chrome),this.STUDIO],focused:true,type:'normal'});
+   // Like the Atelier: the window opens on the studio only; accounts and gateway live in its Mes comptes page.
+   const w=await chrome.windows.create({url:this.STUDIO,focused:true,type:'normal'});
    id=w.id;await chrome.storage.local.set({workspaceWindow:id});
-   const tabs=await chrome.tabs.query({windowId:id});
-   const settings=tabs.find(t=>(t.url||t.pendingUrl||'').startsWith(this.settingsUrl(chrome)));
-   if(settings)await chrome.tabs.update(settings.id,{pinned:true});
-   const studio=tabs.find(t=>(t.url||t.pendingUrl||'').startsWith(this.STUDIO));
-   if(studio)await chrome.tabs.update(studio.id,{active:true});
   }else if(focus)await chrome.windows.update(id,{focused:true});
   return id;
  },
- // Icon click: show the studio; the gateway settings stay one pinned tab away.
+ // Icon click: show the studio (one tab, no gateway tab).
  async open(chrome){
   const id=await this.ensure(chrome,{focus:true});
   const tabs=await chrome.tabs.query({windowId:id});
   const url=t=>t.url||t.pendingUrl||'';
-  if(!tabs.some(t=>url(t).startsWith(this.settingsUrl(chrome))))await chrome.tabs.create({windowId:id,url:this.settingsUrl(chrome),pinned:true,index:0,active:false});
+  // Older versions pinned a gateway tab: close it, its controls are now in the studio.
+  const old=tabs.filter(t=>url(t).startsWith(this.settingsUrl(chrome))).map(t=>t.id);
+  if(old.length)await chrome.tabs.remove(old);
   const studio=tabs.find(t=>url(t).startsWith(this.STUDIO));
   if(studio)await chrome.tabs.update(studio.id,{active:true});
   else await chrome.tabs.create({windowId:id,url:this.STUDIO,active:true});

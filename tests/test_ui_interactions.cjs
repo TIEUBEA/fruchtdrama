@@ -165,6 +165,12 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   assert.ok(await evaluate(`document.querySelector('.key-panel').innerText.includes('Clé du studio')&&!document.querySelector('.key-panel').innerText.includes(${JSON.stringify('')}+'token')`),'key panel');
   await evaluate(`document.querySelector('[data-add-service="moi.qa@x.com"][data-service="claude"]').click()`);
   await waitFor(async()=>(await (await fetch(base+'/api/state')).json()).accounts.find(a=>a.email==='moi.qa@x.com').services.claude,10000,'service ajouté sur la ligne');
+  // 12 ter. No gateway tab: its buttons live in Mes comptes › Navigateur and reach the extension through the studio.
+  await evaluate(`document.querySelector('[data-account-tab="bridge"]').click()`);
+  await waitFor(()=>evaluate(`!!document.querySelector('[data-bridge-action="register_flow"]')`),10000,'panneau navigateur');
+  await evaluate(`document.querySelector('[data-bridge-action="register_flow"]').click()`);
+  await waitFor(async()=>(await (await fetch(base+'/api/state')).json()).bridge_requests?.some(r=>r.type==='register_flow'),5000,'demande transmise');
+  await waitFor(()=>evaluate(`document.querySelector('.bridge-notice')?.innerText.includes('Demande envoyée')`),10000,'retour affiché');
   const emoji=/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B50}\u{2B06}\u{2190}-\u{21FF}\u{25A0}-\u{25FF}]/u;
   for(const pageName of ['filon','studio','connections','library','guide']){
    await evaluate(`document.querySelector('[data-page="${pageName}"]').click()`);await sleep(400);

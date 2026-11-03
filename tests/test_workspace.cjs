@@ -6,11 +6,12 @@ function harness(){
  const chrome={runtime:{getURL:p=>'chrome-extension://ext/'+p},
   storage:{local:{get:async k=>({[k]:store[k]}),set:async d=>Object.assign(store,d),remove:async k=>{delete store[k];}}},
   windows:{get:async id=>{if(!windows.has(id))throw Error('No window');return windows.get(id);},
-   create:async d=>{const w={id:nextWin++,...d};windows.set(w.id,w);log.push('window');for(const url of d.url)tab(w.id,{url});return w;},
+   create:async d=>{const w={id:nextWin++,...d};windows.set(w.id,w);log.push('window');for(const url of [].concat(d.url))tab(w.id,{url,active:true});return w;},
    update:async(id,d)=>{log.push('focus:'+id);return Object.assign(windows.get(id),d);}},
   tabs:{query:async q=>[...tabs.values()].filter(t=>q.windowId===undefined||t.windowId===q.windowId),
    create:async d=>{log.push('tab:'+d.url);return tab(d.windowId,d);},
    update:async(id,d)=>Object.assign(tabs.get(id),d),
+   remove:async ids=>{for(const id of [].concat(ids)){log.push('remove:'+id);tabs.delete(id);}},
    move:async(id,d)=>{log.push('move:'+id);tabs.get(id).windowId=d.windowId;return tabs.get(id);}}};
  const ctx={chrome};vm.createContext(ctx);
  vm.runInContext(fs.readFileSync(path.join(__dirname,'../extension/workspace.js'),'utf8'),ctx);
@@ -18,15 +19,17 @@ function harness(){
 }
 (async()=>{
  const h=harness();
- // 1. Icon click: one new window with the pinned gateway tab and the studio tab in front.
+ // 1. Icon click: one new window with the studio only (no gateway tab, like the Atelier).
  const id=await h.ws.open(h.chrome);
  assert.equal(h.windows.size,1);assert.equal(h.store.workspaceWindow,id);
  const inWindow=[...h.tabs.values()].filter(t=>t.windowId===id);
- assert.deepEqual(inWindow.map(t=>t.url),['chrome-extension://ext/popup.html','http://127.0.0.1:8840/']);
- assert.ok(inWindow[0].pinned,'gateway settings pinned');assert.ok(inWindow[1].active,'studio shown');
+ assert.deepEqual(inWindow.map(t=>t.url),['http://127.0.0.1:8840/']);assert.ok(inWindow[0].active,'studio shown');
+ // 1 bis. A gateway tab left by an older version is closed on the next click.
+ const old=h.tab(id,{url:'chrome-extension://ext/popup.html',pinned:true});
  // 2. Second click: same window refocused, nothing duplicated.
  await h.ws.open(h.chrome);
- assert.equal(h.windows.size,1);assert.equal([...h.tabs.values()].length,2);assert.ok(h.log.includes('focus:'+id));
+ assert.ok(h.log.includes('remove:'+old.id),'old gateway tab closed');
+ assert.equal(h.windows.size,1);assert.equal([...h.tabs.values()].length,1);assert.ok(h.log.includes('focus:'+id));
  // 3. Provider tabs are created inside the window.
  const chat=await h.ws.createTab(h.chrome,{url:'https://chatgpt.com/',active:true});assert.equal(chat.windowId,id);
  // 4. A registered Flow tab found in another window is moved in, session intact (same tab id).

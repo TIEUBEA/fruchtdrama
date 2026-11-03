@@ -20,7 +20,7 @@ async function waitFor(fn,timeout,label){const end=Date.now()+timeout;while(Date
   const id=await run('FruchtWorkspace.open(chrome)');
   assert.equal(await run('chrome.windows.getAll().then(w=>w.length)'),before+1,'one new window');
   const tabs=await run(`chrome.tabs.query({windowId:${id}}).then(t=>t.map(x=>({url:x.pendingUrl||x.url,pinned:x.pinned})))`);
-  assert.equal(tabs.length,2);assert.match(tabs[0].url,/^chrome-extension:\/\/.+\/popup\.html$/);assert.ok(tabs[0].pinned);assert.match(tabs[1].url,/^http:\/\/127\.0\.0\.1:8840\//);
+  assert.equal(tabs.length,1);assert.match(tabs[0].url,/^http:\/\/127\.0\.0\.1:8840\//);
   assert.equal(await run('FruchtWorkspace.open(chrome)'),id,'second click: same window');
   assert.equal(await run('chrome.windows.getAll().then(w=>w.length)'),before+1,'no duplicate window');
   const created=await run(`FruchtWorkspace.createTab(chrome,{url:'about:blank#provider',active:false}).then(t=>t.windowId)`);
@@ -30,6 +30,6 @@ async function waitFor(fn,timeout,label){const end=Date.now()+timeout;while(Date
   await run(`chrome.windows.remove(${id})`);await sleep(500);
   assert.equal(await run(`chrome.storage.local.get('workspaceWindow').then(x=>x.workspaceWindow??null)`),null,'closing the window forgets it');
   ws.close();
-  console.log('Fenêtre unique vérifiée dans Chromium réel : fenêtre dédiée, onglet passerelle épinglé, studio, onglets créés et déplacés dedans, oubli à la fermeture.');
+  console.log('Fenêtre unique vérifiée dans Chromium réel : fenêtre dédiée ouverte sur le studio seul (aucun onglet passerelle), onglets créés et déplacés dedans, oubli à la fermeture.');
  }finally{chrome.kill('SIGKILL');await sleep(300);fs.rmSync(temp,{recursive:true,force:true});}
 })().catch(e=>{console.error(e);process.exitCode=1;});

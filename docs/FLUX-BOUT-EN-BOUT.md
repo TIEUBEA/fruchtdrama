@@ -1,6 +1,6 @@
 # FruchtDrama — Flux de bout en bout : une vidéo entièrement automatisée
 
-Version 0.1.53 (branches `sudf` / `sudf-ui`). Ce document décrit ce qui se passe, étape par étape,
+Version 0.1.54 (branches `sudf` / `sudf-ui`). Ce document décrit ce qui se passe, étape par étape,
 quand vous lancez une production sans intervenir, et ce que vous devez préparer une seule fois.
 
 ## A. Préparation unique (environ 30 minutes)
@@ -8,7 +8,7 @@ quand vous lancez une production sans intervenir, et ce que vous devez préparer
 1. Installer : voir `INSTALLATION.md` (Python 3.11/3.12, Chrome, FFmpeg, `Installer.cmd`).
 2. Lancer le studio : `Lancer-Studio.cmd` → http://127.0.0.1:8840.
 3. Charger l'extension : `chrome://extensions` → Mode développeur → **Charger l'extension non empaquetée** → dossier `extension`. Épingler l'icône.
-4. Cliquer sur l'icône : la **fenêtre FruchtDrama** s'ouvre (onglet Passerelle épinglé + Studio). Tout se passe dans cette fenêtre.
+4. Cliquer sur l'icône : la **fenêtre FruchtDrama** s'ouvre sur le studio. Tout se passe dans cette fenêtre et dans la page du studio (plus d'onglet Passerelle).
 5. Rien à copier : l'extension enregistre seule la clé cachée du studio au premier clic (Mes comptes affiche « Clé enregistrée »).
 6. Dans la fenêtre, se connecter soi-même à : ChatGPT, TikTok, Google Flow (et Grok / LMArena si utilisés).
 7. Flow : Mes comptes → profil avec solde réel ; ouvrir un projet Flow → Passerelle → **Mémoriser le compte Flow de cet onglet**. Répéter pour chaque compte Google (ajoutés au même profil Chrome). Cocher **Ouvrir Flow et passer au compte suivant automatiquement**.

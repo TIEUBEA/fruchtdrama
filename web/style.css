@@ -74,3 +74,6 @@ body.dark .site-card{background:#2b2e37;border-color:#3a3f4a}@media(max-width:11
 table.unified td small{display:block;color:var(--muted)}.link-btn{background:none;border:0;padding:2px 0;color:var(--muted);font-size:13px;text-decoration:underline;cursor:pointer;display:block}.link-btn:hover{color:var(--ink)}
 .manual-pair summary{cursor:pointer;color:var(--muted);margin:8px 0}
 @media(max-width:900px){.unified-add{grid-template-columns:1fr}}
+.browser-actions{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}.browser-actions>div{display:flex;flex-direction:column;gap:8px;border:1px solid var(--line);border-radius:12px;padding:16px}.browser-actions small{color:var(--muted)}.browser-actions button{margin-top:auto}
+.bridge-notice{margin-top:16px;padding:10px 14px;border-radius:10px;background:var(--soft,#f4f1ea)}.bridge-notice.ok{border-left:4px solid #3c8a4e}.bridge-notice.bad{border-left:4px solid #b54a3a}.bridge-notice time{color:var(--muted);font-size:13px;margin-left:8px}
+@media(max-width:900px){.browser-actions{grid-template-columns:1fr}}

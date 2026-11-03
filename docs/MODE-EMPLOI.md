@@ -80,9 +80,7 @@ Si le message « Port 8840 utilisé par une autre installation » apparaît : un
 ## 6. Ouvrir la fenêtre FruchtDrama et appairer
 
 1. Cliquer sur l'icône **FruchtDrama** dans la barre de Chrome.
-2. Une **nouvelle fenêtre** s'ouvre. **Tout se passe dans cette fenêtre** : le studio, ChatGPT, Claude, TikTok, Flow et l'ouverture des comptes. Elle contient :
-   - un premier onglet épinglé **Passerelle** ;
-   - l'onglet **Studio**.
+2. Une **nouvelle fenêtre** s'ouvre sur le **Studio**. **Tout se passe dans cette fenêtre et dans la page du studio** : ChatGPT, Claude, TikTok, Flow, l'ouverture des comptes. Depuis 0.1.54 il n'y a plus d'onglet Passerelle : ses boutons sont dans Mes comptes › **Navigateur**.
 3. **Rien à copier** (depuis 0.1.53) : au premier clic, l'extension enregistre seule la clé du studio, la garde cachée et active les tâches. Mes comptes affiche « Clé du studio : Enregistrée ».
 4. Le badge en haut du studio passe à « en ligne » sous 30 secondes.
 5. Après une réinstallation de l'extension : Mes comptes → **Autoriser une nouvelle extension**, puis recliquer sur l'icône.
@@ -104,7 +102,7 @@ Toujours **vous-même**, dans la fenêtre FruchtDrama. Le studio ne demande ni n
 **Un compte Flow**
 1. **Mes comptes** → créer un profil Flow, indiquer le **solde réel** de crédits.
 2. Dans la fenêtre FruchtDrama, ouvrir https://labs.google/fx/tools/flow, se connecter, ouvrir (ou créer) un projet.
-3. Onglet **Passerelle** → **Mémoriser le compte Flow de cet onglet**. Le dernier onglet Flow consulté est utilisé.
+3. Studio → Mes comptes › **Navigateur** → **Mémoriser le compte Flow ouvert**. Le dernier onglet Flow consulté est utilisé ; le résultat s'affiche sous les boutons.
 4. Vérifier l'adresse e-mail affichée dans Mes comptes.
 
 **Grok Imagine et LMArena (expérimental)**
@@ -198,6 +196,7 @@ Quand ChatGPT refuse une image, le studio la redemande seul deux fois avec une f
 
 | Version | Ce qui change pour vous |
 |---|---|
+| 0.1.54 | Plus d'onglet **Passerelle** : tout se fait dans le studio (Mes comptes › Navigateur : mémoriser le compte Flow, ranger les onglets, récupérer une réponse). Recharger l'extension. |
 | 0.1.53 | **Une adresse, plusieurs services** : ajoutée une seule fois dans Mes comptes. **Clé du studio** enregistrée seule au premier clic sur l'icône, jamais recopiée (section 6). Recharger l'extension. |
 | sudf-ui | Interface façon Atelier : **Le Filon**, **Créer une vidéo** d'un lien TikTok ou d'une idée, thème sombre (◐), police et images agrandies (clic pour agrandir). |
 | 0.1.52 | **Écrire la suite** d'un épisode (série) ; **Kit de publication**. |

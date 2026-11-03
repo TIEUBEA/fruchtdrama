@@ -258,6 +258,11 @@ async function handleRequests(cfg){
  for(const r of requests||[]){
   if(r.type==='open'&&FruchtSites.list[r.site]){const tab=await FruchtWorkspace.createTab(chrome,{url:FruchtSites.list[r.site].url,active:true});await chrome.windows.update(tab.windowId,{focused:true}).catch(()=>{});}
   if(r.type==='check'){const sites=await FruchtSites.check(chrome,FruchtWorkspace);await call('/api/bridge/sites',{client:cfg.client,sites});}
+  // Former gateway-tab buttons, now clicked in the studio's Mes comptes page.
+  if(['register_flow','tidy','recover'].includes(r.type)){
+   let result;try{result=r.type==='register_flow'?await registerFlow():r.type==='tidy'?await tidyChats():await recover(r.job);}catch(e){result={ok:false,error:e.message};}
+   await call('/api/bridge/notice',{client:cfg.client,action:r.type,ok:!!result?.ok,text:result?.message||result?.error||'Terminé.'});
+  }
  }
 }
 // Hidden key (Atelier-like): pair once with the local studio, never ask the owner to copy a code.
@@ -265,7 +270,7 @@ async function autoPair(){
  const cfg=await chrome.storage.local.get(['client','token']);if(cfg.client&&cfg.token)return false;
  const r=await fetch(BASE+'/api/bridge/auto-pair',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({label:'Fenêtre FruchtDrama'})});
  const b=await r.json();if(!r.ok)throw Error(b.error||'Appairage automatique impossible');
- await chrome.storage.local.set({client:b.client,token:b.token,role:'all',ai_provider:'both',label:'Fenêtre FruchtDrama',enabled:true,auto_paired:true,status:b.enabled?'Appairé automatiquement au studio local.':'Appairé ; activez ce navigateur dans Mes comptes › Passerelle (un autre navigateur est déjà actif).'});
+ await chrome.storage.local.set({client:b.client,token:b.token,role:'all',ai_provider:'both',label:'Fenêtre FruchtDrama',enabled:true,auto_paired:true,status:b.enabled?'Appairé automatiquement au studio local.':'Appairé ; activez ce navigateur dans Mes comptes › Navigateur (un autre navigateur est déjà actif).'});
  return true;
 }
 async function poll(){

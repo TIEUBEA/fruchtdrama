@@ -16,7 +16,7 @@ import quotas
 import power
 import maintenance
 import series
-VERSION='0.1.53'
+VERSION='0.1.54'
 import sys
 import traceback
 
@@ -1234,11 +1234,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 elif path=='/api/sites':
                     action=b.get('action')
                     if action=='open' and b.get('site') not in SITES:raise ValueError('Site inconnu')
-                    if action not in ('open','check'):raise ValueError('Action inconnue')
+                    if action not in ('open','check','register_flow','tidy','recover'):raise ValueError('Action inconnue')
+                    if action=='recover' and not job_by(b.get('job')):raise ValueError('Production inconnue')
                     queue=STATE.setdefault('bridge_requests',[])
-                    if not any(r==({'type':action,'site':b.get('site')} if action=='open' else {'type':'check'}) for r in queue):
-                        queue.append({'type':'open','site':b['site']} if action=='open' else {'type':'check'})
+                    item={'type':action,'site':b.get('site')} if action=='open' else {'type':action,'job':b.get('job')} if action=='recover' else {'type':action}
+                    if item not in queue:queue.append(item)
+                    if action in ('register_flow','tidy','recover'):STATE['bridge_notice']={'at':now(),'action':action,'pending':True,'text':'Demande envoyée à la fenêtre FruchtDrama…'}
                     if action=='check':STATE.setdefault('sites',{})['_requested']=now()
+                elif path=='/api/bridge/notice':
+                    if b.get('client') not in STATE['clients']:raise ValueError('Passerelle inconnue')
+                    STATE['bridge_notice']={'at':now(),'action':str(b.get('action',''))[:20],'ok':bool(b.get('ok')),'text':str(b.get('text',''))[:300]}
+                    save();return self.send_json({'ok':True})
                 elif path=='/api/bridge/sites':
                     c=STATE['clients'].get(b.get('client'))
                     if not c:raise ValueError('Passerelle inconnue')

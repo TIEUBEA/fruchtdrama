@@ -9,6 +9,21 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 Prochain : P3 (séries, idées, kit de publication, veille, 16:9) et P4 (montage avancé, sous-titres karaoké, rapport de panne). Voir `docs/sudf/REPRISE.md`.
 
+## 0.1.54 — tout dans la page du studio, plus d'onglet Passerelle (03/11/2026)
+
+Comme l'Atelier : l'extension n'a plus de page à elle ; tout se règle dans le studio.
+
+### Changé
+- La fenêtre FruchtDrama s'ouvre sur le studio seul. L'ancien onglet Passerelle épinglé est fermé au clic suivant ; il reste accessible en secours par « Options » de l'extension.
+- Mes comptes › **Navigateur** : état de l'extension, **Mémoriser le compte Flow ouvert**, **Ranger les onglets**, **Récupérer une réponse** ; le résultat de l'extension s'affiche dans la page (`bridge_notice`).
+
+### Ajouté
+- Script de contenu `studio-bridge.js` (page du studio uniquement) : signale la présence de l'extension et la réveille aussitôt après chaque action (plus d'attente de 30 s).
+- `POST /api/sites` accepte `register_flow`, `tidy`, `recover` ; `POST /api/bridge/notice` (extension authentifiée).
+
+### Tests
+- `test_workspace.cjs` (studio seul, ancien onglet fermé), `test_workspace_chrome.cjs` (Chromium réel), `test_unified_accounts.py` (actions transmises une seule fois, retour affiché), étape 12 ter de `test_ui_interactions.cjs`.
+
 ## 0.1.53 — comptes par adresse et clé cachée (03/11/2026)
 
 Sur le modèle de l'Atelier Gourmand : une adresse s'ajoute une seule fois, la clé ne se recopie jamais.

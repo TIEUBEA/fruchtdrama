@@ -98,6 +98,18 @@ class HttpTests(unittest.TestCase):
         self.req('/api/key/reset', {})
         self.assertTrue(self.req('/api/bridge/auto-pair', {}, 'chrome-extension://other')['token'])
 
+    def test_gateway_actions_from_studio_page(self):
+        b = self.req('/api/bridge/auto-pair', {}, EXT); h = {'Authorization': 'Bearer ' + b['token']}
+        self.req('/api/sites', {'action': 'register_flow'}); self.req('/api/sites', {'action': 'tidy'}); self.req('/api/sites', {'action': 'tidy'})
+        self.assertEqual(self.error('/api/sites', {'action': 'recover', 'job': 'nope'})[0], 400)
+        self.assertEqual(self.error('/api/sites', {'action': 'rm -rf'})[0], 400)
+        st = json.load(urllib.request.urlopen(self.base + '/api/state')); self.assertTrue(st['bridge_notice']['pending'])
+        r = urllib.request.Request(self.base + '/api/bridge/requests?client=' + b['client'], headers=h)
+        self.assertEqual(json.load(urllib.request.urlopen(r)), [{'type': 'register_flow'}, {'type': 'tidy'}], 'queued once each')
+        self.req('/api/bridge/notice', {'client': b['client'], 'action': 'tidy', 'ok': True, 'text': '2 onglets rangés'}, headers=h)
+        st = json.load(urllib.request.urlopen(self.base + '/api/state'))
+        self.assertEqual(st['bridge_notice']['text'], '2 onglets rangés'); self.assertNotIn('pending', st['bridge_notice'])
+
     def test_auto_pair_second_browser_starts_disabled(self):
         first = self.req('/api/bridge/auto-pair', {}, EXT)
         s.STATE['clients'][first['client']]['seen'] = s.now()
