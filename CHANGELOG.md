@@ -15,7 +15,7 @@ Comme l'Atelier : l'extension n'a plus de page à elle ; tout se règle dans le 
 
 ### Changé
 - La fenêtre FruchtDrama s'ouvre sur le studio seul. L'ancien onglet Passerelle épinglé est fermé au clic suivant ; il reste accessible en secours par « Options » de l'extension.
-- Mes comptes › **Navigateur** : état de l'extension, **Mémoriser le compte Flow ouvert**, **Ranger les onglets**, **Récupérer une réponse** ; le résultat de l'extension s'affiche dans la page (`bridge_notice`).
+- Mes comptes › **Navigateur** : **Oublier** un navigateur hors ligne ; état de l’extension, **Mémoriser le compte Flow ouvert**, **Ranger les onglets**, **Récupérer une réponse** ; le résultat de l'extension s'affiche dans la page (`bridge_notice`).
 
 ### Ajouté
 - Script de contenu `studio-bridge.js` (page du studio uniquement) : signale la présence de l'extension et la réveille aussitôt après chaque action (plus d'attente de 30 s).

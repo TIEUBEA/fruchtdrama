@@ -110,6 +110,13 @@ class HttpTests(unittest.TestCase):
         st = json.load(urllib.request.urlopen(self.base + '/api/state'))
         self.assertEqual(st['bridge_notice']['text'], '2 onglets rangés'); self.assertNotIn('pending', st['bridge_notice'])
 
+    def test_forget_offline_browser_only(self):
+        b = self.req('/api/bridge/auto-pair', {}, EXT)
+        s.STATE['clients'][b['client']]['seen'] = s.now()
+        self.assertIn('en ligne', self.error('/api/client', {'id': b['client'], 'forget': True})[1])
+        s.STATE['clients'][b['client']]['seen'] = '2026-01-01T00:00:00+00:00'
+        self.assertNotIn(b['client'], self.req('/api/client', {'id': b['client'], 'forget': True})['clients'])
+
     def test_auto_pair_second_browser_starts_disabled(self):
         first = self.req('/api/bridge/auto-pair', {}, EXT)
         s.STATE['clients'][first['client']]['seen'] = s.now()

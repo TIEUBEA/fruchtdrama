@@ -1230,7 +1230,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     c=STATE['clients'].get(b.get('id'))
                     if not c:raise ValueError('Passerelle inconnue')
                     if any(t['status']=='claimed' and t.get('client')==b.get('id') for t in STATE['tasks']) and b.get('disabled'):raise ValueError('Cette passerelle exécute une tâche : attendez sa fin')
-                    c['disabled']=bool(b.get('disabled'))
+                    if b.get('forget'):
+                        # Only an offline browser can be forgotten; it would have to pair again.
+                        if time.time()-flow_credits.seconds(c.get('seen'))<75:raise ValueError('Ce navigateur est en ligne : désactivez-le plutôt')
+                        if any(t['status']=='claimed' and t.get('client')==c['id'] for t in STATE['tasks']):raise ValueError('Cette passerelle exécute une tâche : attendez sa fin')
+                        del STATE['clients'][c['id']]
+                    else:c['disabled']=bool(b.get('disabled'))
                 elif path=='/api/sites':
                     action=b.get('action')
                     if action=='open' and b.get('site') not in SITES:raise ValueError('Site inconnu')
