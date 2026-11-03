@@ -40,7 +40,8 @@ def choose(state, current, cost):
     selected = next((p for p in profiles if p['id'] == current), None)
     automatic=state.get('settings', {}).get('flow_auto', False)
     def eligible(p):
-        return route(p) and state['clients'].get(p.get('flow_client'),{}).get('role') in ('all','flow')
+        # Accounts detected in the window carry their slot; older registrations stay usable only if routed.
+        return route(p) and state['clients'].get(p.get('flow_client'),{}).get('role') in ('all','flow') and not state['clients'].get(p.get('flow_client'),{}).get('disabled')
     if selected and not selected.get('blocked') and selected.get('balance', 0) >= cost and (not automatic or eligible(selected)):
         return selected
     if not automatic:
