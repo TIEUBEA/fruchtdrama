@@ -95,6 +95,18 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(self.error('/api/account', {'email': 'x', 'services': ['grok']})[0], 400)
         self.assertEqual(self.error('/api/account', {'email': 'e@x.com', 'services': ['grok']}, 'http://evil.test')[0], 403)
 
+    def test_delete_all_backs_up_and_keeps_busy(self):
+        for e in ('a@x.com', 'b@x.com', 'c@x.com'):
+            self.req('/api/account', {'email': e, 'services': ['flow', 'grok']})
+        s.STATE['profiles'].append({'id': 'nomail', 'label': 'Flow', 'balance': 0})
+        s.STATE['tasks'].append({'id': 't', 'job': 'j', 'status': 'claimed', 'kind': 'engine_video', 'payload': {'engine': 'grok', 'account': {'email': 'b@x.com'}}})
+        st = self.req('/api/account', {'delete_all': True})
+        self.assertEqual(st['removed'], 3); self.assertEqual(st['kept'], ['b@x.com'])
+        self.assertEqual([a['email'] for a in st['accounts']], ['b@x.com'])
+        backup = s.DATA / 'sauvegardes' / st['backup']
+        self.assertEqual(len(json.loads(backup.read_text('utf-8'))['identities']), 3, 'state saved before removal')
+        self.assertEqual(self.error('/api/account', {'delete_all': True}, 'http://evil.test')[0], 403)
+
     def test_auto_pair_once_hidden_key(self):
         self.assertEqual(self.error('/api/bridge/auto-pair', {}, 'http://evil.test')[0], 403)
         b = self.req('/api/bridge/auto-pair', {'label': 'Fenêtre'}, EXT)

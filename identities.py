@@ -143,3 +143,27 @@ def view(state, now, clip_cost=12):
         rows.append({'email': email, 'label': label, 'services': services,
                      'order': [s for s in SERVICES if s in services]})
     return rows
+
+
+def delete_all(state, delete_profile):
+    """Remove every address, Flow profile and Grok / Arena account; accounts busy with a clip are kept.
+
+    Returns (removed, kept). The caller backs up the state first.
+    """
+    emails = list(dict.fromkeys([i['email'] for i in state.setdefault('identities', [])]
+                                + [e for e in (profile_email(p) for p in state.setdefault('profiles', [])) if e]
+                                + [a['email'] for a in state.setdefault('engine_accounts', [])]))
+    removed, kept = 0, []
+    for email in emails:
+        try:
+            delete(state, email, delete_profile)
+            removed += 1
+        except ValueError:
+            kept.append(email)
+    for p in [p for p in state['profiles'] if not profile_email(p)]:
+        try:
+            delete_profile(p['id'])
+            removed += 1
+        except ValueError:
+            kept.append(p.get('label') or p['id'])
+    return removed, kept

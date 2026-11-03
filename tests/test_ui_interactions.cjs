@@ -181,6 +181,7 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   assert.deepEqual(unified.order,['chatgpt','flow','grok','arena']);assert.equal(unified.services.flow.balance,40);
   await evaluate(`document.querySelector('.more-accounts').open=true`);
   assert.ok(await evaluate(`!!document.querySelector('[data-bridge-action="scan_flow"]')`),'Détecter mes comptes');
+  assert.ok(await evaluate(`/Retirer tous les comptes \\(\\d+\\)/.test(document.querySelector('[data-delete-all-accounts]')?.textContent||'')`),'bouton retirer tous les comptes');
   await waitFor(()=>evaluate(`[...document.querySelectorAll('table.unified tbody tr')].filter(r=>r.textContent.includes('moi.qa@x.com')).length===1`),10000,'une ligne par adresse');
   assert.ok(await evaluate(`document.querySelector('.key-panel').textContent.includes('Clé du studio')&&!document.querySelector('.key-panel').textContent.includes(${JSON.stringify('')}+'token')`),'key panel');
   await evaluate(`document.querySelector('[data-add-service="moi.qa@x.com"][data-service="claude"]').click()`);

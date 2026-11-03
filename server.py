@@ -19,7 +19,7 @@ import quotas
 import power
 import maintenance
 import series
-VERSION='0.1.61'
+VERSION='0.1.62'
 import sys
 import traceback
 
@@ -1357,7 +1357,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         if 'chrome_profile' in b:p['chrome_profile']=flow_accounts.chrome_profile(b['chrome_profile'])
                     else: STATE['profiles'].append({'id':uid(),'label':str(b.get('label','Flow'))[:60],'balance':balance,'checked':now()})
                 elif path=='/api/account':
-                    if b.get('delete'):identities.delete(STATE,b.get('email'),delete_profile)
+                    if b.get('delete_all'):
+                        # Never delete without a backup: copy the state before removing every account.
+                        backup=DATA/'sauvegardes'/('comptes-avant-tout-retirer-'+dt.datetime.now().strftime('%Y%m%d-%H%M%S')+'.json');backup.parent.mkdir(exist_ok=True)
+                        backup.write_text(json.dumps(STATE,ensure_ascii=False,indent=2),'utf-8')
+                        removed,kept=identities.delete_all(STATE,delete_profile);save()
+                        return self.send_json({**public_state(),'removed':removed,'kept':kept,'backup':backup.name})
+                    elif b.get('delete'):identities.delete(STATE,b.get('email'),delete_profile)
                     elif b.get('remove_service'):identities.remove_service(STATE,b.get('email'),b.get('remove_service'),delete_profile)
                     else:identities.add(STATE,b.get('email'),b.get('services'),b.get('label',''),b.get('balance',0),uid)
                 elif path=='/api/key/reset':
