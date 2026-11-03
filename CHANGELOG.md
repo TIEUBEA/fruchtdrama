@@ -5,6 +5,11 @@ correspondante (P0-xx, P1-x, P2-xx) détaillée dans `docs/sudf/`. Guide pour re
 `docs/sudf/REPRISE.md`. **Mode d'emploi détaillé** (installer, lancer, utiliser), mis à jour à chaque
 version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, version par version).
 
+## 0.1.61 — 03/11/2026
+- Recharge quotidienne des crédits Flow : à la première dépense d'un compte, le studio note l'heure de retour des crédits (24 h plus tard). Mes comptes affiche « Crédits de retour dans 3 h 12 ». À l'heure dite, la fenêtre FruchtDrama relit seule tous les soldes ; si les crédits ne sont pas revenus, nouvel essai toutes les heures.
+- Rotation : les comptes dont le minuteur tourne déjà sont utilisés en premier ; les comptes pleins sont gardés pour la suite.
+- 23 adresses Google ajoutées (sans mot de passe) ; liste dans Documentation/MES-COMPTES.md.
+
 ## Non publié (branche `sudf`)
 
 Prochain : P3 (séries, idées, kit de publication, veille, 16:9) et P4 (montage avancé, sous-titres karaoké, rapport de panne). Voir `docs/sudf/REPRISE.md`.

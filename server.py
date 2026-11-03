@@ -10,7 +10,7 @@ import quality
 import errors
 import engines
 import engine_accounts
-import identities
+import identities, flow_refill
 import ideas
 import thumbs
 import originality
@@ -19,7 +19,7 @@ import quotas
 import power
 import maintenance
 import series
-VERSION='0.1.60'
+VERSION='0.1.61'
 import sys
 import traceback
 
@@ -116,6 +116,14 @@ def job_dir(j):
     d=safe_child(DATA/'jobs',j['id']); d.mkdir(parents=True,exist_ok=True); return d
 def asset_url(j, file): return f"/media/{j['id']}/{file}"
 
+def refill_check(at=None):
+    """A Flow account's daily credits are due: ask the window to read every balance again (at most every 10 min)."""
+    at=at or time.time()
+    if not flow_refill.due(STATE['profiles'],at) or at-STATE.get('refill_requested',-1e9)<600:return False
+    queue=STATE.setdefault('bridge_requests',[])
+    if {'type':'scan_flow'} not in queue:queue.append({'type':'scan_flow'})
+    STATE['refill_requested']=at;save();return True
+
 def flow_dispatch_tick():
     """Wake only the one browser needed for the next queued Flow clip."""
     pending=None
@@ -126,6 +134,7 @@ def flow_dispatch_tick():
             if j['stage']=='clips' and j['status']=='waiting_credit':
                 if flow_accounts.choose(STATE,j.get('flow_profile'),j['config']['flow_cost']):j['status']='running'
             if j['status']=='running':schedule(j)
+        refill_check()
         task=next((t for t in STATE['tasks'] if t['kind']=='flow_video' and t['status']=='queued' and job_by(t['job'])['status']=='running'),None)
         if not task:
             p=flow_credits.prepare(STATE,time.time())
@@ -520,7 +529,7 @@ def flow_scan(state,client,accounts):
             # No project yet: each production creates its own project from this account's home page.
             p['flow_url']=f"https://flow.google.com/u/{int(a.get('slot',0))}/project/home";p['flow_url_home']=True
         if isinstance(a.get('balance'),int) and 0<=a['balance']<=100000:
-            p['balance']=a['balance'];p['credit_source']='read';p['checked']=now();p.pop('blocked',None) if a['balance']>0 else p.update(blocked='credits')
+            flow_refill.read(p,a['balance'],time.time(),int(state.get('settings',{}).get('flow_daily',flow_refill.DAILY)));p['balance']=a['balance'];p['credit_source']='read';p['checked']=now();p.pop('blocked',None) if a['balance']>0 else p.update(blocked='credits')
         names.append(email)
     state.setdefault('settings',{})['flow_auto']=True
     total=sum(int(x.get('balance') or 0) for x in state['profiles'] if (x.get('flow_email') or '') in names)
@@ -1135,7 +1144,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             if t['payload'].get('dry_run'):
                                 # A dry run never sends: nothing to reserve (P1-4).
                                 t['status']='claimed'; t['client']=client; t['claimed']=now(); event(j,'Essai à blanc : préparation de '+t['slot']+' dans Flow, sans envoi.'); save(); return self.send_json(t)
-                            p['balance']-=cost;t['reservation']={'profile':p['id'],'amount':cost,'refunded':False}; event(j,f"Réservation prudente de {cost} crédits sur {p['label']}. En cas d’échec, vérifier le solde réel avant de le réajuster.")
+                            p['balance']-=cost;flow_refill.spent(p,time.time());t['reservation']={'profile':p['id'],'amount':cost,'refunded':False}; event(j,f"Réservation prudente de {cost} crédits sur {p['label']}. En cas d’échec, vérifier le solde réel avant de le réajuster.")
                         t['status']='claimed'; t['client']=client; t['claimed']=now(); event(j,('Essai à blanc : préparation de '+t['slot']+' dans '+engines.ENGINES[t['payload']['engine']]['label']+', sans envoi.') if t['kind']=='engine_video' and t['payload'].get('dry_run') else 'Connecteur en cours : '+t['slot']); save(); return self.send_json(t)
                     save(); return self.send_json(None)
                 if path=='/api/bridge/status':

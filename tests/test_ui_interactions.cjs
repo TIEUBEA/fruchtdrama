@@ -174,15 +174,15 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   const flow=await waitFor(async()=>(await (await fetch(base+'/api/state')).json()).profiles.find(p=>p.label==='flow.qa@x.com'),10000,'compte Flow ajouté');
   assert.equal(flow.balance,88);
   await evaluate(`document.querySelector('[data-account-tab="limits"]').click()`);
-  await waitFor(()=>evaluate(`document.querySelector('table.accounts').innerText.includes('flow.qa@x.com')`),10000,'compte Flow affiché');
+  await waitFor(()=>evaluate(`[...document.querySelectorAll('table.accounts')].some(t=>t.innerText.includes('flow.qa@x.com'))`),10000,'compte Flow affiché');
   // 12 bis. Unified accounts: one address, several services, one row; hidden studio key.
   await evaluate(`(()=>{const f=document.querySelector('#accountForm');f.email.value='Moi.QA@x.com';f.balance.value='40';[...f.querySelectorAll('[name=services]')].forEach(c=>c.checked=['chatgpt','flow','grok','arena'].includes(c.value));f.requestSubmit();return true})()`);
   const unified=await waitFor(async()=>(await (await fetch(base+'/api/state')).json()).accounts.find(a=>a.email==='moi.qa@x.com'),10000,'compte unifié ajouté');
   assert.deepEqual(unified.order,['chatgpt','flow','grok','arena']);assert.equal(unified.services.flow.balance,40);
   await evaluate(`document.querySelector('.more-accounts').open=true`);
   assert.ok(await evaluate(`!!document.querySelector('[data-bridge-action="scan_flow"]')`),'Détecter mes comptes');
-  await waitFor(()=>evaluate(`[...document.querySelectorAll('table.unified tbody tr')].filter(r=>r.innerText.includes('moi.qa@x.com')).length===1`),10000,'une ligne par adresse');
-  assert.ok(await evaluate(`document.querySelector('.key-panel').innerText.includes('Clé du studio')&&!document.querySelector('.key-panel').innerText.includes(${JSON.stringify('')}+'token')`),'key panel');
+  await waitFor(()=>evaluate(`[...document.querySelectorAll('table.unified tbody tr')].filter(r=>r.textContent.includes('moi.qa@x.com')).length===1`),10000,'une ligne par adresse');
+  assert.ok(await evaluate(`document.querySelector('.key-panel').textContent.includes('Clé du studio')&&!document.querySelector('.key-panel').textContent.includes(${JSON.stringify('')}+'token')`),'key panel');
   await evaluate(`document.querySelector('[data-add-service="moi.qa@x.com"][data-service="claude"]').click()`);
   await waitFor(async()=>(await (await fetch(base+'/api/state')).json()).accounts.find(a=>a.email==='moi.qa@x.com').services.claude,10000,'service ajouté sur la ligne');
   // 12 ter. No gateway tab: its buttons live in Mes comptes › Navigateur and reach the extension through the studio.

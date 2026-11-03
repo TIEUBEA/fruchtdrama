@@ -5,6 +5,8 @@ import re
 import subprocess
 import urllib.parse
 
+import flow_refill
+
 
 def project_url(value):
     u = urllib.parse.urlsplit(str(value))
@@ -46,7 +48,7 @@ def choose(state, current, cost):
         return selected
     if not automatic:
         return None
-    return next((p for p in profiles if eligible(p) and p.get('balance', 0) >= cost), None)
+    return next((p for p in flow_refill.order(profiles) if eligible(p) and p.get('balance', 0) >= cost), None)
 
 
 def chrome_profile(value):
