@@ -12,6 +12,7 @@
 | Comptes | Une adresse = plusieurs services (ChatGPT, Claude, Flow, Grok, Arena), ajoutée une seule fois ; clé du studio enregistrée seule et cachée | 0.1.53 |
 | Originalité | Score estimé avant publication, conseils pour s'éloigner de l'original ; alerte dès la fiche pour une recréation | 0.1.56 |
 | Filon | Chiffres réels (vues, vues/h, croissance, engagement, durée, compte), onglets Viral / Toutes / Comptes, filtres, suivi de comptes, vidéos lancées seules | 0.1.56 |
+| Versions | « + Version horizontale 16:9 » (planches redessinées en paysage, clips 16:9, montage 1280×720) et « Langues » (mêmes planches, répliques, voix et clips refaits) | 0.1.58 |
 | Séries | « Écrire la suite » avec personnages réutilisés | 0.1.52 |
 | Publication | Kit : titre, description, hashtags, premier commentaire, créneaux | 0.1.52 |
 | Assistance | Rapport de panne sans secret ; nettoyage avec sauvegarde ; suppression vers la corbeille | 0.1.51 |

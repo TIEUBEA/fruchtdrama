@@ -38,13 +38,13 @@ def compare(expected,transcript,language,probability):
     if language and probability>=.8 and language not in ('de','fr','en'):issues.append('La langue détectée ne correspond à aucune langue de création autorisée.')
     return round(ratio,3),issues
 
-def technical(path,expected=(7.5,8.5)):
+def technical(path,expected=(7.5,8.5),horizontal=False):
     p=subprocess.run([shutil.which('ffprobe') or 'ffprobe','-v','error','-show_entries','format=duration:stream=codec_type,width,height,duration,start_time','-of','json',str(path)],capture_output=True,text=True,timeout=30)
     if p.returncode:raise ValueError('Clip illisible par ffprobe')
     data=json.loads(p.stdout);streams=data.get('streams',[]);video=next((x for x in streams if x['codec_type']=='video'),{})
     errors=[];duration=float(data.get('format',{}).get('duration',0))
     if not expected[0]<=duration<=expected[1]:errors.append(f'Durée incompatible avec le moteur vidéo ({expected[0]:g} à {expected[1]:g} s attendues).')
-    if video.get('height',0)<=video.get('width',0):errors.append('Vidéo absente ou non verticale.')
+    if (video.get('height',0)>video.get('width',0))==horizontal or not video:errors.append('Vidéo absente ou mauvaise orientation ('+('horizontale' if horizontal else 'verticale')+' attendue).')
     audio=next((x for x in streams if x['codec_type']=='audio'),None)
     if not audio:errors.append('Piste audio absente.')
     if audio and abs(float(audio.get('start_time',0))-float(video.get('start_time',0)))>.2:errors.append('Décalage initial audio/vidéo supérieur à 200 ms : vérifier la synchronisation.')
@@ -73,7 +73,7 @@ def analyse(j,folder):
     report={'fingerprint':fingerprint(j,folder),'hard_errors':[],'warnings':[],'clips':[],
             'limits':['La transcription peut se tromper, surtout sur les noms propres.','Identité du locuteur et synchronisation des lèvres non certifiées automatiquement.']}
     for i,scene in enumerate(j['scenes']):
-        result=technical(folder/scene['clip'],engines.spec(j)['range']);report['clips'].append(result)
+        result=technical(folder/scene['clip'],engines.spec(j)['range'],(j.get('config') or {}).get('format')=='horizontal');report['clips'].append(result)
         report['hard_errors'] += [f"Scène {i+1} : {x}" for x in result['hard_errors']]
         # Actual sampled frames, never the generated input still presented as clip evidence.
         sheet=f'quality-scene-{i:02}.jpg'

@@ -19,7 +19,7 @@ import quotas
 import power
 import maintenance
 import series
-VERSION='0.1.57'
+VERSION='0.1.58'
 import sys
 import traceback
 
@@ -330,7 +330,7 @@ def import_browser_download(j,t,info):
     result=subprocess.run([probe,'-v','error','-show_entries','format=duration:stream=codec_type,width,height','-of','json',str(source)],capture_output=True,text=True,timeout=20)
     if result.returncode:raise ValueError('Le fichier téléchargé n’est pas une vidéo lisible')
     metadata=json.loads(result.stdout);streams=metadata.get('streams',[]);video=next((x for x in streams if x.get('codec_type')=='video'),{})
-    if not 4<=float(metadata.get('format',{}).get('duration',0))<=12 or video.get('height',0)<=video.get('width',0) or not any(x.get('codec_type')=='audio' for x in streams):raise ValueError('Le clip doit être vertical, durer environ huit secondes et contenir de l’audio')
+    if not 4<=float(metadata.get('format',{}).get('duration',0))<=12 or (video.get('height',0)>video.get('width',0))==horizontal(j) or not any(x.get('codec_type')=='audio' for x in streams):raise ValueError('Le clip doit être vertical, durer environ huit secondes et contenir de l’audio')
     name=t['slot'].replace(':','_')+'_'+uid()+source.suffix.lower();shutil.copyfile(source,job_dir(j)/name)
     t['download_import']={'id':download_id,'file':name};return name
 
@@ -420,7 +420,15 @@ def parse_json(text):
     if start<0 or end<start: raise ValueError('La réponse ne contient pas de JSON')
     return json.loads(text[start:end+1])
 
+def translation_prompt(j):
+    """Language version (Atelier "Langues"): same story, same boards, new lines and voices."""
+    language=j['config']['language'];source=copy.deepcopy(j['variant']['script'])
+    for k in ('production_id','generation_task_id','creative_selection','opening_plan'):source.pop(k,None)
+    source['production_id']=j['id']
+    return f'''Traduis et adapte ce scénario de mini-fiction de fruits dans la langue : {language}. Garde exactement la même structure JSON, les mêmes identifiants de personnages, le même nombre de scènes, les mêmes locuteurs et le même sens. Adapte naturellement les répliques (pas de mot à mot), le titre, cover_title (3 à 5 mots) et la description (mentionne la création par IA). Les prénoms peuvent être adaptés à la langue. Les répliques restent courtes : au plus {engines.word_limit(j,25)} mots par scène. Les champs image_prompt et video_prompt restent tels quels, sauf la langue parlée indiquée dans video_prompt. Réponds UNIQUEMENT avec le JSON. JSON : {json.dumps(source,ensure_ascii=False)}'''
+
 def script_prompt(j):
+    if (j.get('variant') or {}).get('kind')=='language':return translation_prompt(j)
     ref=j['selected']; n=j['config']['scene_count']
     language=j['config'].get('language','Deutsch (de-DE)')
     schema={'production_id':j['id'],'title':'Titre dans la langue choisie','cover_title':'Question courte dans la langue choisie','description':'Description TikTok dans la langue choisie, mentionnant la création par IA','characters':[{'id':'fruit_a','name':'Prénom dans la langue choisie','appearance':'Design de fruit et vêtements cohérents','voice':'Voix native de la langue choisie, âge, timbre','image_prompt':'Prompt de référence dans la langue choisie'}],'scenes':[{'title':'Titre court de la scène (2 à 4 mots, langue choisie)','characters':['fruit_a'],'meaning':'Action compréhensible sans le son','image_prompt':'Prompt d’image dans la langue choisie, 9:16','video_prompt':'Animation, caméra, action, position des locuteurs, lèvres et personnages silencieux','dialogue':[{'speaker':'fruit_a','text':'Réplique courte dans la langue choisie'}]}]}
@@ -435,7 +443,16 @@ def script_prompt(j):
         guidance=editorial.instructions(j,STATE['jobs'])+'\nRéférences comparées : '+json.dumps(j.get('candidates',[])[:6],ensure_ascii=False)+'\nCorrections demandées : '+json.dumps(j.get('editorial_feedback',[]),ensure_ascii=False)
     return f'''Crée une mini-fiction de fruits entièrement ORIGINALE. Langue demandée pour les dialogues, les voix, les textes de couverture, la description et les prompts (sauf les clés techniques et la signature narrative) : {language}. La langue demandée prime sur la langue française des instructions et des descriptions du schéma. Aucune traduction ni réplique dans une autre langue. Les personnages parlent avec des voix natives de la langue demandée. Réponds UNIQUEMENT avec du JSON valide, sans explication. Conserve les clés techniques du schéma en anglais. Référence comme indice de tendance seulement, jamais copier les répliques ou les plans : {json.dumps(ref,ensure_ascii=False)}. Idée : {j['brief']}. Exactement {n} scènes de {engines.spec(j)['seconds']} secondes, au maximum 3 personnages. Au plus {word_limit} mots parlés par scène pour les langues avec espaces ; pour les autres, une réplique assez courte pour être prononcée naturellement en moins de 7 secondes. Maximum 2 locuteurs par scène. Accroche dès la première phrase, retournement visible, conclusion satisfaisante. Pas de présentation comme fait réel. Animation 3D premium, fruits anthropomorphes avec peau de fruit aussi sur les mains, vêtements couvrants sans logos, grands visages expressifs, décor cohérent avec l’intrigue choisie et différent des épisodes récents, vertical 9:16. Même identité et tenue partout, aucune voix de narrateur, personnages parlant à l'écran, caméra continue par clip. Sous-titres ajoutés au montage. {guidance} Le champ cover_title doit être une accroche de couverture de 3 à 5 mots maximum dans la langue demandée, sans révéler la fin. Schéma : {json.dumps(schema,ensure_ascii=False)}'''
 
+def horizontal(j): return (j.get('config') or {}).get('format')=='horizontal'
+def frame_size(j): return (1280,720) if horizontal(j) else (720,1280)
+def landscape(text):
+    """Horizontal 16:9 version (Atelier-like): the same prompts, turned to landscape."""
+    text=re.sub(r'portrait 9:16','landscape 16:9',str(text));text=text.replace('9:16','16:9')
+    return re.sub(r'\bvertical\b','horizontal',re.sub(r'\bportrait\b','landscape',text))
+
 def add_task(j, kind, payload, slot):
+    if horizontal(j) and kind in ('chat_image','flow_video','engine_video') or (horizontal(j) and kind=='chat_text' and slot=='script'):
+        payload={**payload,'prompt':landscape(payload.get('prompt','')),'aspect':'16:9'}
     if kind=='chat_image' and j.get('refusal_levels',{}).get(slot):
         # P2-05: an image refused by ChatGPT is reworded, level by level.
         payload={**payload,'prompt':refusal.soften(payload['prompt'],j['refusal_levels'][slot]),'refusal_level':j['refusal_levels'][slot]}
@@ -770,6 +787,15 @@ def store_script(j,s):
     if s.get('production_id') and s['production_id']!=j['id']:raise ValueError('Ce scénario appartient à une autre production')
     validate_script(s,j['config']['scene_count']);editorial.validate(s,j,STATE['jobs'])
     j['script']=s; j['characters']=copy.deepcopy(s['characters']); j['scenes']=copy.deepcopy(s['scenes']); j['title']=s['title']; j['stage']='characters'; j['status']='running'
+    v=j.get('variant') or {}
+    if v.get('kind')=='language':
+        # Same boards and cast images: only the clips (voices) are made again.
+        files=v.get('character_files',{})
+        for c in j['characters']:
+            if files.get(c['id']):c['file']=files[c['id']]
+        if v.get('sheet'):j['character_sheet_file']=v['sheet']
+        for scene,image in zip(j['scenes'],v.get('images',[])):
+            if image:scene['image']=image
     previous=job_by(j.get('series',{}).get('previous')) if j.get('series') else None
     if previous:
         reused=series.inherit(j,previous,job_dir(previous),job_dir(j))
@@ -915,7 +941,7 @@ def render_job(id):
         if not ff: raise RuntimeError('ffmpeg introuvable. Installe ffmpeg et relance le studio.')
         aligned_count=0
         caption_size,caption_words=(48,4) if j.get('retention_version')==1 else (38,5)
-        ass=['[Script Info]','ScriptType: v4.00+','PlayResX: 720','PlayResY: 1280','[V4+ Styles]','Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',f'Style: Default,Arial,{caption_size},&H00FFFFFF,&H0000FFFF,&H00141414,&H70000000,-1,0,0,0,100,100,0,0,1,3,1,2,55,55,160,1',f'Style: Karaoke,Arial,{caption_size},&H0000FFFF,&H00FFFFFF,&H00141414,&H70000000,-1,0,0,0,100,100,0,0,1,3,1,2,55,55,160,1','[Events]','Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text']
+        ass=['[Script Info]','ScriptType: v4.00+',f'PlayResX: {frame_size(j)[0]}',f'PlayResY: {frame_size(j)[1]}','[V4+ Styles]','Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',f'Style: Default,Arial,{caption_size},&H00FFFFFF,&H0000FFFF,&H00141414,&H70000000,-1,0,0,0,100,100,0,0,1,3,1,2,55,55,160,1',f'Style: Karaoke,Arial,{caption_size},&H0000FFFF,&H00FFFFFF,&H00141414,&H70000000,-1,0,0,0,100,100,0,0,1,3,1,2,55,55,160,1','[Events]','Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text']
         def stamp(s): return f'{int(s//3600)}:{int(s//60)%60:02}:{int(s)%60:02}.{int(s%1*100):02}'
         start=0.0
         for i,s in enumerate(j['scenes']):
@@ -926,7 +952,7 @@ def render_job(id):
                 pr=subprocess.run([probe,'-v','error','-select_streams','a','-show_entries','stream=index','-of','csv=p=0',str(src)],capture_output=True,text=True,timeout=30); audio=bool(pr.stdout.strip())
             # P5-06: Flow clips stay 8 s; Grok/Arena clips keep their real, bounded duration.
             length=engines.clip_length(j,clip_duration(probe,src) if probe else None)
-            args=[ff,'-y','-i',str(src),'-f','lavfi','-i','anullsrc=r=48000:cl=stereo','-map','0:v:0','-map','0:a:0' if audio else '1:a:0','-vf','scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,setsar=1,fps=30,tpad=stop_mode=clone:stop_duration='+f'{length:g}','-af','apad','-t',f'{length:g}','-c:v','libx264','-preset','fast','-crf','21','-c:a','aac','-ar','48000','-ac','2',str(out)]
+            args=[ff,'-y','-i',str(src),'-f','lavfi','-i','anullsrc=r=48000:cl=stereo','-map','0:v:0','-map','0:a:0' if audio else '1:a:0','-vf',f'scale={frame_size(j)[0]}:{frame_size(j)[1]}:force_original_aspect_ratio=increase,crop={frame_size(j)[0]}:{frame_size(j)[1]},'+'setsar=1,fps=30,tpad=stop_mode=clone:stop_duration='+f'{length:g}','-af','apad','-t',f'{length:g}','-c:v','libx264','-preset','fast','-crf','21','-c:a','aac','-ar','48000','-ac','2',str(out)]
             run_command(args)
             speech=(j.get('quality_report',{}).get('clips',[])[i].get('speech') if j.get('quality_version')==1 and i<len(j.get('quality_report',{}).get('clips',[])) else None)
             offset=start;start+=length
@@ -958,11 +984,11 @@ def render_job(id):
         else:
             cover_path=d/'cover.jpg';cover_file='cover.jpg'
             first=j['scenes'][0].get('image')
-            if first: make_cover(safe_child(d,first),cover_path,j['script']['cover_title'])
+            if first: make_cover(safe_child(d,first),cover_path,j['script']['cover_title'],frame_size(j))
             else:
-                run_command([ff,'-y','-i',str(d/'final.mp4'),'-frames:v','1',str(d/'cover-frame.jpg')]);make_cover(d/'cover-frame.jpg',cover_path,j['script']['cover_title'])
+                run_command([ff,'-y','-i',str(d/'final.mp4'),'-frames:v','1',str(d/'cover-frame.jpg')]);make_cover(d/'cover-frame.jpg',cover_path,j['script']['cover_title'],frame_size(j))
         with LOCK:
-            actual=job_by(id); actual['stage']='done'; actual['status']='done'; actual['final']=asset_url(actual,'final.mp4'); actual['cover']=asset_url(actual,cover_file); actual['qc']={'export':'Réussi : MP4 vertical 720 × 1280, audio normalisé.','subtitles':f'{aligned_count}/{len(j["scenes"])} scènes calées sur reconnaissance vocale ; autres timings estimés. Contrôle à l’écoute nécessaire.','lips':'Synchronisation labiale non vérifiée automatiquement.','duration':len(j['scenes'])*8}; event(actual,'Export terminé. Un contrôle visuel et audio reste nécessaire avant publication.'); check_originality(actual); save()
+            actual=job_by(id); actual['stage']='done'; actual['status']='done'; actual['final']=asset_url(actual,'final.mp4'); actual['cover']=asset_url(actual,cover_file); actual['qc']={'export':'Réussi : MP4 '+('horizontal 1280 × 720' if horizontal(j) else 'vertical 720 × 1280')+', audio normalisé.','subtitles':f'{aligned_count}/{len(j["scenes"])} scènes calées sur reconnaissance vocale ; autres timings estimés. Contrôle à l’écoute nécessaire.','lips':'Synchronisation labiale non vérifiée automatiquement.','duration':len(j['scenes'])*8}; event(actual,'Export terminé. Un contrôle visuel et audio reste nécessaire avant publication.'); check_originality(actual); save()
             try:
                 kit=series.kit(actual);(d/'publication.json').write_text(json.dumps(kit,ensure_ascii=False,indent=2),'utf-8');(d/'publication.txt').write_text(series.kit_text(kit),'utf-8');actual['publication']=asset_url(actual,'publication.txt')
             except Exception as e:log_error('Kit de publication',e)
@@ -974,9 +1000,9 @@ def render_job(id):
 def start_render(id):
     if id not in BUSY: BUSY.add(id); threading.Thread(target=render_job,args=(id,),daemon=True).start()
 
-def make_cover(src,out,title):
+def make_cover(src,out,title,size=(720,1280)):
     from PIL import Image, ImageOps, ImageDraw, ImageFont
-    im=ImageOps.fit(Image.open(src).convert('RGB'),(720,1280)); draw=ImageDraw.Draw(im,'RGBA'); draw.rectangle((0,0,720,320),fill=(10,12,20,205))
+    im=ImageOps.fit(Image.open(src).convert('RGB'),size); draw=ImageDraw.Draw(im,'RGBA'); draw.rectangle((0,0,size[0],320*size[1]//1280),fill=(10,12,20,205))
     preferred=[]
     if re.search('[\u3040-\u30ff]',title): preferred=[r'C:/Windows/Fonts/YuGothB.ttc']
     elif re.search('[\uac00-\ud7af]',title): preferred=[r'C:/Windows/Fonts/malgunbd.ttf']
@@ -1510,6 +1536,38 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             if key in j:nxt[key]=j[key]
                         STATE['jobs'].insert(0,nxt);event(nxt,'Partie '+str(part)+' créée à partir de « '+str(j.get('title'))+' » : mêmes personnages, scénario en cours.');schedule(nxt)
                         save();return self.send_json({**public_state(),'created':nxt['id']})
+                    elif action=='variant':
+                        # Atelier-like "Version horizontale 16:9" and "Langues": a new episode from this one.
+                        if not j.get('script') or not any(x.get('image') for x in j['scenes']):raise ValueError('Il faut une histoire et ses planches')
+                        kind=b.get('kind')
+                        if kind not in ('horizontal','language'):raise ValueError('Version inconnue')
+                        cfg={**copy.deepcopy(j['config']),'dry_run':False}
+                        if kind=='horizontal':
+                            if horizontal(j):raise ValueError('Cet épisode est déjà horizontal')
+                            cfg['format']='horizontal'
+                        else:
+                            cfg['language']=creation_language(b.get('language',''))
+                            if cfg['language']==j['config'].get('language'):raise ValueError('Choisissez une autre langue')
+                            cfg['query']=RESEARCH_QUERIES[cfg['language']]
+                        nxt={'id':uid(),'title':j['title']+(' · 16:9' if kind=='horizontal' else ' · '+cfg['language'].split(' ')[0]),'brief':j.get('brief',''),'config':cfg,'selected':j.get('selected'),
+                             'variant':{'kind':kind,'of':j['id']},'flow_profile':j.get('flow_profile'),'status':'running','created':now(),'updated':now(),'events':[],'candidates':[],
+                             'characters':copy.deepcopy(j['characters']),'scenes':[],'character_sheet':j.get('character_sheet'),'cover_style':j.get('cover_style'),'quality_version':j.get('quality_version')}
+                        src,dst=job_dir(j),None
+                        STATE['jobs'].insert(0,nxt);dst=job_dir(nxt)
+                        names=[f for f in [j.get('character_sheet_file')]+[c.get('file') for c in j['characters']]+([x.get('image') for x in j['scenes']] if kind=='language' else []) if f]
+                        for f in dict.fromkeys(names):
+                            if (src/f).is_file():shutil.copyfile(src/f,dst/f)
+                        if kind=='horizontal':
+                            # Same story and cast; boards drawn again in landscape, then clips and montage.
+                            nxt['script']=copy.deepcopy(j['script']);nxt['scenes']=[{k:v for k,v in x.items() if k not in ('image','clip')} for x in j['scenes']]
+                            if j.get('character_sheet_file'):nxt['character_sheet_file']=j['character_sheet_file']
+                            nxt['script_approved']=now();nxt['stage']='images';(dst/'scenario.json').write_text(json.dumps(nxt['script'],ensure_ascii=False,indent=2),'utf-8');(dst/'description.txt').write_text(nxt['script'].get('description',''),'utf-8')
+                            event(nxt,'Version horizontale 16:9 de « '+j['title']+' » : même histoire et mêmes personnages, planches redessinées en paysage.')
+                        else:
+                            nxt['variant'].update(script=j['script'],images=[x.get('image') for x in j['scenes']],character_files={c['id']:c.get('file') for c in j['characters'] if c.get('file')},sheet=j.get('character_sheet_file'))
+                            nxt['characters']=[];nxt['stage']='script'
+                            event(nxt,'Version '+cfg['language']+' de « '+j['title']+' » : mêmes planches, répliques et voix refaites.')
+                        schedule(nxt);save();return self.send_json({**public_state(),'created':nxt['id']})
                     elif action=='delete':
                         # P4-1: never a silent loss: the folder goes to data/corbeille, the state is backed up first.
                         if any(t['job']==id and t['status']=='claimed' for t in STATE['tasks']):raise ValueError('Une tâche est en cours : attendez sa fin')

@@ -58,7 +58,7 @@ async function run(task,attachments){
   if(task.payload.flow_route&&!globalThis.FruchtFlowSession?.verify(document,task.payload.flow_route))throw Error('Compte Flow différent ou session expirée ; aucun envoi effectué.');
   if(globalThis.FruchtFlow.creditBlocked(document)){const error=Error('Crédits Flow insuffisants signalés par le fournisseur ; aucun envoi effectué.');error.flowBlocked='credits';error.kind='credits';throw error;}
  };
- if(isFlow){globalThis.FruchtFlow.closeAccountPanel(document);await sleep(250);if(task.payload.flow_route||task.payload.model)await globalThis.FruchtFlow.prepareFrames(document,sleep,task.payload.cost,task.payload.model,task.payload.resolution,task.payload.seconds);}
+ if(isFlow){globalThis.FruchtFlow.closeAccountPanel(document);await sleep(250);if(task.payload.flow_route||task.payload.model)await globalThis.FruchtFlow.prepareFrames(document,sleep,task.payload.cost,task.payload.model,task.payload.resolution,task.payload.seconds,task.payload.aspect||'9:16');}
  let editor=await waitFor(findEditor,45000);
  checkFlowAccount();
  if(attachments?.length){
@@ -76,13 +76,13 @@ async function run(task,attachments){
 
  if(isFlow){
   // A visible cost must match. Never click when the cost is unknown.
-  if(task.payload.flow_route||task.payload.model)await globalThis.FruchtFlow.configure(document,sleep,task.payload.cost,task.payload.model,task.payload.resolution,task.payload.seconds);
+  if(task.payload.flow_route||task.payload.model)await globalThis.FruchtFlow.configure(document,sleep,task.payload.cost,task.payload.model,task.payload.resolution,task.payload.seconds,task.payload.aspect||'9:16');
   const settings=globalThis.FruchtFlow.settingsButton(document);
   let cost=globalThis.FruchtFlow.cost(text()),openedSettings=false;
   if((cost===null||globalThis.FruchtFlow.outputCount(document,settings)===null)&&settings){settings.click();openedSettings=true;await sleep(700);cost=globalThis.FruchtFlow.cost(text());}
   if(globalThis.FruchtFlow.outputCount(document,settings)!==1)throw Error('Flow : choisissez x1 (un résultat) dans les paramètres. Aucun envoi effectué.');
   if(cost===null)throw Error('Flow : coût de génération non lisible. Vérifiez le modèle, x1 et le coût, puis générez et importez le clip manuellement. Aucun envoi effectué.');
-  if(task.payload.model)globalThis.FruchtFlow.verifyModel(document,task.payload.model,task.payload.resolution,task.payload.seconds);
+  if(task.payload.model)globalThis.FruchtFlow.verifyModel(document,task.payload.model,task.payload.resolution,task.payload.seconds,task.payload.aspect||'9:16');
   if(cost!==task.payload.cost||cost>task.payload.balance)throw Error('Flow : coût affiché différent du budget prévu. Aucun envoi effectué.');
   if(!settings&&/(?:x\s*2|x\s*4)\b/i.test(text()))throw Error('Flow : vérifiez que le nombre de résultats est x1. Aucun envoi effectué.');
   if(openedSettings){settings.click();await sleep(400);}

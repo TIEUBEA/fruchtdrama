@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "FruchtDrama",
-  "version": "0.1.57",
+  "version": "0.1.58",
   "description": "Ouvre une fenêtre FruchtDrama où tout se passe : studio, IA, Flow et comptes. Relie vos sessions de création au studio local.",
   "permissions": [
     "storage",

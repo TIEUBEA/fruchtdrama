@@ -88,21 +88,22 @@ globalThis.FruchtFlow={
   this.activate(doc,matches[0]);await pause(400);
   if(this.currentSetting(doc,pattern,parse)!==desired)throw Error('Flow : réglage '+kind+' non confirmé ; aucun envoi effectué.');
  },
- verifyModel(doc,model,resolution,seconds){
-  const portrait=[...doc.querySelectorAll('[role="radio"]')].filter(b=>this.visible(doc,b)&&this.labelMatches(b,/^9:16$/)&&b.getAttribute('aria-checked')==='true');
-  if(portrait.length!==1)throw Error('Flow : format vertical non confirmé ; aucun envoi effectué.');
+ aspectPattern(aspect){return aspect==='16:9'?/^16:9$/:/^9:16$/;},
+ verifyModel(doc,model,resolution,seconds,aspect='9:16'){
+  const portrait=[...doc.querySelectorAll('[role="radio"]')].filter(b=>this.visible(doc,b)&&this.labelMatches(b,this.aspectPattern(aspect))&&b.getAttribute('aria-checked')==='true');
+  if(portrait.length!==1)throw Error('Flow : format '+(aspect==='16:9'?'horizontal':'vertical')+' non confirmé ; aucun envoi effectué.');
   const control=this.modelControl(doc);
   if(!control||!this.modelPattern(model).test(control.innerText||control.getAttribute('aria-label')||''))throw Error('Flow : modèle demandé non confirmé ; aucun envoi effectué.');
   if(this.currentSetting(doc,/^(?:360|720|1080|2160)p$/i,t=>this.resolution(t))!==resolution)throw Error('Flow : résolution demandée non confirmée ; aucun envoi effectué.');
   if(this.currentSetting(doc,/^(?:4|6|8|10)\s*(?:s(?:ec(?:onds?|ondes?)?)?\.?|Sek(?:unden)?\.?)$/i,t=>this.seconds(t))!==seconds)throw Error('Flow : durée demandée non confirmée ; aucun envoi effectué.');
  },
- async prepareFrames(doc,pause,cost,model,resolution,seconds){
+ async prepareFrames(doc,pause,cost,model,resolution,seconds,aspect='9:16'){
   if(/Einstellungen für KI-Agenten|AI agent settings|Paramètres (?:de l.agent|des agents IA)/i.test(doc.body?.innerText||'')){
    const back=this.control(doc,/^(?:Zurück|Back|Retour)$/i);if(back){back.click();await pause(400);}
   }
   const agent=this.control(doc,/^(?:Agentenmodus|Agent mode|Mode agent|Agent)$/i);
   if(agent&&(agent.getAttribute('aria-pressed')==='true'||agent.getAttribute('aria-checked')==='true')){this.activate(doc,agent);await pause(700);}
-  await this.configure(doc,pause,cost,model,resolution,seconds);
+  await this.configure(doc,pause,cost,model,resolution,seconds,aspect);
   const frames=[...doc.querySelectorAll('[role="radio"]')].filter(b=>this.visible(doc,b)&&this.labelMatches(b,/^(?:Frames|Cadres|Images clés|Images)$/i));
   if(frames.length!==1)throw Error('Flow : mode Images / Frames absent ou ambigu. Aucun import ni génération effectué.');
   if(frames[0].getAttribute('aria-checked')!=='true'){this.activate(doc,frames[0]);await pause(500);}
@@ -110,11 +111,11 @@ globalThis.FruchtFlow={
   const settings=this.settingsButton(doc);
   if(settings){settings.click();await pause(350);}
  },
- async configure(doc,pause,cost,model,resolution='720p',seconds=8){
+ async configure(doc,pause,cost,model,resolution='720p',seconds=8,aspect='9:16'){
   const settings=this.settingsButton(doc);if(!settings)throw Error('Paramètres Flow indisponibles ; aucun envoi effectué.');
   const radios=()=>[...doc.querySelectorAll('[role="radio"]')].filter(b=>this.visible(doc,b));
   if(!radios().some(b=>this.labelMatches(b,/^(?:16:9|9:16)$/))){settings.click();await pause(500);}
-  for(const pattern of [/^(?:Vidéo|Video|Vídeo)$/i,/^9:16$/,/^(?:x\s*1|1\s*-\s*mal)$/i]){
+  for(const pattern of [/^(?:Vidéo|Video|Vídeo)$/i,this.aspectPattern(aspect),/^(?:x\s*1|1\s*-\s*mal)$/i]){
    const options=radios().filter(b=>this.labelMatches(b,pattern));
    if(options.length!==1)throw Error('Réglage Flow vidéo / 9:16 / x1 non reconnu ; aucun envoi effectué.');
    if(options[0].getAttribute('aria-checked')!=='true'){this.activate(doc,options[0]);await pause(350);}
@@ -128,14 +129,14 @@ globalThis.FruchtFlow={
     if(options.length!==1)throw Error('Flow : modèle demandé indisponible ou ambigu ; aucun envoi effectué.');
     this.activate(doc,options[0]);await pause(500);
    }
-   for(const pattern of [/^(?:Vidéo|Video|Vídeo)$/i,/^9:16$/,/^(?:x\s*1|1\s*-\s*mal)$/i]){
+   for(const pattern of [/^(?:Vidéo|Video|Vídeo)$/i,this.aspectPattern(aspect),/^(?:x\s*1|1\s*-\s*mal)$/i]){
     const options=radios().filter(b=>this.labelMatches(b,pattern));
     if(options.length!==1)throw Error('Flow : réglages perdus après sélection du modèle ; aucun envoi effectué.');
     if(options[0].getAttribute('aria-checked')!=='true'){this.activate(doc,options[0]);await pause(350);}
    }
    await this.chooseSetting(doc,pause,resolution,'resolution');
    await this.chooseSetting(doc,pause,seconds,'seconds');
-   this.verifyModel(doc,model,resolution,seconds);
+   this.verifyModel(doc,model,resolution,seconds,aspect);
   }else if(this.cost(doc.body?.innerText||'')!==cost&&cost===10){
    const selectors=[...doc.querySelectorAll('[role="combobox"],button,[role="button"]')].filter(b=>this.visible(doc,b)&&/^Veo\b/i.test((b.innerText||b.getAttribute('aria-label')||'').trim()));
    if(selectors.length===1){

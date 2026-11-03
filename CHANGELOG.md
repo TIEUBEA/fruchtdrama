@@ -9,6 +9,19 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 Prochain : P3 (séries, idées, kit de publication, veille, 16:9) et P4 (montage avancé, sous-titres karaoké, rapport de panne). Voir `docs/sudf/REPRISE.md`.
 
+## 0.1.58 — versions horizontale 16:9 et autres langues (03/11/2026)
+
+### Ajouté
+- **+ Version horizontale 16:9** (page épisode, comme l'Atelier) : nouvel épisode lié, même histoire et mêmes personnages (feuille copiée), planches redessinées en paysage, clips 16:9, sous-titres et montage 1280 × 720, miniature horizontale. Les prompts passent automatiquement de 9:16 à 16:9 ; Flow : réglage 16:9 choisi et vérifié avant envoi (`aspect`), sinon aucun envoi.
+- **Langues** : version dans une autre langue, mêmes planches et mêmes images de personnages, répliques adaptées (pas de mot à mot), titre, couverture et description traduits, voix et clips refaits ; relecture possible si l'option est cochée.
+- Les versions s'affichent sous le titre de l'épisode d'origine, avec leur état.
+
+### Changé
+- Contrôle qualité et import des clips vérifient l'orientation attendue (verticale ou horizontale).
+
+### Tests
+- `tests/test_variants.py` (3), `test_flow_models.cjs` (16:9 choisi, vérifié, refusé si absent).
+
 ## 0.1.57 — bandeau de limite, « En cours », contrôles et thèmes (03/11/2026)
 
 ### Ajouté
