@@ -19,7 +19,7 @@ import quotas
 import power
 import maintenance
 import series
-VERSION='0.1.59'
+VERSION='0.1.60'
 import sys
 import traceback
 
@@ -502,6 +502,31 @@ def check_originality(j):
     event(j,'Contrôle d’originalité : '+str(j['originality']['score'])+' % · '+{'publish':'publication conseillée','fix':'corrections conseillées avant publication','hold':'publication déconseillée'}[j['originality']['verdict']]+'.')
     return j['originality']
 
+def flow_scan(state,client,accounts):
+    """Google accounts found in this Chrome: one Flow profile each, real credits, automatic rotation."""
+    added=updated=0;names=[]
+    for a in accounts[:40]:
+        email=str(a.get('email') or '').strip().lower()
+        if not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+',email):continue
+        p=next((x for x in state['profiles'] if (x.get('flow_email') or x.get('label','')).lower()==email),None)
+        if not p:
+            p={'id':uid(),'label':email,'balance':0};state['profiles'].append(p);added+=1
+        else:updated+=1
+        p.update(flow_email=email,flow_client=client['id'],auto_enabled=True,slot=int(a.get('slot',0)))
+        try:
+            if a.get('project'):p['flow_url']=flow_accounts.project_url(a['project']);p.pop('flow_url_home',None)
+        except ValueError:pass
+        if not p.get('flow_url'):
+            # No project yet: each production creates its own project from this account's home page.
+            p['flow_url']=f"https://flow.google.com/u/{int(a.get('slot',0))}/project/home";p['flow_url_home']=True
+        if isinstance(a.get('balance'),int) and 0<=a['balance']<=100000:
+            p['balance']=a['balance'];p['credit_source']='read';p['checked']=now();p.pop('blocked',None) if a['balance']>0 else p.update(blocked='credits')
+        names.append(email)
+    state.setdefault('settings',{})['flow_auto']=True
+    total=sum(int(x.get('balance') or 0) for x in state['profiles'] if (x.get('flow_email') or '') in names)
+    if not names:return 'Aucun compte Google détecté dans cette fenêtre : ajoute tes comptes dans Chrome (photo de profil › Ajouter un compte), puis Détecter.'
+    return f'{len(names)} compte(s) Google détecté(s) ({added} nouveau(x)), {total} crédits Flow au total. Changement de compte automatique activé.'
+
 def approve_sheet(j,sheet,title_index,hook_index,message):
     j['sheet']=sheet;j['sheet_approved']=now();j['sheet_choice']={'title':int(title_index),'hook':int(hook_index)}
     j['brief']=ideas.brief(sheet,title_index,hook_index);j['title']=sheet['titles'][min(int(title_index),len(sheet['titles'])-1)].capitalize()
@@ -972,7 +997,7 @@ def render_job(id):
                 pr=subprocess.run([probe,'-v','error','-select_streams','a','-show_entries','stream=index','-of','csv=p=0',str(src)],capture_output=True,text=True,timeout=30); audio=bool(pr.stdout.strip())
             # P5-06: Flow clips stay 8 s; Grok/Arena clips keep their real, bounded duration.
             length=engines.clip_length(j,clip_duration(probe,src) if probe else None)
-            args=[ff,'-y','-i',str(src),'-f','lavfi','-i','anullsrc=r=48000:cl=stereo','-map','0:v:0','-map','0:a:0' if audio else '1:a:0','-vf',f'scale={frame_size(j)[0]}:{frame_size(j)[1]}:force_original_aspect_ratio=increase:flags=lanczos,crop={frame_size(j)[0]}:{frame_size(j)[1]},unsharp=5:5:0.5:5:5:0,'+'setsar=1,fps=30,tpad=stop_mode=clone:stop_duration='+f'{length:g}','-af','apad','-t',f'{length:g}','-c:v','libx264','-preset','medium','-crf','17','-pix_fmt','yuv420p','-c:a','aac','-ar','48000','-ac','2',str(out)]
+            args=[ff,'-y','-i',str(src),'-f','lavfi','-i','anullsrc=r=48000:cl=stereo','-map','0:v:0','-map','0:a:0' if audio else '1:a:0','-vf',f'scale={frame_size(j)[0]}:{frame_size(j)[1]}:force_original_aspect_ratio=increase:flags=lanczos,crop={frame_size(j)[0]}:{frame_size(j)[1]},fps=30,'+(f"zoompan=z='{'min(1+0.0012*on,1.08)' if i%2==0 else 'max(1.08-0.0012*on,1)'}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={frame_size(j)[0]}x{frame_size(j)[1]}:fps=30," if j['config'].get('dynamic',True) else '')+'unsharp=5:5:0.5:5:5:0,setsar=1,tpad=stop_mode=clone:stop_duration='+f'{length:g}','-af','apad','-t',f'{length:g}','-c:v','libx264','-preset','medium','-crf','17','-pix_fmt','yuv420p','-c:a','aac','-ar','48000','-ac','2',str(out)]
             run_command(args)
             speech=(j.get('quality_report',{}).get('clips',[])[i].get('speech') if j.get('quality_version')==1 and i<len(j.get('quality_report',{}).get('clips',[])) else None)
             offset=start;start+=length
@@ -1383,13 +1408,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 elif path=='/api/sites':
                     action=b.get('action')
                     if action=='open' and b.get('site') not in SITES:raise ValueError('Site inconnu')
-                    if action not in ('open','check','register_flow','tidy','recover'):raise ValueError('Action inconnue')
+                    if action not in ('open','check','register_flow','tidy','recover','scan_flow'):raise ValueError('Action inconnue')
                     if action=='recover' and not job_by(b.get('job')):raise ValueError('Production inconnue')
                     queue=STATE.setdefault('bridge_requests',[])
                     item={'type':action,'site':b.get('site')} if action=='open' else {'type':action,'job':b.get('job')} if action=='recover' else {'type':action}
                     if item not in queue:queue.append(item)
-                    if action in ('register_flow','tidy','recover'):STATE['bridge_notice']={'at':now(),'action':action,'pending':True,'text':'Demande envoyée à la fenêtre FruchtDrama…'}
+                    if action in ('register_flow','tidy','recover','scan_flow'):STATE['bridge_notice']={'at':now(),'action':action,'pending':True,'text':'Demande envoyée à la fenêtre FruchtDrama…'}
                     if action=='check':STATE.setdefault('sites',{})['_requested']=now()
+                elif path=='/api/bridge/flow-scan':
+                    c=STATE['clients'].get(b.get('client'))
+                    if not c:raise ValueError('Passerelle inconnue')
+                    STATE['bridge_notice']={'at':now(),'action':'scan_flow','ok':True,'text':''}
+                    message=flow_scan(STATE,c,b.get('accounts') or [])
+                    STATE['bridge_notice']['text']=message;save();return self.send_json({'ok':True,'message':message})
                 elif path=='/api/bridge/notice':
                     if b.get('client') not in STATE['clients']:raise ValueError('Passerelle inconnue')
                     STATE['bridge_notice']={'at':now(),'action':str(b.get('action',''))[:20],'ok':bool(b.get('ok')),'text':str(b.get('text',''))[:300]}
@@ -1505,6 +1536,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             # Queued Flow payloads were built for the previous mode.
                             if t['job']==id and t['status']=='queued' and t['kind'] in ('flow_video','engine_video'):t['status']='cancelled'
                         event(j,'Essai à blanc activé : les clips seront préparés dans Flow sans être envoyés.' if j['config']['dry_run'] else 'Production réelle : les prochains clips seront envoyés à Flow et consommeront des crédits.')
+                    elif action=='rerender':
+                        # "Remonter…": same clips, new montage (new hook, subtitles or resolution).
+                        if not all(x.get('clip') for x in j['scenes']):raise ValueError('Il manque des clips')
+                        if j['id'] in BUSY:raise ValueError('Montage déjà en cours')
+                        j.pop('final',None);j['stage']='edit';j['status']='rendering';event(j,'Remontage demandé avec les clips existants.');start_render(j['id'])
                     elif action=='rename':
                         title=' '.join(str(b.get('title','')).split())[:80]
                         if not title:raise ValueError('Titre vide')

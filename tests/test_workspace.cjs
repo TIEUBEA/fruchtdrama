@@ -58,7 +58,7 @@ function harness(){
  assert.equal(manifest.action.default_popup,undefined,'a popup would prevent action.onClicked');
  assert.match(fs.readFileSync(path.join(__dirname,'../extension/background.js'),'utf8'),/importScripts\('workspace\.js'/);
  const worker=fs.readFileSync(path.join(__dirname,'../extension/background-worker.js'),'utf8');
- assert.match(worker,/action\?\.onClicked\?\.addListener\(\(\)=>FruchtWorkspace\.open/);
+ assert.match(worker,/action\?\.onClicked\?\.addListener\(\(\)=>openWorkspace\(\)/);
  assert.doesNotMatch(worker,/chrome\.tabs\.create\(/,'no tab created outside the window');
  assert.doesNotMatch(worker,/currentWindow:true/,'no dependence on the focused window');
  for(const file of ['chat-session.js','flow-session.js','flow-credits.js'])

@@ -57,8 +57,8 @@ class BrowserInterfaceTests(unittest.TestCase):
     def test_studio_renders_productions_and_online_connector(self):
         self.assertIn('Le Filon', self.dom(), 'Le Filon opens the application, like the Atelier')
         html = self.dom('#page=studio')
-        self.assertIn('Tes épisodes, de l’idée à la vidéo finale.', html); self.assertIn('class="studio-card"', html); self.assertIn('Épisode QA', html)
-        self.assertIn('1 connecteur(s) en ligne', html); self.assertIn('À vérifier', html)
+        self.assertIn('Tes histoires et leurs parties.', html); self.assertIn('class="story-card"', html); self.assertIn('ÉPISODE QA', html)
+        self.assertIn('1 connecteur(s) en ligne', html); self.assertIn('Tourner', html, 'next action with its direct button')
         self.assertNotIn('Studio inaccessible', html)
         self.assertIn('Limite Grok vidéos atteinte', html, 'wall banner on every page'); self.assertIn('data-forget-wall="g1"', html)
 

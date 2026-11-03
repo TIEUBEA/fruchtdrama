@@ -9,6 +9,24 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 Prochain : P3 (séries, idées, kit de publication, veille, 16:9) et P4 (montage avancé, sous-titres karaoké, rapport de panne). Voir `docs/sudf/REPRISE.md`.
 
+## 0.1.60 — Studio identique à l'Atelier, comptes Google détectés, montage dynamique (03/11/2026)
+
+### Changé
+- **Studio par histoires** (comme l'Atelier) : « Tes histoires et leurs parties », File de nuit, + Nouvelle histoire, compteurs à dessiner / à tourner / prêtes / à écrire, quotas (« N en 6 h », « au mur, reprise HH:MM », crédits Flow) ; grandes cartes avec badge, barre 5 segments, prochaine action et bouton direct (Tourner, Dessiner, Monter, Valider…).
+- **Page d'histoire** : les parties (et versions 16:9 / langues), « Créer la partie N », personnages, Supprimer l'histoire.
+- **Page de partie** : ← histoire, titre en majuscules ✎ (renommer), durée et scènes, Version horizontale / Langues, Télécharger les images, File de nuit, Le texte, ▶ Boucle complète ; cases Fiche / Personnages / Planches / Clips (« N à revoir ») / Montage (Monter… / Remonter…) ; Vidéo finale ; Miniature (Télécharger, **Contrôler** = originalité, Refaire) ; Publication (Tout copier, réécrire) ; Personnages (Tout refaire) ; Scènes ; journal replié.
+- **Mes comptes** : « Comptes Google Flow » avec **Détecter mes comptes** (parcourt /u/0, /u/1… de la fenêtre, lit adresse, crédits réels et projet de chaque compte, active la rotation) ; le reste (clé, adresses, Grok / Arena) replié.
+- **Ouverture de la fenêtre** : ChatGPT, Grok et Flow ouverts en onglets, sites revérifiés et crédits de tous les comptes relus.
+
+### Amélioré
+- **Montage dynamique** : zoom lent alterné (avant / arrière) sur chaque clip, en plus des coupes.
+
+### Ajouté
+- Remontage (« Remonter… ») avec les clips existants ; renommer un épisode.
+
+### Tests
+- `tests/test_flow_scan.py` (2), tests d'interface adaptés (navigation Studio › histoire › partie).
+
 ## 0.1.59 — résolution, hook, personnages en mouvement, réécriture anti-plagiat (03/11/2026)
 
 Priorités du propriétaire pour monétiser TikTok : 1. la résolution, 2. le hook.

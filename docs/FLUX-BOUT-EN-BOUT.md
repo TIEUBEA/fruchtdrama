@@ -1,6 +1,6 @@
 # FruchtDrama — Flux de bout en bout : une vidéo entièrement automatisée
 
-Version 0.1.59 (branches `sudf` / `sudf-ui`). Ce document décrit ce qui se passe, étape par étape,
+Version 0.1.60 (branches `sudf` / `sudf-ui`). Ce document décrit ce qui se passe, étape par étape,
 quand vous lancez une production sans intervenir, et ce que vous devez préparer une seule fois.
 
 ## A. Préparation unique (environ 30 minutes)

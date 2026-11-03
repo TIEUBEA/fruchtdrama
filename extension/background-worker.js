@@ -259,6 +259,10 @@ async function handleRequests(cfg){
   if(r.type==='open'&&FruchtSites.list[r.site]){const tab=await FruchtWorkspace.createTab(chrome,{url:FruchtSites.list[r.site].url,active:true});await chrome.windows.update(tab.windowId,{focused:true}).catch(()=>{});}
   if(r.type==='check'){const sites=await FruchtSites.check(chrome,FruchtWorkspace);await call('/api/bridge/sites',{client:cfg.client,sites});}
   // Former gateway-tab buttons, now clicked in the studio's Mes comptes page.
+  if(r.type==='scan_flow'){
+   let text;try{const accounts=await FruchtFlowScan.scan(chrome,FruchtWorkspace);const b=await call('/api/bridge/flow-scan',{client:cfg.client,accounts});text=b.message;}catch(e){text='Détection interrompue : '+e.message;}
+   await call('/api/bridge/notice',{client:cfg.client,action:'scan_flow',ok:!/interrompue/.test(text),text});
+  }
   if(['register_flow','tidy','recover'].includes(r.type)){
    let result;try{result=r.type==='register_flow'?await registerFlow(true):r.type==='tidy'?await tidyChats(true):await recover(r.job,true);}catch(e){result={ok:false,error:e.message};}
    await call('/api/bridge/notice',{client:cfg.client,action:r.type,ok:!!result?.ok,text:result?.message||result?.error||'Terminé.'});
@@ -453,7 +457,20 @@ chrome.runtime.onInstalled.addListener(createAlarm);
 chrome.runtime.onStartup.addListener(createAlarm);
 chrome.runtime.onStartup.addListener(()=>FruchtWorkspace.reset(chrome).catch(recordBackgroundError));
 // P5-1: the icon opens the FruchtDrama window; everything happens inside it.
-chrome.action?.onClicked?.addListener(()=>FruchtWorkspace.open(chrome).catch(recordBackgroundError));
+// Like the Atelier: the window opens with the sites already signed in (ChatGPT, Grok, Flow), then the
+// sessions are re-checked and every Flow account's real credits are read again.
+async function openWorkspace(){
+ const fresh=(await FruchtWorkspace.windowId(chrome))===null;
+ await FruchtWorkspace.open(chrome);
+ if(!fresh)return;
+ const tabs=await chrome.tabs.query({});
+ for(const url of ['https://chatgpt.com/','https://grok.com/imagine','https://flow.google.com/']){
+  const host=new URL(url).hostname;if(!tabs.some(t=>{try{return new URL(t.url||t.pendingUrl).hostname===host;}catch{return false;}}))await FruchtWorkspace.createTab(chrome,{url,active:false});
+ }
+ const cfg=await chrome.storage.local.get(null);if(!cfg.client||!cfg.token||!cfg.enabled)return;
+ try{const sites=await FruchtSites.check(chrome,FruchtWorkspace);await call('/api/bridge/sites',{client:cfg.client,sites});const accounts=await FruchtFlowScan.scan(chrome,FruchtWorkspace);const b=await call('/api/bridge/flow-scan',{client:cfg.client,accounts});await call('/api/bridge/notice',{client:cfg.client,action:'scan_flow',ok:true,text:b.message});}catch(e){recordBackgroundError(e);}
+}
+chrome.action?.onClicked?.addListener(()=>openWorkspace().catch(recordBackgroundError));
 chrome.windows?.onRemoved?.addListener(id=>FruchtWorkspace.closed(chrome,id).catch(recordBackgroundError));
 chrome.alarms.onAlarm.addListener(a=>{if(a.name==='studio-poll')triggerPoll();});
 chrome.downloads?.onCreated?.addListener(()=>triggerPoll());

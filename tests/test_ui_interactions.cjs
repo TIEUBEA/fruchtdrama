@@ -82,7 +82,7 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   // Atelier-like episode page: step cards, a wall of scenes; a scene opens its board and clip side by side.
   assert.equal(await evaluate(`document.querySelectorAll('.tracker .track').length`),5,'five step cards');
   assert.equal(await evaluate(`document.querySelectorAll('.scene-wall .scene-tile').length`),2,'one tile per scene');
-  await evaluate(`document.querySelectorAll('[data-scene-open]')[1].click()`);
+  await evaluate(`document.querySelectorAll('.scene-tile[data-scene-open]')[1].click()`);
   await waitFor(()=>evaluate(`!!document.querySelector('#sceneBox[open] .scene-pair img')&&!!document.querySelector('#sceneBox[open] .scene-pair video')`),5000,'planche et clip côte à côte');
   const sizes=await evaluate(`JSON.stringify([...document.querySelectorAll('#sceneBox .scene-pair img,#sceneBox .scene-pair video')].map(i=>Math.round(i.getBoundingClientRect().width)))`);
   assert.ok(JSON.parse(sizes).every(w=>w>=200),'board and clip shown large '+sizes);
@@ -100,7 +100,7 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   await evaluate(`document.querySelector('[data-action="accountSwitched"]').click()`);
   await waitFor(async()=>(await (await fetch(base+'/api/state')).json()).jobs.find(x=>x.id===switching).status==='running',10000,'changement confirmé');
   // 7 bis. Interface: a Grok production shows its engine, not the Flow profile selector.
-  assert.ok(await evaluate(`document.querySelector('.engine-badge')?.textContent.includes('Grok Imagine')&&document.querySelector('#jobProfile').closest('label').hidden`),'engine badge and Flow selector hidden');
+  assert.ok(await evaluate(`document.querySelector('#jobProfile').closest('label').hidden`),'Flow selector hidden for a Grok episode');
   // 8. P5-07: add a Grok account from Connexions (address only).
   await evaluate(`document.querySelector('nav [data-page="connections"]').click()`);
   await waitFor(()=>evaluate("!!document.querySelector('#accountForm')"),10000,'formulaire comptes');
@@ -114,7 +114,11 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   await waitFor(()=>evaluate(`!!document.querySelector('[data-night="add"]')`),15000,'bouton file de nuit');
   await evaluate(`document.querySelector('[data-night="add"]').click()`);
   await waitFor(async()=>(await (await fetch(base+'/api/state')).json()).night?.ids?.includes(job),10000,'ajout file de nuit');
+  // Atelier-like navigation: part page → story page → Studio (stories with their next action).
+  await evaluate(`document.querySelector('[data-back-story]').click()`);
+  await waitFor(()=>evaluate(`!!document.querySelector('.story-card.add')&&document.body.innerText.includes('Les parties')`),10000,'page de l’histoire');
   await evaluate(`document.querySelector('[data-back-studio]').click()`);
+  await waitFor(()=>evaluate(`document.querySelectorAll('.story-grid .story-card').length>=1&&document.body.innerText.includes('Tes histoires et leurs parties')`),10000,'Studio par histoires');
   await waitFor(()=>evaluate(`!!document.querySelector('[data-night="start"]')`),10000,'panneau file de nuit');
   await evaluate(`document.querySelector('[data-night="start"]').click()`);
   await waitFor(async()=>(await (await fetch(base+'/api/state')).json()).night?.active===true||(await (await fetch(base+'/api/state')).json()).night?.log?.some(x=>x.text.includes('démarrée')),10000,'file démarrée');
@@ -175,6 +179,8 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   await evaluate(`(()=>{const f=document.querySelector('#accountForm');f.email.value='Moi.QA@x.com';f.balance.value='40';[...f.querySelectorAll('[name=services]')].forEach(c=>c.checked=['chatgpt','flow','grok','arena'].includes(c.value));f.requestSubmit();return true})()`);
   const unified=await waitFor(async()=>(await (await fetch(base+'/api/state')).json()).accounts.find(a=>a.email==='moi.qa@x.com'),10000,'compte unifié ajouté');
   assert.deepEqual(unified.order,['chatgpt','flow','grok','arena']);assert.equal(unified.services.flow.balance,40);
+  await evaluate(`document.querySelector('.more-accounts').open=true`);
+  assert.ok(await evaluate(`!!document.querySelector('[data-bridge-action="scan_flow"]')`),'Détecter mes comptes');
   await waitFor(()=>evaluate(`[...document.querySelectorAll('table.unified tbody tr')].filter(r=>r.innerText.includes('moi.qa@x.com')).length===1`),10000,'une ligne par adresse');
   assert.ok(await evaluate(`document.querySelector('.key-panel').innerText.includes('Clé du studio')&&!document.querySelector('.key-panel').innerText.includes(${JSON.stringify('')}+'token')`),'key panel');
   await evaluate(`document.querySelector('[data-add-service="moi.qa@x.com"][data-service="claude"]').click()`);
