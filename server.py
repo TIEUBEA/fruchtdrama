@@ -159,7 +159,9 @@ def flow_dispatch_tick():
     try:flow_accounts.launch(pending)
     except Exception as e:
         with LOCK:
-            j=job_by(task['job']);j['status']='attention';event(j,'Ouverture Flow impossible : '+str(e))
+            j=job_by(task['job']);j['status']='attention'
+            who=(task['payload'].get('flow_route') or {}).get('email','ce compte')
+            event(j,'Ouverture Flow impossible ('+str(e)+'). Le compte '+who+' a été mémorisé par un navigateur hors ligne : dans la fenêtre FruchtDrama, ouvrez un projet Flow de ce compte puis Mes comptes › Navigateur › Mémoriser le compte Flow ouvert, ou choisissez un autre compte Flow pour cet épisode.')
             j['last_error']={'kind':'interface','slot':task.get('slot'),'task':task.get('id'),'at':now()};save()
 
 LAST_ERRORS={}

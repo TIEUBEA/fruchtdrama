@@ -12,5 +12,9 @@ const assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('nod
  assert.equal(store.token,'secret');assert.equal(store.role,'all');assert.equal(store.enabled,true);assert.equal(store.auto_paired,true);
  assert.equal(await vm.runInContext('autoPair()',context),false,'already paired: no second request');
  assert.equal(calls.length,1);
+ // Studio-page buttons run inside the poll loop, which holds the busy flag: they must not lock themselves out.
+ vm.runInContext('busy=true',context);
+ await assert.rejects(vm.runInContext('registerFlow(true)',context),e=>!/Attendez la fin/.test(e.message));
+ await assert.rejects(vm.runInContext('registerFlow()',context),/Attendez la fin/);
  console.log('Appairage automatique : une seule demande, clé gardée par l’extension, rôle complet activé.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

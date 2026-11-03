@@ -260,7 +260,7 @@ async function handleRequests(cfg){
   if(r.type==='check'){const sites=await FruchtSites.check(chrome,FruchtWorkspace);await call('/api/bridge/sites',{client:cfg.client,sites});}
   // Former gateway-tab buttons, now clicked in the studio's Mes comptes page.
   if(['register_flow','tidy','recover'].includes(r.type)){
-   let result;try{result=r.type==='register_flow'?await registerFlow():r.type==='tidy'?await tidyChats():await recover(r.job);}catch(e){result={ok:false,error:e.message};}
+   let result;try{result=r.type==='register_flow'?await registerFlow(true):r.type==='tidy'?await tidyChats(true):await recover(r.job,true);}catch(e){result={ok:false,error:e.message};}
    await call('/api/bridge/notice',{client:cfg.client,action:r.type,ok:!!result?.ok,text:result?.message||result?.error||'Terminé.'});
   }
  }
@@ -402,9 +402,10 @@ async function pollFlowDownload(active){
  const imported=await call('/api/bridge/import-download',{task:active.task.id,client:active.client,download_id:item.id,filename:item.filename,size:item.fileSize>=0?item.fileSize:item.bytesReceived});
  await finish(active,{ok:true,file:imported.file});
 }
-async function recover(job){
- if(busy)throw Error('Le connecteur est occupé. Réessayez dans quelques secondes.');
- busy=true;let task,cfg;
+// owned: called from the poll loop, which already holds the busy flag (studio-page buttons).
+async function recover(job,owned=false){
+ if(!owned){if(busy)throw Error('Le connecteur est occupé. Réessayez dans quelques secondes.');busy=true;}
+ let task,cfg;
  try{
   cfg=await chrome.storage.local.get(null);if(!cfg.client||!cfg.token)throw Error('Appairez d’abord l’extension.');
   if(cfg.activeTask)throw Error('Une tâche est déjà suivie. Attendez sa fin avant de récupérer une autre réponse.');
@@ -415,12 +416,11 @@ async function recover(job){
  }catch(e){
   if(task)try{await call('/api/bridge/result',{task:task.id,client:cfg.client,result:{ok:false,error:e.message}});}catch{}
   throw e;
- }finally{busy=false;}
+ }finally{if(!owned)busy=false;}
 }
 async function recordBackgroundError(error){try{await chrome.storage.local.set({status:'Connecteur : '+(error?.message||String(error))});}catch{}}
-async function tidyChats(){
- if(busy)throw Error('La passerelle est occupée. Réessayez dans quelques secondes.');
- busy=true;
+async function tidyChats(owned=false){
+ if(!owned){if(busy)throw Error('La passerelle est occupée. Réessayez dans quelques secondes.');busy=true;}
  try{
   const cfg=await chrome.storage.local.get(null);
   if(!cfg.client||!cfg.token)throw Error('Appairez d’abord la passerelle.');
@@ -428,14 +428,14 @@ async function tidyChats(){
   const data=await call('/api/state');
   const result=await FruchtChats.tidy(cfg,data.tasks,chrome);
   await chrome.storage.local.set({status:result.message});return result;
- }finally{busy=false;}
+ }finally{if(!owned)busy=false;}
 }
 // Project URLs with or without an account prefix: /project/<id>, /u/1/project/<id>, /fx/tools/flow/project/<id>.
 const FLOW_PROJECT=/^https:\/\/(flow\.google\.com|labs\.google)\/(?:[^?#]*\/)?project\//;
-async function registerFlow(){
+async function registerFlow(owned=false){
  const cfg=await chrome.storage.local.get(null);
  if(!cfg.client||!cfg.token)throw Error('Appairez d’abord la passerelle au studio.');
- if(cfg.activeTask||busy)throw Error('Attendez la fin de la tâche en cours avant de mémoriser ce compte.');
+ if(cfg.activeTask||(busy&&!owned))throw Error('Attendez la fin de la tâche en cours avant de mémoriser ce compte.');
  if(cfg.role==='creation')throw Error('Ce navigateur est réservé à votre IA ; utilisez la passerelle Flow.');
  const tab=await FruchtWorkspace.latest(chrome,FLOW_PROJECT);
  if(!FruchtFlowSession.project(tab?.url))throw Error('Ouvrez, dans la fenêtre FruchtDrama, le projet Flow du compte à mémoriser, puis cliquez ici.');
