@@ -9,6 +9,24 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 Prochain : P3 (séries, idées, kit de publication, veille, 16:9) et P4 (montage avancé, sous-titres karaoké, rapport de panne). Voir `docs/sudf/REPRISE.md`.
 
+## 0.1.59 — résolution, hook, personnages en mouvement, réécriture anti-plagiat (03/11/2026)
+
+Priorités du propriétaire pour monétiser TikTok : 1. la résolution, 2. le hook.
+
+### Amélioré
+- **Résolution** : vidéo finale en **1080 × 1920** (1920 × 1080 en horizontal) au lieu de 720 × 1280 ; agrandissement Lanczos + netteté légère ; encodage haute qualité (x264 slow, CRF 17, profil high, AAC 192 kb/s) ; sous-titres, marges et miniature mis à l'échelle. Option **clips Flow en 1080p** (Réglages Flow de Créer ; vérifiée dans Flow, sinon aucun envoi). Planches : « plus haute résolution disponible, ultra net ».
+- **Hook** : accroche **écrite à l'écran** pendant les 3 premières secondes (gros texte en haut, dernier mot en jaune, fondu) ; champ `hook_text` demandé à l'IA ; consigne « HOOK OBLIGATOIRE » : instant le plus fort en scène 1, phrase choc de moins de 10 mots dans les 2 premières secondes, question résolue à la fin.
+- **Personnages et mouvement** : 2 à 5 personnages (au moins 3 quand l'histoire le permet) ; cadrage différent par scène, caméra en mouvement, personnages qui agissent, arrière-plan vivant, au moins deux lieux ; même consigne dans les prompts de clips.
+
+### Ajouté
+- **Réécrire pour s'éloigner** (originalité) : sur la fiche (renvoyée avec les conseils et l'origine à éviter) et après le montage (nouveaux titre, couverture, accroche et description, kit de publication refait, score recalculé).
+
+### Corrigé
+- Flow : l'avertissement réel « Avertissement de crédits insuffisants » est reconnu ; la tâche s'arrête en « crédits » (passage au compte suivant) au lieu d'un « envoi bloqué » incompréhensible.
+- Les boutons Navigateur du studio (mémoriser le compte Flow, ranger, récupérer) ne se bloquent plus eux-mêmes (« Attendez la fin de la tâche en cours »).
+- Mes comptes : statuts fidèles (solde bas, compte réellement ouvert).
+- Message clair quand un compte Flow a été mémorisé par un navigateur hors ligne.
+
 ## 0.1.58 — versions horizontale 16:9 et autres langues (03/11/2026)
 
 ### Ajouté

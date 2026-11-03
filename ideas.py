@@ -72,8 +72,8 @@ def sheet_prompt(language, idea, scene_count, seconds, note='', previous=None):
         revision = '\nConsigne du propriétaire : ' + note
     return f"""Écris la fiche de décision d'une mini-fiction ORIGINALE de fruits anthropomorphes, avant tout dessin.
 Idée : {idea}
-Vidéo verticale de {scene_count} plans de {seconds} secondes, au plus 3 personnages. Langue de tous les textes : {language}.
-Titres en 2 à 4 mots, en majuscules. Premières répliques : une phrase choc de 12 mots au plus, prononcée par un personnage à l'écran.
+Vidéo verticale de {scene_count} plans de {seconds} secondes, 2 à 5 personnages, plusieurs lieux. Langue de tous les textes : {language}.
+Titres en 2 à 4 mots, en majuscules. Premières répliques : une phrase choc de 10 mots au plus, dite dans les 2 premières secondes par un personnage à l'écran (c'est le hook : danger, injustice ou secret, jamais une présentation).
 Réponds UNIQUEMENT avec du JSON valide, sans explication, clés techniques en anglais.{revision}
 Schéma : {json.dumps(schema, ensure_ascii=False)}"""
 
@@ -97,7 +97,7 @@ def validate_sheet(data):
             cast.append({'name': _text(c.get('name'), 40), 'role': _text(c.get('role'), 40), 'appearance': _text(c.get('appearance'), 200)})
     if not cast:
         raise ValueError('Fiche sans casting')
-    sheet['cast'] = cast[:3]
+    sheet['cast'] = cast[:5]
     return sheet
 
 

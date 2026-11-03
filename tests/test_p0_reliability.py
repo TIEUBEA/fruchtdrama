@@ -296,7 +296,7 @@ class RealMontageTests(unittest.TestCase):
         self.assertEqual(j['stage'], 'done'); self.assertEqual(j['final'], s.asset_url(j, 'final.mp4'))
         probe = subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration:stream=codec_type,width,height', '-of', 'json', str(folder / 'final.mp4')], capture_output=True, text=True, check=True)
         meta = json.loads(probe.stdout); video = next(x for x in meta['streams'] if x['codec_type'] == 'video')
-        self.assertEqual((video['width'], video['height']), (720, 1280))
+        self.assertEqual((video['width'], video['height']), (1080, 1920), 'best resolution for TikTok')
         self.assertAlmostEqual(float(meta['format']['duration']), 16, delta=0.5)
         self.assertTrue(any(x['codec_type'] == 'audio' for x in meta['streams']))
         self.assertTrue((folder / 'cover.jpg').is_file()); self.assertEqual(s.STATE['tasks'], [])

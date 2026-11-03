@@ -54,7 +54,7 @@ class VariantTests(unittest.TestCase):
         self.assertTrue((s.job_dir(v) / 'ref.png').is_file()); self.assertFalse(any(x.get('image') for x in v['scenes']))
         t = next(t for t in s.STATE['tasks'] if t['job'] == v['id'] and t['kind'] == 'chat_image')
         self.assertIn('landscape 16:9', t['payload']['prompt']); self.assertNotIn('9:16', t['payload']['prompt']); self.assertEqual(t['payload']['aspect'], '16:9')
-        self.assertEqual(s.frame_size(v), (1280, 720))
+        self.assertEqual(s.frame_size(v), (1920, 1080))
         self.assertIn('planches', self.error('/api/job/' + v['id'], {'action': 'variant', 'kind': 'horizontal'}), 'no boards yet')
         v['scenes'][0]['image'] = 's0.png'
         self.assertIn('déjà horizontal', self.error('/api/job/' + v['id'], {'action': 'variant', 'kind': 'horizontal'}))
@@ -76,7 +76,7 @@ class VariantTests(unittest.TestCase):
 
     def test_orientation_checks(self):
         self.assertEqual(s.landscape('A shot, portrait 9:16, vertical framing'), 'A shot, landscape 16:9, horizontal framing')
-        self.assertEqual(s.frame_size({'config': {}}), (720, 1280))
+        self.assertEqual(s.frame_size({'config': {}}), (1080, 1920))
 
 
 if __name__ == '__main__':

@@ -1,7 +1,8 @@
 globalThis.FruchtFlow={
  creditBlocked(doc){
-  const pattern=/^(?:Warnung:\s*Nicht genügend Guthaben|Nicht genügend Guthaben|Insufficient credits|Not enough credits|Crédits insuffisants|Avertissement\s*:\s*crédits insuffisants)$/i;
-  return [...doc.querySelectorAll('button,[role="button"],[role="alert"]')].some(el=>this.visible(doc,el)&&[el.getAttribute('aria-label'),el.innerText].filter(Boolean).some(label=>pattern.test(label.trim())));
+  // Real labels seen: "Avertissement de crédits insuffisants" (03/11/2026), "Warnung: Nicht genügend Guthaben", "Insufficient credits".
+  const pattern=/(?:nicht genügend guthaben|insufficient credits|not enough credits|crédits insuffisants)/i;
+  return [...doc.querySelectorAll('button,[role="button"],[role="alert"]')].some(el=>this.visible(doc,el)&&[el.getAttribute('aria-label'),el.innerText].filter(Boolean).some(label=>label.trim().length<70&&pattern.test(label.trim())));
  },
  activate(doc,element){
   if(!element||element.disabled||element.getAttribute('aria-disabled')==='true')return;

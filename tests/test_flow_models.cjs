@@ -26,6 +26,9 @@ function fixture({missing=false,ambiguous=false,wrongResolution=false,wrongDurat
  return {doc,picked,model};
 }
 (async()=>{
+ // Real Flow label (03/11/2026): "Avertissement de crédits insuffisants" must stop before any send.
+ {const el=t=>({innerText:'',getAttribute:k=>k==='aria-label'?t:null,getClientRects:()=>[{}]});const d=labels=>({querySelectorAll:()=>labels.map(el)});
+  f.visible=()=>true;assert.ok(f.creditBlocked(d(['Avertissement de crédits insuffisants'])));assert.ok(f.creditBlocked(d(['Warnung: Nicht genügend Guthaben'])));assert.ok(!f.creditBlocked(d(['Ingrédient image','Effacer le prompt'])));}
  // Horizontal 16:9 version: the 16:9 radio is chosen and verified; a vertical-only page refuses.
  {const h=fixture({aspect:'16:9'});await f.configure(h.doc,async()=>{},12,'gemini_omni_flash','720p',8,'16:9');f.verifyModel(h.doc,'gemini_omni_flash','720p',8,'16:9');
   assert.throws(()=>f.verifyModel(h.doc,'gemini_omni_flash','720p',8),/format vertical non confirmé/);

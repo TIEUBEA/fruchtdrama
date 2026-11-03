@@ -25,6 +25,11 @@ globalThis.FruchtResponse={
     if(![...q.scenes,q.continuity].every(x=>x&&['pass','issue','uncertain'].includes(x.status)&&typeof x.detail==='string'&&x.detail.trim()))continue;
     return parsed;
    }
+   if(kind==='meta'){
+    if(parsed?.production_id!==expectedJob||parsed?.generation_task_id!==expectedTask)continue;
+    if(typeof parsed.title!=='string'||typeof parsed.description!=='string')continue;
+    return parsed;
+   }
    if(kind==='ideas'||kind==='sheet'){
     // Story start (ten stories, decision sheet): only the reply bound to this exact task.
     if(parsed?.production_id!==expectedJob||parsed?.generation_task_id!==expectedTask)continue;

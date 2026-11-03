@@ -67,6 +67,19 @@ class ServerTests(unittest.TestCase):
         self.assertIn('Contrôle d’originalité', j['events'][-1]['text'])
         self.assertEqual(next(f for f in r['factors'] if f['key'] == 'duration')['risk'], 5, '8 s is under one minute')
 
+    def test_distance_rewrites_texts_then_rescores(self):
+        s.STATE = s.fresh()
+        j = {'id': s.uid(), 'title': 'Copie', 'brief': 'b', 'stage': 'done', 'status': 'done', 'events': [], 'config': {'clip_seconds': 8, 'provider': 'chatgpt', 'language': 'Français (fr-FR)'}, 'characters': [],
+             'selected': {'source': 'owner_link', 'title': 'Le père enferme sa fille'}, 'script': {'title': 'Le père enferme sa fille', 'description': 'Le père enferme sa fille #ia'}, 'scenes': [{'image': 'scene0.png', 'dialogue': []}]}
+        s.STATE['jobs'].append(j); picture(s.job_dir(j) / 'scene0.png', 6)
+        self.assertTrue(s.check_originality(j)['factors'])
+        import json as _j
+        s.add_task(j, 'chat_text', {'provider': 'chatgpt', 'prompt': 'x', 'response_kind': 'meta'}, 'rewrite_meta')
+        t = next(x for x in s.STATE['tasks'] if x['slot'] == 'rewrite_meta'); t['status'] = 'claimed'
+        s.accept_task_result(t, {'ok': True, 'text': _j.dumps({'title': 'La clé du grenier', 'cover_title': 'QUI A LA CLÉ ?', 'hook_text': 'Elle ne devait jamais ouvrir', 'description': 'Une histoire originale créée avec l’IA #fruits'})})
+        self.assertEqual(j['title'], 'La clé du grenier'); self.assertEqual(j['script']['hook_text'], 'Elle ne devait jamais ouvrir')
+        self.assertIn('réécrits', ' '.join(e['text'] for e in j['events'])); self.assertIn('Contrôle d’originalité', j['events'][-1]['text'])
+
 
 if __name__ == '__main__':
     unittest.main()

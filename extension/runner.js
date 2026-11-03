@@ -91,6 +91,7 @@ async function run(task,attachments){
  const prompt=task.payload.prompt+(task.kind==='chat_image'?'\nGenerate the image now, not a written tutorial.':'');fill(editor,prompt);await sleep(700);
  const findSend=()=>isFlow?globalThis.FruchtFlow.sendButton(document,editor):globalThis.FruchtComposer.button(document,editor);
  let send=null;const buttonStart=Date.now();while(Date.now()-buttonStart<(attachments?.length?180000:25000)){blocked();checkFlowAccount();editor=findEditor()||editor;send=findSend();if(send)break;await sleep(700)}
+ if(!send&&isFlow&&globalThis.FruchtFlow.creditBlocked(document)){const error=Error('Crédits Flow insuffisants signalés par le fournisseur ; aucun envoi effectué.');error.flowBlocked='credits';error.kind='credits';throw error;}
  if(!send){const diagnostic=globalThis.FruchtComposer.diagnostic(document,editor);return {ok:false,error:'Envoi bloqué : '+(diagnostic.editor?.length?'texte présent, commande inactive ou non reconnue.':'le texte n’a pas été accepté par l’éditeur.')+' Diagnostic technique : '+JSON.stringify(diagnostic),diagnostic};}
  if(isFlow&&/buy|acheter|upgrade|abonn|subscribe|purchase/i.test(send.innerText+' '+send.getAttribute('aria-label')))throw Error('Achat interdit par le budget zéro.');
  checkFlowAccount();requireLiveExtension();

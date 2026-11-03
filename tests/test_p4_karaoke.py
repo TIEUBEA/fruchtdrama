@@ -66,7 +66,9 @@ class MontageTests(unittest.TestCase):
         self.assertEqual(j['status'], 'done', j['events'][-1]['text'])
         ass = (folder / 'subtitles.ass').read_text('utf-8-sig')
         self.assertIn('Style: Karaoke', ass)
-        lines = [l for l in ass.splitlines() if l.startswith('Dialogue:')]
+        hook = [l for l in ass.splitlines() if ',Hook,' in l]
+        self.assertEqual(len(hook), 1, 'hook written on screen at the start'); self.assertTrue(hook[0].startswith('Dialogue: 1,0:00:00.00'))
+        lines = [l for l in ass.splitlines() if l.startswith('Dialogue:') and ',Hook,' not in l]
         self.assertTrue(lines and all(',Karaoke,' in l and '\\kf' in l for l in lines))
         self.assertTrue(any(l.startswith('Dialogue: 0,0:00:08.50') for l in lines), 'second clip offset by 8 s')
         self.assertTrue((folder / 'final.mp4').stat().st_size > 1000)
