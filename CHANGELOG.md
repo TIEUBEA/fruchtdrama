@@ -5,7 +5,7 @@ correspondante (P0-xx, P1-x, P2-xx) détaillée dans `docs/sudf/`. Guide pour re
 `docs/sudf/REPRISE.md`. **Mode d'emploi détaillé** (installer, lancer, utiliser), mis à jour à chaque
 version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, version par version).
 
-## Prochaine version
+## 0.1.85 — 05/11/2026
 - Corrigé : **« Recréer à l'identique » refaisait une autre histoire** (cas réel : une femme de ménage qui cache sa misère devenue deux sœurs et un pendentif). L'IA recevait aussi les règles d'originalité (cinq concepts nouveaux, historique à éviter) qui contredisaient la fidélité. Elle reçoit maintenant la vidéo découpée scène par scène (répliques d'origine minutées dans l'ordre) et la consigne « même histoire, mêmes personnages, mêmes lieux, mêmes événements ; seules les répliques sont reformulées ».
 - Amélioré : **histoires captivantes**. Les six directions « secret de famille calme » (lettre, photo, héritage, promesse…) sont remplacées par huit moteurs émotionnels des vidéos virales (patronne qui humilie, belle-mère cruelle, milliardaire déguisé, épouse trahie, fille rejetée, enfant moqué, fils ingrat, fausse accusation). Nouvelles règles de récit : victime attachante, antagoniste détestable, injustice qui s'aggrave, basculement, revanche visible, transitions qui laissent une tension, réactions émotionnelles visibles, appel de fin. Les concepts sont choisis d'abord sur l'émotion (3*hook + 2*clarté + 3*émotion + 1*nouveauté).
 - Amélioré : « Inspirée d'une vidéo » garde la mécanique émotionnelle de l'original (victime, antagoniste, injustice, retournement, fin) et change personnages, lieux et répliques.

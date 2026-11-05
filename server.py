@@ -24,7 +24,7 @@ import power
 import maintenance
 import series
 import licence
-VERSION='0.1.84'
+VERSION='0.1.85'
 OFFICIAL_ORIGIN='chrome-extension://bhdmibhibonmaamgcbpmbhedhohfongj'  # extension/manifest.json "key"
 import sys
 import traceback
