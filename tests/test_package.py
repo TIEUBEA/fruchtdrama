@@ -31,7 +31,7 @@ class PackageTests(unittest.TestCase):
     def test_guide_pdf_has_no_account_name(self):
         text = subprocess.run(['pdftotext', str(ROOT / 'docs/GUIDE-UTILISATEUR.pdf'), '-'], capture_output=True, text=True).stdout
         self.assertNotRegex(text.lower(), r'arnaud|pkf|djoum|chewa')
-        self.assertIn('0.1.69', text)
+        self.assertIn('0.1.85', text)
 
 
 if __name__ == '__main__':
