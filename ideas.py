@@ -35,7 +35,8 @@ def ideas_prompt(language, niche, trend_titles, extra='', avoid=()):
                          'why': 'Pourquoi ça accroche (une phrase)'}]}
     return f"""Propose exactement {IDEA_COUNT} histoires ORIGINALES et très différentes pour une vidéo verticale courte de la niche « {niche} » (fruits anthropomorphes en animation 3D).
 Langue de tous les textes : {language}. Réponds UNIQUEMENT avec du JSON valide, sans explication, clés techniques en anglais.
-Chaque histoire : un enfant ou un personnage attachant, une injustice ou un danger visible dès la première image, une échéance, un secret ou un retournement, une suite possible.
+Chaque histoire : une victime attachante (souvent une mère, un enfant, une employée modeste) et un antagoniste détestable (patron, belle-mère, riche méprisant, mari ingrat, collègue jalouse), une injustice ou une humiliation visible dès la première image qui s'aggrave, puis un retournement où la victime obtient justice ou revanche devant tous ; émotion forte (colère, larmes, soulagement), jamais une simple discussion ou un secret de famille réglé calmement ; une suite possible.
+Le pitch dit en une phrase qui souffre, qui est injuste, ce qui empire et comment ça bascule.
 Titres viraux observés aujourd'hui (tendance seulement, ne jamais les copier) : {json.dumps(list(trend_titles), ensure_ascii=False)}.
 Histoires déjà faites à éviter : {json.dumps(list(avoid), ensure_ascii=False)}.
 {('Consigne du propriétaire : ' + extra) if extra else ''}
@@ -73,6 +74,7 @@ def sheet_prompt(language, idea, scene_count, seconds, note='', previous=None):
     return f"""Écris la fiche de décision d'une mini-fiction ORIGINALE de fruits anthropomorphes, avant tout dessin.
 Idée : {idea}
 Vidéo verticale de {scene_count} plans de {seconds} secondes, 2 à 5 personnages, plusieurs lieux. Langue de tous les textes : {language}.
+Le moteur (engine) est ce que veut la victime, l'obstacle est l'antagoniste et l'injustice qui s'aggrave, le twist est la preuve ou la révélation qui renverse la situation et punit l'injuste. L'émotion doit être forte et lisible sans le son (humiliation, trahison, sacrifice, revanche), jamais un malentendu poli.
 Titres en 2 à 4 mots, en majuscules. Premières répliques : une phrase choc de 10 mots au plus, dite dans les 2 premières secondes par un personnage à l'écran (c'est le hook : danger, injustice ou secret, jamais une présentation).
 Appels de fin : trois appels différents, dits par un personnage à la fin, liés au twist, 15 mots au plus. Le premier fait choisir en commentaire (ex. « Je le dénonce, dis 1. Je me tais, dis 2. »), le deuxième annonce la partie 2 et demande l'abonnement, le troisième pose une question au spectateur.
 Réponds UNIQUEMENT avec du JSON valide, sans explication, clés techniques en anglais.{revision}

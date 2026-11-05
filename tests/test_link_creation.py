@@ -52,7 +52,7 @@ class LinkTests(unittest.TestCase):
         # The AI now sees the video: key-frame board attached, description and transcription in the prompt.
         self.assertEqual(task['payload']['attachments'], [f"/media/{j['id']}/source_board.jpg"])
         self.assertIn('La pomme cache une lettre', task['payload']['prompt']); self.assertIn('Où est la lettre ?', task['payload']['prompt'])
-        self.assertIn('Inspiration seulement', task['payload']['prompt']); self.assertIn('entièrement ORIGINALE', task['payload']['prompt'])
+        self.assertIn('INSPIRÉE de cette vidéo', task['payload']['prompt']); self.assertIn('entièrement ORIGINALE', task['payload']['prompt'])
         self.assertTrue(any('sans copier' in e['text'] for e in j['events']))
         self.assertTrue(any('Vidéo d’origine analysée' in e['text'] for e in j['events']))
 

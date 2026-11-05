@@ -59,7 +59,7 @@ class SourceVideoTests(unittest.TestCase):
         a = {'desc': 'Une pomme ment', 'board': 'source_board.jpg', 'transcript': '[00:01] Menteuse !'}
         identical = sv.guidance('identical', a, 1)
         self.assertIn('RECRÉER À L’IDENTIQUE', identical); self.assertIn('Menteuse', identical); self.assertIn('1 capture(s)', identical)
-        self.assertIn('Inspiration seulement', sv.guidance('inspired', a))
+        self.assertIn('mécanique émotionnelle', sv.guidance('inspired', a))
         self.assertIn('seul son lien est connu', sv.guidance('inspired', {}))
 
 

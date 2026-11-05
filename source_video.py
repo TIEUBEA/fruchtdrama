@@ -26,7 +26,7 @@ MAX_SECONDS = 600
 FRAMES = 8
 CAPTURES = 4
 CAPTURE_BYTES = 8 * 1024 * 1024
-TRANSCRIPT_CHARS = 3000
+TRANSCRIPT_CHARS = 8000  # a 3 min video: the end (the payoff) must reach the writer
 VIDEO_HOSTS = re.compile(r'(^|\.)(tiktok\.com|tiktokcdn\.com|tiktokcdn-us\.com|tiktokv\.com|ibytedtos\.com|byteoversea\.com)$')
 MODES = ('inspired', 'identical')
 
@@ -131,7 +131,24 @@ def save_captures(decoded, folder: pathlib.Path) -> list[str]:
     return saved
 
 
-def guidance(mode: str, analysis: dict | None, captures_count: int = 0) -> str:
+def beats(transcript: str, duration: float | None, scenes: int) -> list[list[str]]:
+    """Original lines grouped into our scenes by time, so a faithful remake follows the same order.
+    Each transcript line looks like « [mm:ss] text »."""
+    lines = []
+    for raw in str(transcript or '').splitlines():
+        m = re.match(r'\[(\d+):(\d+)\]\s*(.+)', raw.strip())
+        if m:
+            lines.append((int(m.group(1)) * 60 + int(m.group(2)), m.group(3).strip()))
+    if not lines or scenes < 1:
+        return []
+    total = max(float(duration or 0), lines[-1][0] + 1.0)
+    groups = [[] for _ in range(scenes)]
+    for t, text in lines:
+        groups[min(scenes - 1, int(t / total * scenes))].append(f'[{t // 60:02d}:{t % 60:02d}] {text}')
+    return groups
+
+
+def guidance(mode: str, analysis: dict | None, captures_count: int = 0, scenes: int = 0) -> str:
     """What the writing AI is told about the video to redo."""
     analysis = analysis or {}
     seen = []
@@ -146,11 +163,21 @@ def guidance(mode: str, analysis: dict | None, captures_count: int = 0) -> str:
     if analysis.get('transcript'):
         text += '\nCe qui y est dit (transcription automatique, peut contenir des erreurs) :\n' + analysis['transcript']
     if mode == 'identical':
-        text += ('\nMODE RECRÉER À L’IDENTIQUE, choisi par le propriétaire : refais la même histoire, scène par scène, dans le même ordre, '
-                 'avec les mêmes rôles, le même type de personnages et de décors, la même accroche, le même retournement et la même fin. '
-                 'Reformule chaque réplique avec d’autres mots (jamais mot pour mot), donne d’autres prénoms, et garde nos fruits anthropomorphes. '
-                 'Parmi les concepts comparés, donne le meilleur score au plus fidèle.')
+        # Like the Atelier « Recréer à l'identique »: same characters, outfits, marks and settings as the original;
+        # only the lines are reworded in simple words, as close to the script as possible.
+        text += ('\nMODE RECRÉER À L’IDENTIQUE, choisi par le propriétaire. C’est LA MÊME HISTOIRE : mêmes personnages et mêmes rôles '
+                 '(même métier, même âge, même lien entre eux, même méchant, même victime), mêmes lieux, mêmes objets, mêmes événements dans le même ordre, '
+                 'même accroche, même retournement, même fin et même émotion. N’invente aucun autre conflit, aucun autre personnage principal, aucun secret, '
+                 'aucun objet que la vidéo ne montre pas. Les personnages deviennent des fruits anthropomorphes qui gardent les vêtements, signes distinctifs et '
+                 'attitudes de l’original. Seules les répliques sont reformulées en mots simples, au plus près du sens de l’original (jamais mot pour mot), '
+                 'et les prénoms changent.')
+        groups = beats(analysis.get('transcript', ''), analysis.get('duration'), scenes)
+        if any(groups):
+            text += ('\nDÉCOUPAGE OBLIGATOIRE : chaque scène reprend les moments de l’original indiqués ci-dessous (condense en gardant chaque '
+                     'événement et chaque émotion ; si une scène n’a pas de réplique, montre l’action correspondante de la planche) :\n'
+                     + '\n'.join(f'Scène {k + 1} : ' + (' / '.join(g) if g else '(action visible sur la planche à ce moment)') for k, g in enumerate(groups)))
     else:
-        text += ('\nInspiration seulement : garde ce qui fait marcher la vidéo (type d’accroche, rythme, émotion, type de retournement), '
-                 'mais invente une autre histoire ; ne copie ni ses répliques ni ses plans.')
+        text += ('\nINSPIRÉE de cette vidéo : garde sa mécanique émotionnelle (le même type de victime et d’antagoniste, la même injustice, '
+                 'le même genre de retournement, la même fin et la même émotion, le même rythme et le même type d’accroche), '
+                 'mais change les personnages, le lieu, les objets et toutes les répliques ; ne copie ni ses répliques ni ses plans.')
     return text

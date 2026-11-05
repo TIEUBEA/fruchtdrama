@@ -131,7 +131,7 @@ class EditorialTests(unittest.TestCase):
         old=self.add_old();before=copy.deepcopy(old);self.job['hook_version']=1;self.job['retention_version']=1
         prompt=s.script_prompt(self.job)
         self.assertIn('6 à 10 mots',prompt);self.assertIn('opening_plan',prompt)
-        self.assertIn('Ne commence pas toutes les histoires',prompt)
+        self.assertIn('Le spectateur comprend immédiatement qui souffre',prompt)
         self.assertIn('English (en-US)',prompt)
         self.assertEqual(old,before);self.assertNotIn('hook_version',old)
         self.assertIn(editorial.direction(self.job,s.STATE['jobs'])['id'],[x[0] for x in editorial.FAMILY_DIRECTIONS])
