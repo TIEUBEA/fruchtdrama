@@ -148,13 +148,16 @@ def cached(url, data_dir, kind='meta'):
 
 
 def figures(meta, now=time.time):
-    """Views, views per hour, growth since the previous reading, engagement, age."""
+    """Views, views per hour, growth over the last 24 h of readings, engagement, age."""
     if not meta or not meta.get('views'):
         return None
     views, moment = meta['views'], now()
     hours = max(1.0, (moment - meta['created']) / 3600) if meta.get('created') else None
     history = meta.get('history', [])
-    growth = history[-1][1] - history[-2][1] if len(history) >= 2 else None
+    # TikTok rounds the counter (41,3 k): two readings 2 h apart often look identical. Like the Atelier,
+    # growth is measured from the oldest reading of the last 24 h, and stays unknown with a single reading.
+    window = [h for h in history if h[0] >= history[-1][0] - 86400] if history else []
+    growth = window[-1][1] - window[0][1] if len(window) >= 2 and window[-1][0] - window[0][0] >= 3600 else None
     engagement = round((meta.get('likes', 0) + meta.get('comments', 0) + meta.get('shares', 0)) / views * 100, 1) if views else None
     return {'views': views, 'per_hour': round(views / hours) if hours else None, 'growth': growth,
             'engagement': engagement, 'age_days': round((moment - meta['created']) / 86400, 1) if meta.get('created') else None,

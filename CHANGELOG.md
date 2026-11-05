@@ -5,6 +5,17 @@ correspondante (P0-xx, P1-x, P2-xx) détaillée dans `docs/sudf/`. Guide pour re
 `docs/sudf/REPRISE.md`. **Mode d'emploi détaillé** (installer, lancer, utiliser), mis à jour à chaque
 version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, version par version).
 
+## 0.1.83 — 05/11/2026
+Revue de chaque menu face au live de l'Atelier Gourmand relu en détail (rapport : `docs/sudf/REVUE-MODULES-2026-11-05.md`).
+- Corrigé : **carte d'histoire** qui prenait le statut de la version 16:9 ou d'une autre langue (« À tourner » sur une vidéo prête). Elle suit la partie principale et ajoute « · 16:9 à finir ».
+- Corrigé : **compteurs du Studio** et sous-titre du menu comptés par histoire, comme les cartes (« 4 prêtes » pour 2 cartes prêtes auparavant).
+- Corrigé : **description de publication** coupée à 240 caractères au milieu d'un mot, sans hashtags : affichée en entier.
+- Corrigé : **descriptions des personnages** coupées au milieu d'un mot : texte complet sur 4 lignes, en entier au survol.
+- Corrigé : « Clips 3 à revoir » en rouge après un montage accepté : « 3 acceptés avec réserve », un clic ouvre la scène.
+- Corrigé : **Mes comptes** : le bandeau de détection (« 74 crédits ») contredisait le tableau (« 293 crédits ») ; il porte sa date et précise qu'il ne parle que d'une fenêtre. Numéros de compte en double : « fenêtre 1 · compte n° 1 ».
+- Corrigé : **Filon** : « Croissance +0 » sur 40 % des vidéos (compteur TikTok arrondi). Croissance mesurée sur 24 h de lectures, « — » s'il n'y a qu'une lecture.
+- Corrigé : le bouton « Langues » ressemblait à un cadre vide.
+
 ## 0.1.82 — 05/11/2026
 - Corrigé : **diagnostic technique affiché tel quel** (« Lecture du scénario : {"candidates":4,…} ») dans la barre de fabrication, la carte « En cours » et le journal. Il devient une phrase : « L'IA écrit le scénario ; réponse pas encore complète », « Scénario reçu (8 scènes) : vérification en cours », « En attente de la réponse de l'IA » (`readable_progress`, aussi appliqué aux anciennes lignes).
 - Corrigé : **refus du scénario imprécis**. « Il faut 1 à 5 personnages et exactement 8 scènes » devient le nombre réellement reçu (« 7 personnage(s) reçu(s), il en faut 1 à 5 : fusionner ou retirer les personnages secondaires »). La réécriture automatique reçoit cette raison exacte.

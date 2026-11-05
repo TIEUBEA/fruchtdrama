@@ -200,3 +200,5 @@ body.dark .wall.wall-big{background:#3b1414;color:#ffd9d6;border-color:#e57373}b
 .flagline{margin:8px 0 0;font-size:.92em}.flagline.bad{color:#b71c1c}.flagline.warn{color:#8a3b07}.heard{margin:8px 0 0;font-size:.92em}.heard.warn{color:#8a3b07}.heard small{color:var(--muted)}
 
 .run-widget button{min-width:0;overflow:hidden}.run-widget span{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+small.clamp{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}.pub-desc{white-space:pre-line;overflow-wrap:anywhere}
+details.lang-menu{border:0;padding:0;margin:0;position:relative}details.lang-menu>summary{list-style:none}details.lang-menu>summary::-webkit-details-marker{display:none}details.lang-menu[open]{display:flex;gap:6px;flex-wrap:wrap}

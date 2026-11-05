@@ -24,7 +24,7 @@ import power
 import maintenance
 import series
 import licence
-VERSION='0.1.82'
+VERSION='0.1.83'
 OFFICIAL_ORIGIN='chrome-extension://bhdmibhibonmaamgcbpmbhedhohfongj'  # extension/manifest.json "key"
 import sys
 import traceback
@@ -618,7 +618,8 @@ def flow_scan(state,client,accounts):
     state.setdefault('settings',{})['flow_auto']=True
     total=sum(int(x.get('balance') or 0) for x in state['profiles'] if (x.get('flow_email') or '') in names)
     if not names:return 'Aucun compte Google détecté dans cette fenêtre : ajoute tes comptes dans Chrome (photo de profil › Ajouter un compte), puis Détecter.'
-    return f'{len(names)} compte(s) Google détecté(s) ({added} nouveau(x)), {total} crédits Flow au total. Changement de compte automatique activé.'
+    # Says "in this window": with several FruchtDrama windows the table below adds up all of them.
+    return f'Dernière détection dans une fenêtre : {len(names)} compte(s) Google ({added} nouveau(x)), {total} crédits Flow sur ces comptes. Changement de compte automatique activé.'
 
 def prepare_source(id):
     """Refaire une virale: fetch the TikTok video once, key-frame board + local transcription, then write."""
