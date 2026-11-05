@@ -5,6 +5,11 @@ correspondante (P0-xx, P1-x, P2-xx) détaillée dans `docs/sudf/`. Guide pour re
 `docs/sudf/REPRISE.md`. **Mode d'emploi détaillé** (installer, lancer, utiliser), mis à jour à chaque
 version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, version par version).
 
+## Prochaine version
+- Ajouté : **Apparence** (Mes comptes, ancienne section « Thème ») : sept palettes comme l'Atelier, en cartes avec quatre pastilles de couleur : Ardoise, Laiton, Lagon, Cinéma, Papier, Verre, Éditorial. Papier (clair) reste le thème de départ. L'ancien « Clair » devient Papier, l'ancien « Sombre » devient Ardoise, sans rien perdre. Le bouton rond en haut passe de Papier à Ardoise et inversement.
+- Amélioré : chaque palette est lisible partout (texte contrôlé à 4,5 pour 1 au moins sur Filon, Créer, Studio, Mes comptes, épisode et histoire).
+- Amélioré : **Personnages** comme l'Atelier, sur la page épisode et la page histoire : une petite pastille par personnage (nom, point vert s'il est dessiné, flèche) qui se déplie au clic pour montrer sa description, son image s'il a la sienne et « Remplacer ». À côté du titre, la bascule « Simple | Détaillé » change le niveau tant que rien n'est dessiné, puis montre seulement le niveau choisi. « Tout refaire » s'appelle maintenant « Refaire », à droite.
+
 ## 0.1.84 — 05/11/2026
 L'Atelier Gourmand 1.0.22 ouvert et parcouru bouton par bouton ; écarts corrigés (détail : `docs/sudf/REVUE-MODULES-2026-11-05.md`).
 - Ajouté : **espagnol et portugais (Brésil)**, cinq langues comme l'Atelier : écriture, recherche TikTok, contrôle des paroles, hashtags, horaires de publication, variantes.
