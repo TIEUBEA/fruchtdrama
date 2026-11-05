@@ -5,6 +5,12 @@ correspondante (P0-xx, P1-x, P2-xx) détaillée dans `docs/sudf/`. Guide pour re
 `docs/sudf/REPRISE.md`. **Mode d'emploi détaillé** (installer, lancer, utiliser), mis à jour à chaque
 version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, version par version).
 
+## 0.1.82 — 05/11/2026
+- Corrigé : **diagnostic technique affiché tel quel** (« Lecture du scénario : {"candidates":4,…} ») dans la barre de fabrication, la carte « En cours » et le journal. Il devient une phrase : « L'IA écrit le scénario ; réponse pas encore complète », « Scénario reçu (8 scènes) : vérification en cours », « En attente de la réponse de l'IA » (`readable_progress`, aussi appliqué aux anciennes lignes).
+- Corrigé : **refus du scénario imprécis**. « Il faut 1 à 5 personnages et exactement 8 scènes » devient le nombre réellement reçu (« 7 personnage(s) reçu(s), il en faut 1 à 5 : fusionner ou retirer les personnages secondaires »). La réécriture automatique reçoit cette raison exacte.
+- Corrigé : l'étape 1 affichait « Fiche à écrire » pendant l'écriture du scénario ; elle affiche « scénario en cours » (et « à valider » quand la fiche attend le propriétaire).
+- Corrigé : le texte de la carte « En cours » (barre latérale) débordait de la carte ; il est coupé à deux lignes.
+
 ## 0.1.81 — 05/11/2026
 - Corrigé : **chrono de fabrication incohérent** (« 678 min » pour un épisode commencé la veille). Il comptait depuis la création de l'épisode, nuits et pauses comprises. Il compte maintenant le temps de travail seulement : un silence de plus de 10 minutes dans le journal (pause, nuit, attente du propriétaire) n'est pas compté. Affichage en heures au-delà de 60 minutes (`activeSeconds`).
 

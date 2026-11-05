@@ -24,7 +24,7 @@ import power
 import maintenance
 import series
 import licence
-VERSION='0.1.81'
+VERSION='0.1.82'
 OFFICIAL_ORIGIN='chrome-extension://bhdmibhibonmaamgcbpmbhedhohfongj'  # extension/manifest.json "key"
 import sys
 import traceback
@@ -107,13 +107,26 @@ def client_accepts(client,task):
     return task['kind']=='tiktok_search'
 def event(j, text): j['events'].append({'at':now(),'text':text}); j['updated']=now()
 
+def readable_progress(text):
+    # The extension reports the scenario reader's raw diagnostic; the owner sees a sentence instead.
+    prefix='Lecture du scénario : '
+    if not text.startswith(prefix+'{'):return text
+    try:d=json.loads(text[len(prefix):])
+    except ValueError:return 'Lecture de la réponse de l’IA en cours.'
+    if d.get('parsedScenes'):return f"Scénario reçu ({d['parsedScenes']} scènes) : vérification en cours."
+    if d.get('hasJob') or d.get('hasTask'):return 'L’IA écrit le scénario ; réponse pas encore complète.'
+    return 'En attente de la réponse de l’IA.'
+
 def alert(j,level,text):
     # Shown as a banner at the top of the episode: 'action' = the owner must act, 'auto' = decided alone, to check.
     event(j,text);alerts=j.setdefault('alerts',[]);alerts.append({'at':now(),'level':level,'text':text});del alerts[:-6]
 def public_state():
     s=copy.deepcopy(STATE); s.pop('token',None)
-    for t in s['tasks']: t.pop('result',None)
+    for t in s['tasks']:
+        t.pop('result',None)
+        if t.get('progress'):t['progress']=readable_progress(t['progress'])
     for public,j in zip(s['jobs'],STATE['jobs']):
+        for e in public.get('events',[]):e['text']=readable_progress(e['text'])
         public['uncertain_clips']=sorted({int(t['slot'].split(':')[1]) for t in uncertain_clip_tasks(j)})
     s['quota_status']=quotas.summary(STATE,time.time());s['version']=VERSION
     s['accounts']=identities.view(STATE,time.time(),int(STATE['settings'].get('flow_cost',12)));s.pop('extension_origin',None)
@@ -461,7 +474,9 @@ def rank_candidates(rows,language='Deutsch (de-DE)'):
 def validate_script(s, n):
     if not isinstance(s,dict): raise ValueError('Objet JSON attendu')
     chars=s.get('characters',[]); scenes=s.get('scenes',[])
-    if not 1<=len(chars)<=5 or len(scenes)!=n: raise ValueError(f'Il faut 1 à 5 personnages et exactement {n} scènes')
+    # Name the count actually received: the rewrite request and the journal must say what to fix.
+    if not 1<=len(chars)<=5: raise ValueError(f'{len(chars)} personnage(s) reçu(s), il en faut 1 à 5 : fusionner ou retirer les personnages secondaires')
+    if len(scenes)!=n: raise ValueError(f'{len(scenes)} scène(s) reçue(s), il en faut exactement {n}')
     ids=[c.get('id') for c in chars]
     if len(set(ids))!=len(ids) or any(not re.fullmatch('[a-z][a-z0-9_]{0,24}',str(x)) for x in ids): raise ValueError('Identifiants personnages invalides')
     for c in chars:
@@ -1559,7 +1574,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if path=='/api/bridge/progress':
                     t=next((t for t in STATE['tasks'] if t['id']==b.get('task') and t.get('client')==b.get('client') and t['status']=='claimed'),None)
                     if not t:raise ValueError('Tâche non associée à ce navigateur')
-                    j=job_by(t['job']);message=str(b.get('message',''))[:240]
+                    j=job_by(t['job']);message=readable_progress(str(b.get('message','')))[:240]
                     if j['status']!='paused' and message and message!=t.get('progress'):
                         t['progress']=message;event(j,message);save()
                     return self.send_json({'ok':True})

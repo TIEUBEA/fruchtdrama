@@ -198,3 +198,5 @@ body.dark .wall.wall-big{background:#3b1414;color:#ffd9d6;border-color:#e57373}b
 /* Scene window extras. */
 .scene-tools{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}.scene-edit{margin-top:12px;display:flex;flex-direction:column;gap:8px}.scene-edit textarea{width:100%}
 .flagline{margin:8px 0 0;font-size:.92em}.flagline.bad{color:#b71c1c}.flagline.warn{color:#8a3b07}.heard{margin:8px 0 0;font-size:.92em}.heard.warn{color:#8a3b07}.heard small{color:var(--muted)}
+
+.run-widget button{min-width:0;overflow:hidden}.run-widget span{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
