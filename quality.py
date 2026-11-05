@@ -35,7 +35,7 @@ def compare(expected,transcript,language,probability):
     issues=[]
     if not b:issues.append('Aucune parole reconnue : écoute nécessaire.')
     elif ratio<MIN_MATCH:issues.append(f'Les paroles reconnues correspondent à {round(ratio*100)} % du scénario (seuil {round(MIN_MATCH*100)} %) ; vérifier les répliques avant le montage.')
-    if language and probability>=.8 and language not in ('de','fr','en'):issues.append('La langue détectée ne correspond à aucune langue de création autorisée.')
+    if language and probability>=.8 and language not in ('de','fr','en','es','pt'):issues.append('La langue détectée ne correspond à aucune langue de création autorisée.')
     return round(ratio,3),issues
 
 def technical(path,expected=(7.5,8.5),horizontal=False):
@@ -58,7 +58,7 @@ def transcribe_all(j,folder):
     sys.path.insert(0,str(ROOT/'.qc-runtime'))
     from faster_whisper import WhisperModel
     model=WhisperModel('base',download_root=str(ROOT/'.qc-models'),device='cpu',compute_type='int8',cpu_threads=4,local_files_only=True)
-    output=[];target={'Deutsch (de-DE)':'de','Français (fr-FR)':'fr','English (en-US)':'en'}[j['config']['language']]
+    output=[];target={'Deutsch (de-DE)':'de','Français (fr-FR)':'fr','English (en-US)':'en','Español (es-ES)':'es','Português (pt-BR)':'pt'}[j['config']['language']]
     for scene in j['scenes']:
         segments,info=model.transcribe(str(folder/scene['clip']),beam_size=5,word_timestamps=True,vad_filter=True,condition_on_previous_text=False)
         segments=list(segments);tokens=[{'word':w.word.strip(),'start':round(w.start,3),'end':round(w.end,3),'probability':round(w.probability,3)} for seg in segments for w in (seg.words or [])]

@@ -58,3 +58,32 @@ Statuts : **Vert** = conforme, **Orange** = écart à décider, **Rouge** = déf
 3. Publication : « Titre · Partie N », appel de fin dans la description, hashtags de niche plutôt que #CreationIA.
 4. Brouillon 480p puis 1080p (Grok), bibliothèque de personnages réutilisables.
 5. Nettoyage des trois « Nouvel épisode » abandonnés.
+
+## Suite : l'Atelier 1.0.22 ouvert et parcouru bouton par bouton (0.1.84)
+
+Méthode : copie isolée de Chrome (profil temporaire, extension chargée depuis `~/Downloads/atelier-gourmand (2)`,
+données de l'Atelier copiées pour garder la clé et les histoires), pilotée par le protocole DevTools. Aucun compte
+ChatGPT, Grok ou Claude connecté dans cette copie : aucun clic ne pouvait dépenser quoi que ce soit. Copie fermée et
+effacée à la fin. Idées reprises, jamais le code.
+
+| Écran de l'Atelier | Écart trouvé | Fait en 0.1.84 |
+|---|---|---|
+| Le Filon : 9 niches en pastilles avec point d'état + « Mes niches » | FruchtDrama : Fruits + Mes niches | Les 9 niches (Animaux, Avatar humain, Bébés, Brainrot, Cartoon, Construction, Fruits, Jeux vidéo, Survie) toujours visibles, point vert si déjà relevée |
+| Le Filon : 24 h par défaut | « Tout » par défaut | 24 h ; si rien en 24 h, 7 jours puis Tout tant que le propriétaire n'a pas choisi |
+| Le Filon : 6 tris dont « Au-dessus de leur habitude » et « Les plus récentes » | 4 tris | 6 tris, mêmes noms ; « habitude » = vues / vues médianes du compte |
+| Le Filon : durées 1 min ou moins / 1 min à 1 min 30 / 1 à 2 min / 2 min et plus | 3 tranches | 4 tranches identiques |
+| Compteur et menu « 379 virales aujourd'hui » | « virales » sans période, menu « N vidéos relevées » | « virales aujourd'hui » (moins de 24 h), aussi dans le menu |
+| Créer : niches Fruits, Chats, Animaux, Bébés, Créatures, Gourmandises, Avatar humain, Cartoon, Survie | 6 niches | 9 niches, même ordre |
+| Créer et Mes comptes : 5 langues FR, EN, ES, PT (Brésil), DE | 3 langues | 5 langues partout : écriture, recherche TikTok, contrôle des paroles, hashtags, horaires de publication, variantes de langue |
+| Créer : Courte / Moyenne / Longue / Très longue | 30 s, 1, 2, 3 min | « Courte · 1 min », « Moyenne · 2 min », « Longue · 3 min », « Très longue · 4 min » (+ « Essai · 30 s ») ; 40 plans au plus |
+| Créer : « Vidéos déjà récupérées (N) » | absent | liste repliable, miniature, compte, état, « Ouvrir l'épisode » |
+| Mes comptes : « Miniature de la boucle complète » (Corriger toute seule / Signaler / Pas de contrôle) | absent | ChatGPT regarde la miniature (1 pièce jointe) ; redessinée une fois si défaut, sinon signalée dans le bandeau ; Économie = signaler |
+| Mes comptes : réglages affichés ouverts, « En cas de souci › Copier le rapport de panne » | réglages repliés, rapport caché dans Avancé | réglages ouverts par défaut, section « En cas de souci » |
+| Publication : « Titre · Partie 1 », accroche, appel de fin, hashtags de niche | titre seul, description brute avec #CreationIA | même format ; hashtags génériques (#IA, #AI, #KI, #CreationIA…) retirés, hashtags de la niche ajoutés |
+| Studio : « Nouvel épisode » | cartes sans nom pour les recréations en cours | « Recréation de @compte » |
+
+Restent différents (lot suivant, à décider) :
+- **Feuilles d'état « Au fil de l'histoire »** (un personnage change d'apparence à partir d'une scène) : touche le scénario, les images et les références des planches.
+- **Choix du modèle Claude et de l'effort** (Opus 5.5 / Fable 5.1 / Sonnet 5.5 ; Élevé / Extra / Moyen).
+- **Apparence** : l'Atelier propose 7 palettes (Ardoise, Laiton, Lagon, Cinéma, Papier, Verre, Éditorial) ; FruchtDrama en a 6.
+- Personnages en pastilles compactes repliables (l'Atelier) contre cartes avec description (FruchtDrama).

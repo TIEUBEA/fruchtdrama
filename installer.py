@@ -25,7 +25,7 @@ def main():
     for requirements in ('requirements.txt', 'requirements-quality.txt'):
         subprocess.run([sys.executable, '-m', 'pip', 'install', '-r', str(ROOT / requirements)], check=True)
     subprocess.run([sys.executable, str(ROOT / 'quality_setup.py')], check=True, cwd=ROOT)
-    (ROOT / '.installation-complete').write_text('0.1.83\n', 'utf-8')
+    (ROOT / '.installation-complete').write_text('0.1.84\n', 'utf-8')
     # The extension starts the studio by itself from now on (no window to keep open, survives a restart).
     places = native_setup.register()
     print('\nInstallation terminee. Chargez le dossier extension dans Chrome (chrome://extensions > Mode developpeur > Charger l extension non empaquetee),')

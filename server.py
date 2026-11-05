@@ -24,7 +24,7 @@ import power
 import maintenance
 import series
 import licence
-VERSION='0.1.83'
+VERSION='0.1.84'
 OFFICIAL_ORIGIN='chrome-extension://bhdmibhibonmaamgcbpmbhedhohfongj'  # extension/manifest.json "key"
 import sys
 import traceback
@@ -39,14 +39,14 @@ QUALITY_BUSY = set()
 DOWNLOADS_ROOT = pathlib.Path(os.environ.get('FRUCHT_DOWNLOADS',pathlib.Path.home()/'Downloads')).resolve()
 STEPS = ['research', 'script', 'characters', 'images', 'clips', 'quality', 'cover', 'edit', 'done']
 LABELS = {'ideas':'Dix histoires', 'sheet':'Fiche de décision', 'research':'Recherche', 'script':'Scénario', 'characters':'Personnages', 'images':'Scènes', 'clips':'Animation Flow', 'quality':'Contrôle qualité', 'cover':'Couverture', 'edit':'Montage', 'done':'Terminé'}
-CREATION_LANGUAGES=('Deutsch (de-DE)','Français (fr-FR)','English (en-US)')
+CREATION_LANGUAGES=('Deutsch (de-DE)','Français (fr-FR)','English (en-US)','Español (es-ES)','Português (pt-BR)')
 # Default research query per creation language (same values as the web form).
 SITES=('chatgpt','flow','tiktok','grok','arena','claude')
-RESEARCH_QUERIES={'Deutsch (de-DE)':'KI Früchte Geschichten deutsch','Français (fr-FR)':'histoires fruits IA français','English (en-US)':'AI fruit drama stories English'}
+RESEARCH_QUERIES={'Deutsch (de-DE)':'KI Früchte Geschichten deutsch','Français (fr-FR)':'histoires fruits IA français','English (en-US)':'AI fruit drama stories English','Español (es-ES)':'historias de frutas IA español','Português (pt-BR)':'histórias de frutas IA português'}
 
 def creation_language(value):
     value=str(value).strip()
-    if value not in CREATION_LANGUAGES:raise ValueError('Choisissez Deutsch, Français ou English')
+    if value not in CREATION_LANGUAGES:raise ValueError('Choisissez Français, English, Español, Português ou Deutsch')
     return value
 
 def now(): return dt.datetime.now(dt.timezone.utc).isoformat()
@@ -106,6 +106,31 @@ def client_accepts(client,task):
         return client.get('ai_provider','both') in ('both',provider)
     return task['kind']=='tiktok_search'
 def event(j, text): j['events'].append({'at':now(),'text':text}); j['updated']=now()
+
+COVER_REVIEW_PROMPT=('Review the attached TikTok COVER image. Do not generate an image. Check: the title text is fully visible, '
+    'spelled correctly in {language} and readable on a phone; no cut-off face or text; no extra limbs or deformed faces; the characters look like '
+    'the story cast ({cast}); nothing looks like a watermark or a logo. Output JSON only: '
+    '{{"production_id": "{job}", "generation_task_id": "...", "ok": true}} if it can be published, or the same with "ok": false and '
+    '"problem": "one short sentence saying exactly what to fix".')
+
+def cover_check_pending(j):
+    """Atelier "Miniature de la boucle complète": ChatGPT looks at the cover once (one attachment) and it is redrawn once
+    when it sees a defect ('fix'), or the defect is only reported ('report'). True while the check holds the montage back."""
+    mode=j['config'].get('cover_controls',STATE.get('settings',{}).get('cover_controls','fix'))
+    if mode=='none' or not j.get('cover_file') or j.get('cover_checked')==j['cover_file']:return False
+    review=j.get('cover_review')
+    if not review or review.get('file')!=j['cover_file']:
+        if any(t['job']==j['id'] and t['slot']=='cover_review' and t['status'] in ('queued','claimed') for t in STATE['tasks']):return True
+        cast=', '.join(c.get('name','') for c in j.get('characters',[]))
+        add_task(j,'chat_text',{'provider':'chatgpt','prompt':COVER_REVIEW_PROMPT.format(language=j['config'].get('language',''),cast=cast,job=j['id']),
+                                'attachments':[asset_url(j,j['cover_file'])],'response_kind':'cover_review','file':j['cover_file']},'cover_review');return True
+    j['cover_checked']=j['cover_file']
+    if review['ok']:event(j,'Miniature regardée par ChatGPT : rien à corriger.');return False
+    if mode=='fix' and not j.get('cover_fixed'):
+        j['cover_fixed']=True;j.setdefault('redo_history',[]).append({'slot':'cover','file':j.pop('cover_file'),'note':'contrôle de la miniature','at':now()});j.pop('cover',None)
+        j.setdefault('corrections',{})['cover']='Cover check: '+review['problem']+' Fix this, keep everything else.'
+        event(j,'Miniature redessinée une fois après le contrôle : '+review['problem']);schedule(j);return True
+    alert(j,'auto','Miniature : défaut signalé par ChatGPT — '+review['problem']+' Vérifie-la avant de publier.');return False
 
 def readable_progress(text):
     # The extension reports the scenario reader's raw diagnostic; the owner sees a sentence instead.
@@ -298,16 +323,21 @@ def night_once():
 
 FILON_EVERY=2*3600
 # Atelier "Mes niches": each niche has its own TikTok search; Fruits keeps the historical queries.
-NICHE_WORDS={'Animaux':('animaux','Tiere','animal'),'Chats':('chats','Katzen','cat'),'Bébés':('bébé','Baby','baby'),'Gourmandises':('gourmandises','Süßigkeiten','sweets'),
-             'Cartoon':('cartoon','Cartoon','cartoon'),'Survie':('survie','Survival','survival'),'Créatures':('créatures','Kreaturen','creature'),'Avatar humain':('avatar humain','Avatar Mensch','human avatar')}
+# Search words per niche: French, German, English, Spanish, Portuguese (Brazil).
+NICHE_WORDS={'Animaux':('animaux','Tiere','animal','animales','animais'),'Chats':('chats','Katzen','cat','gatos','gatos'),'Bébés':('bébé','Baby','baby','bebé','bebê'),
+             'Gourmandises':('gourmandises','Süßigkeiten','sweets','dulces','doces'),'Cartoon':('cartoon','Cartoon','cartoon','caricatura','desenho'),
+             'Survie':('survie','Survival','survival','supervivencia','sobrevivência'),'Créatures':('créatures','Kreaturen','creature','criaturas','criaturas'),
+             'Avatar humain':('avatar humain','Avatar Mensch','human avatar','avatar humano','avatar humano'),'Brainrot':('brainrot','Brainrot','brainrot','brainrot','brainrot'),
+             'Construction':('construction','Bau','construction','construcción','construção'),'Jeux vidéo':('jeux vidéo','Videospiele','video game','videojuegos','videogame')}
 def niche_name(value):
     name=' '.join(str(value or '').split())  # too long is refused, never cut silently
     if not re.fullmatch(r"[\w'’ \-]{2,30}",name):raise ValueError('Nom de niche invalide')
     return name
 def niche_query(niche,language):
     if niche=='Fruits':return RESEARCH_QUERIES[language]
-    fr,de,en=NICHE_WORDS.get(niche,(niche,niche,niche))
-    return {'Français (fr-FR)':f'histoire {fr} IA','Deutsch (de-DE)':f'{de} KI Geschichte','English (en-US)':f'AI {en} story'}[language]
+    fr,de,en,es,pt=NICHE_WORDS.get(niche,(niche,)*5)
+    return {'Français (fr-FR)':f'histoire {fr} IA','Deutsch (de-DE)':f'{de} KI Geschichte','English (en-US)':f'AI {en} story',
+            'Español (es-ES)':f'historia {es} IA','Português (pt-BR)':f'história {pt} IA'}[language]
 def filon_refresh(language=None,niche=None):
     """Start a research-only job that refreshes Le Filon (no story, no paid generation)."""
     if any(j.get('filon_only') and j['status'] not in ('done','attention','paused') for j in STATE['jobs']):raise ValueError('Actualisation du Filon déjà en cours')
@@ -456,7 +486,7 @@ def rank_candidates(rows,language='Deutsch (de-DE)'):
         except ValueError: pass
         item['age_days']=age
         text=item['title'].lower()
-        words={'Deutsch (de-DE)':['deutsch','frücht','frucht','ki','story','geschichte'], 'Français (fr-FR)':['français','francais','fruit','histoire','ia','drame'], 'English (en-US)':['english','fruit','story','stories','ai','drama']}.get(language,[])
+        words={'Deutsch (de-DE)':['deutsch','frücht','frucht','ki','story','geschichte'], 'Français (fr-FR)':['français','francais','fruit','histoire','ia','drame'], 'English (en-US)':['english','fruit','story','stories','ai','drama'], 'Español (es-ES)':['español','fruta','historia','ia','drama'], 'Português (pt-BR)':['português','fruta','história','ia','drama']}.get(language,[])
         relevance=sum(w in text for w in words)
         # Never relabel unknown search counters as views.
         metric=item['views'] if item['views'] is not None else item['likes'] if item['likes'] is not None else item['signal']
@@ -769,6 +799,7 @@ def schedule(j):
                 if not style_file.exists():shutil.copyfile(template,style_file)
                 attachments.append(asset_url(j,style_file.name))
             add_task(j,'chat_image',{'provider':'chatgpt','prompt':cover_prompt(j)+correction(j.get('corrections',{}).get('cover')),'attachments':attachments},'cover');return
+        if cover_check_pending(j):return
         j['stage']='edit';j['status']='rendering';event(j,'Montage local démarré.');start_render(j['id'])
     elif step=='edit':
         # A failed or interrupted montage is retried locally; no media is regenerated.
@@ -1128,6 +1159,10 @@ def accept_task_result(t,result):
     if slot=='research': apply_research(j,result.get('candidates',[]))
     elif slot=='board_review':
         j['board_review']=board_check.validate(parse_json(result.get('text','')),j,t['id'])
+    elif slot=='cover_review':
+        answer=parse_json(result.get('text',''))
+        if not isinstance(answer,dict) or answer.get('production_id')!=j['id'] or not isinstance(answer.get('ok'),bool):raise ValueError('Avis sur la miniature illisible : {"ok": true|false, "problem": "…"} attendu')
+        j['cover_review']={'file':t['payload'].get('file'),'ok':answer['ok'],'problem':str(answer.get('problem') or '')[:300]}
     elif slot=='quality_review':
         if quality.fingerprint(j,job_dir(j))!=t['payload'].get('fingerprint'):raise ValueError('Médias changés pendant le contrôle : rapport non applicable')
         review=quality.validate_visual(parse_json(result.get('text','')),j,t['id'])
@@ -1759,6 +1794,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     if 'clip_look' in b:
                         if b['clip_look'] not in ('look','ear'):raise ValueError('Réglage du regard sur les clips inconnu')
                         STATE['settings']['clip_look']=b['clip_look']
+                    if 'cover_controls' in b:
+                        if b['cover_controls'] not in ('fix','report','none'):raise ValueError('Réglage de la miniature inconnu')
+                        STATE['settings']['cover_controls']=b['cover_controls']
                     if 'follow' in b:
                         # Followed TikTok accounts in Le Filon (star), like the Atelier.
                         name=str(b['follow']).strip().lstrip('@')[:60];followed=STATE['settings'].setdefault('filon_follow',[])
@@ -1787,7 +1825,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     duration=b.get('config',{}).get('duration')
                     if duration is not None:
                         # Atelier-like fixed durations (TikTok monetisation needs more than one minute).
-                        if int(duration) not in (30,60,120,180):raise ValueError('Durée inconnue')
+                        if int(duration) not in (30,60,120,180,240):raise ValueError('Durée inconnue')
                         cfg['duration']=int(duration)
                         # Durée garantie: enough plans for the target (more than 60 s for "1 min"), fades included.
                         fade=montage.FADES[montage.validate({},STATE['settings'].get('montage'))['transition']]
@@ -1809,6 +1847,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         # Like the Atelier: in Économie the checks only report, and nobody looks at the clips.
                         cfg['controls']='report';cfg['clip_look']='ear'
                         if cfg.get('board_controls')=='redo':cfg['board_controls']='report'
+                        if cfg.get('cover_controls','fix')=='fix':cfg['cover_controls']='report'
                     if req.get('format','vertical') not in ('vertical','horizontal','both'):raise ValueError('Format inconnu')
                     fmt=req.get('format','vertical');cfg['format']='horizontal' if fmt=='horizontal' else None;cfg['also_horizontal']=fmt=='both'
                     if req.get('characters','simple') not in ('simple','detailed'):raise ValueError('Niveau de personnages inconnu')
@@ -1822,7 +1861,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     requested_query=str(b.get('config',{}).get('query','')).strip()
                     # An omitted or untouched German default follows the chosen language.
                     cfg['query']=RESEARCH_QUERIES[cfg['language']] if not requested_query or requested_query in RESEARCH_QUERIES.values() else requested_query[:200]
-                    if not 3<=cfg['scene_count']<=30 or not 1<=cfg['flow_cost']<=100 or cfg['provider'] not in ('chatgpt','claude'): raise ValueError('Réglages invalides')
+                    if not 3<=cfg['scene_count']<=40 or not 1<=cfg['flow_cost']<=100 or cfg['provider'] not in ('chatgpt','claude'): raise ValueError('Réglages invalides')
                     j={'id':uid(),'title':'Nouvel épisode','brief':str(b.get('brief',''))[:4000], 'config':cfg,'editorial_version':2,'retention_version':1,'hook_version':1,'quality_version':1,'cover_style':'family_poster_v3','character_sheet':1,'flow_profile':b.get('flow_profile'),'status':'running','stage':'research','created':now(),'updated':now(),'events':[],'candidates':[],'characters':[],'scenes':[]}; STATE['jobs'].insert(0,j)
                     if source:
                         j['selected']={'title':'Vidéo fournie par le propriétaire','url':urllib.parse.urlunparse(('https',u.hostname,u.path,'','','')),'source':'owner_link'};thumbs.warm([j['selected']['url']],DATA);j['stage']='script'

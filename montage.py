@@ -74,7 +74,7 @@ def target(duration):
     return float(duration) + (1.0 if duration >= 60 else 0.0)
 
 
-def scenes_for(duration, seconds, fade=0.0, low=3, high=30):
+def scenes_for(duration, seconds, fade=0.0, low=3, high=40):
     """Plans needed so the untrimmed clips, fades included, reach the target length."""
     goal = target(duration) or 0.0
     n = max(low, -(-int(goal) // int(seconds)) if goal else low)

@@ -93,7 +93,7 @@ async function checkActive(active){
   }
   await finish(active,active.pendingResult);return;
  }
- if(FruchtRecovery.isScenario(active.task)||['quality_review','board_review'].includes(active.task.slot)){
+ if(FruchtRecovery.isScenario(active.task)||['quality_review','board_review','cover_review'].includes(active.task.slot)){
   try{
    await chrome.scripting.executeScript({target:{tabId:active.tabId},files:['response.js']});
    const probe=await chrome.tabs.sendMessage(active.tabId,{type:'frucht-scenario-probe',job:active.expectedJob||active.task.job,task:active.expectedTask||active.task.id,scenes:active.task.payload.scene_count,response_kind:active.task.payload.response_kind});

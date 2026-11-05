@@ -5,6 +5,16 @@ correspondante (P0-xx, P1-x, P2-xx) détaillée dans `docs/sudf/`. Guide pour re
 `docs/sudf/REPRISE.md`. **Mode d'emploi détaillé** (installer, lancer, utiliser), mis à jour à chaque
 version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, version par version).
 
+## 0.1.84 — 05/11/2026
+L'Atelier Gourmand 1.0.22 ouvert et parcouru bouton par bouton ; écarts corrigés (détail : `docs/sudf/REVUE-MODULES-2026-11-05.md`).
+- Ajouté : **espagnol et portugais (Brésil)**, cinq langues comme l'Atelier : écriture, recherche TikTok, contrôle des paroles, hashtags, horaires de publication, variantes.
+- Ajouté : **Filon** : les 9 niches de l'Atelier toujours visibles avec point d'état, 24 h par défaut (7 jours puis Tout si vide), tris « Au-dessus de leur habitude » et « Les plus récentes », 4 tranches de durée, « virales aujourd'hui » (aussi dans le menu).
+- Ajouté : **Créer** : 9 niches, durées Courte / Moyenne / Longue / Très longue (4 min, 40 plans au plus), « Vidéos déjà récupérées ».
+- Ajouté : **contrôle de la miniature dans la boucle complète** (Corriger toute seule / Signaler seulement / Pas de contrôle) : ChatGPT la regarde, elle est redessinée une fois si défaut. Nécessite de recharger l'extension FruchtDrama.
+- Ajouté : **Mes comptes** : réglages ouverts par défaut, section « En cas de souci » avec le rapport de panne.
+- Amélioré : **Publication** au format de l'Atelier (accroche, « Titre · Partie N », appel de fin, hashtags de niche sans #IA générique) ; « Tout copier » copie ce texte.
+- Amélioré : une recréation encore sans titre s'appelle « Recréation de @compte » au lieu de « Nouvel épisode ».
+
 ## 0.1.83 — 05/11/2026
 Revue de chaque menu face au live de l'Atelier Gourmand relu en détail (rapport : `docs/sudf/REVUE-MODULES-2026-11-05.md`).
 - Corrigé : **carte d'histoire** qui prenait le statut de la version 16:9 ou d'une autre langue (« À tourner » sur une vidéo prête). Elle suit la partie principale et ajoute « · 16:9 à finir ».

@@ -7,13 +7,17 @@ HASHTAGS = {
     'Deutsch (de-DE)': ['#KI', '#Früchte', '#Drama', '#Geschichte', '#Familie', '#fürdich'],
     'Français (fr-FR)': ['#IA', '#fruits', '#drame', '#histoire', '#famille', '#pourtoi'],
     'English (en-US)': ['#AI', '#fruit', '#drama', '#story', '#family', '#fyp'],
+    'Español (es-ES)': ['#IA', '#frutas', '#drama', '#historia', '#familia', '#parati'],
+    'Português (pt-BR)': ['#IA', '#frutas', '#drama', '#historia', '#familia', '#fyp'],
 }
-PART = {'Deutsch (de-DE)': 'Teil', 'Français (fr-FR)': 'Partie', 'English (en-US)': 'Part'}
+PART = {'Deutsch (de-DE)': 'Teil', 'Français (fr-FR)': 'Partie', 'English (en-US)': 'Part', 'Español (es-ES)': 'Parte', 'Português (pt-BR)': 'Parte'}
 # Common evening/lunch slots for each market, local time. Hypotheses to test with your own statistics.
 SLOTS = {
     'Deutsch (de-DE)': {'zone': 'Europe/Berlin', 'times': ['12:00', '18:00', '20:30']},
     'Français (fr-FR)': {'zone': 'Europe/Paris', 'times': ['12:30', '19:00', '21:00']},
     'English (en-US)': {'zone': 'America/New_York', 'times': ['13:00', '19:00', '21:00']},
+    'Español (es-ES)': {'zone': 'Europe/Madrid', 'times': ['14:00', '20:00', '22:00']},
+    'Português (pt-BR)': {'zone': 'America/Sao_Paulo', 'times': ['12:00', '19:00', '21:00']},
 }
 
 
@@ -65,7 +69,9 @@ def kit(j):
         title = f"{title} ({word} {part_of(j)})"; tags.append(f"#{word}{part_of(j)}")
     first_comment = {'Deutsch (de-DE)': 'Wie geht es weiter? Schreib deine Idee in die Kommentare!',
                      'Français (fr-FR)': 'Et ensuite ? Écris ta suite en commentaire !',
-                     'English (en-US)': 'What happens next? Tell us in the comments!'}.get(language, '')
+                     'English (en-US)': 'What happens next? Tell us in the comments!',
+                     'Español (es-ES)': '¿Y ahora qué? ¡Escribe tu continuación en los comentarios!',
+                     'Português (pt-BR)': 'E agora? Escreve a continuação nos comentários!'}.get(language, '')
     return {'title': title, 'description': s.get('description', ''), 'hashtags': tags[:10], 'first_comment': first_comment,
             'slots': SLOTS.get(language), 'files': {'video': 'final.mp4', 'cover': j.get('cover_file') or 'cover.jpg'},
             'note': 'Créneaux et hashtags : hypothèses à tester avec vos statistiques, aucune garantie de vues.'}

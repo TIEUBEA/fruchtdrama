@@ -169,5 +169,7 @@ def queries(j,jobs):
     language=j['config'].get('language','Deutsch (de-DE)')
     terms={'Deutsch (de-DE)':['KI Früchte Geschichten deutsch Drama','Früchte Geschichte deutsch ungerecht','KI Früchte deutsch überraschung'],
            'Français (fr-FR)':['histoires fruits IA français drame','fruits IA histoire injustice français','fruits parlants histoire retournement français'],
-           'English (en-US)':['AI fruit drama stories English','AI fruit story unfair accusation','talking fruit story plot twist English']}[language]
+           'English (en-US)':['AI fruit drama stories English','AI fruit story unfair accusation','talking fruit story plot twist English'],
+           'Español (es-ES)':['historias de frutas IA drama español','frutas IA historia injusticia','frutas que hablan giro inesperado'],
+           'Português (pt-BR)':['histórias de frutas IA drama português','frutas IA história injustiça','frutas falantes reviravolta']}[language]
     return [j['config']['query']+' '+creative['id'].replace('_',' '),*terms]
