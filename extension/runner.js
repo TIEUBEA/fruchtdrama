@@ -87,6 +87,12 @@ async function run(task,attachments){
   if(!settings&&/(?:x\s*2|x\s*4)\b/i.test(text()))throw Error('Flow : vérifiez que le nombre de résultats est x1. Aucun envoi effectué.');
   if(openedSettings){settings.click();await sleep(400);}
  }
+ // Claude model and effort chosen in the studio. Never blocking: the tab model is kept when the menu is not found.
+ if(task.kind==='chat_text'&&location.hostname==='claude.ai'&&(task.payload.claude_model||task.payload.claude_effort)){
+  const choice=globalThis.FruchtClaudeModel?await globalThis.FruchtClaudeModel.select(document,sleep,task.payload.claude_model,task.payload.claude_effort):{notes:['Modèle Claude non sélectionnable automatiquement : modèle de l’onglet conservé (extension à recharger).']};
+  if(choice.notes?.length)globalThis.fruchtRunState.progress=choice.notes.join(' ');
+  editor=findEditor()||editor;
+ }
  const oldAssistants=new Set(globalThis.FruchtComposer.assistants?.(document)||[]);const oldImageElements=new Set([...document.images]);const oldImages=new Set([...document.images].map(i=>i.currentSrc||i.src));const oldVideos=new Set([...document.querySelectorAll('video')].map(v=>v.currentSrc||v.src));
  const prompt=task.payload.prompt+(task.kind==='chat_image'?'\nGenerate the image now, not a written tutorial.':'');fill(editor,prompt);await sleep(700);
  const findSend=()=>isFlow?globalThis.FruchtFlow.sendButton(document,editor):globalThis.FruchtComposer.button(document,editor);

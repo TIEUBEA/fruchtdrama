@@ -165,7 +165,7 @@ async function recoverResearchReading(active,status){
  if(!['www.tiktok.com','tiktok.com'].includes(host))return false;
  active.researchReadingAttempts=(active.researchReadingAttempts||0)+1;
  await chrome.storage.local.set({activeTask:active,status:'Relecture automatique de la recherche TikTok après navigation · même tâche.'});
- await chrome.scripting.executeScript({target:{tabId:active.tabId},files:['composer.js','response.js','media.js','flow-controls.js','flow-session.js','research.js','chat-session.js','runner.js']});
+ await chrome.scripting.executeScript({target:{tabId:active.tabId},files:['composer.js','response.js','media.js','flow-controls.js','flow-session.js','research.js','chat-session.js','claude-model.js','runner.js']});
  const response=await chrome.tabs.sendMessage(active.tabId,{type:'frucht-run',task:active.task,attachments:[]});
  if(!response?.accepted)throw Error(response?.error||'Lecture de la recherche indisponible.');
  return true;
@@ -186,7 +186,7 @@ async function recoverFlowPreparation(active){
  active.recoveryAttempts=(active.recoveryAttempts||0)+1;
  await chrome.storage.local.set({activeTask:active,status:'Reconnexion automatique avant envoi : même tâche, aucune réservation supplémentaire.'});
  await ready(active.tabId,active.task);
- await chrome.scripting.executeScript({target:{tabId:active.tabId},files:['composer.js','response.js','media.js','flow-controls.js','flow-session.js','research.js','chat-session.js','runner.js']});
+ await chrome.scripting.executeScript({target:{tabId:active.tabId},files:['composer.js','response.js','media.js','flow-controls.js','flow-session.js','research.js','chat-session.js','claude-model.js','runner.js']});
  const reply=await chrome.tabs.sendMessage(active.tabId,{type:'frucht-run',task:active.task,attachments:await loadAttachments(active.task.payload.attachments)});
  if(!reply?.accepted)throw Error(reply?.error||'Préparation Flow indisponible après reconnexion.');
  return true;
@@ -200,7 +200,7 @@ async function collectBound(active,context){
  }
  active.recoveryAttempts=(active.recoveryAttempts||0)+1;
  const task={...active.task,kind:'chat_collect',payload:{...active.task.payload,expected_job:active.expectedJob,expected_task:active.expectedTask}};
- await chrome.scripting.executeScript({target:{tabId:active.tabId},files:['composer.js','response.js','media.js','flow-controls.js','flow-session.js','research.js','chat-session.js','runner.js']});
+ await chrome.scripting.executeScript({target:{tabId:active.tabId},files:['composer.js','response.js','media.js','flow-controls.js','flow-session.js','research.js','chat-session.js','claude-model.js','runner.js']});
  // Clear only a completed/lost reader. Never restart a live generator.
  const response=await chrome.tabs.sendMessage(active.tabId,{type:'frucht-run',task,attachments:[]});
  if(!response?.accepted)throw Error(response?.error||'Lecture automatique indisponible.');
@@ -221,7 +221,7 @@ async function begin(task,tab,cfg){
   const identity=await chrome.tabs.sendMessage(tab.id,{type:'frucht-flow-verify',target:task.payload.flow_route});
   if(!identity?.ok)throw Error('Compte Flow différent ou connexion expirée. Reconnectez le compte enregistré ; aucun envoi effectué.');
  }
- const inject=()=>chrome.scripting.executeScript({target:{tabId:tab.id},files:['composer.js','response.js','media.js','flow-controls.js','flow-session.js','research.js','chat-session.js','engine-video.js','runner.js']});
+ const inject=()=>chrome.scripting.executeScript({target:{tabId:tab.id},files:['composer.js','response.js','media.js','flow-controls.js','flow-session.js','research.js','chat-session.js','engine-video.js','claude-model.js','runner.js']});
  await inject();
  let previous;
  try{previous=await chrome.tabs.sendMessage(tab.id,{type:'frucht-status'});}catch{}
