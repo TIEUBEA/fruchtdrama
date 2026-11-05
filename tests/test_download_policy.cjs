@@ -1,0 +1,17 @@
+const assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs'),path=require('node:path');
+const ctx={URL,Date};vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../extension/download-policy.js'),'utf8'),ctx);const policy=ctx.FruchtDownloads;
+const request={requestedAt:'2026-10-30T17:00:00.000Z'};
+const item={id:7,startTime:'2026-10-30T17:00:02.000Z',url:'blob:https://flow.google.com/observed',referrer:'',mime:'video/mp4',filename:'C:/Users/test/Downloads/clip.mp4'};
+assert.equal(policy.matches(item,request),true);
+assert.equal(policy.matches({...item,url:'https://storage.googleapis.com/clip',referrer:'https://flow.google.com/project/x'},request),true);
+assert.equal(policy.matches({...item,url:'https://unrelated.example/file',referrer:''},request),false);
+assert.equal(policy.matches({...item,startTime:'2026-10-30T16:50:00Z'},request),false);
+assert.equal(policy.matches({...item,startTime:'2026-10-30T17:02:04Z'},request),true);
+assert.equal(policy.matches({...item,startTime:'2026-10-30T17:05:00Z'},request),true);
+assert.equal(policy.matches({...item,startTime:'2026-10-30T17:05:01Z'},request),false);
+assert.equal(policy.matches(item,{requestedAt:'invalid'}),false);
+assert.equal(policy.matches({...item,mime:'image/png',filename:'image.png'},request),false);
+assert.equal(policy.choose([item],request),item);
+assert.equal(policy.choose([{...item,url:'https://unrelated.example',referrer:''}],request),null);
+assert.throws(()=>policy.choose([item,{...item,id:8}],request),/Plusieurs/);
+console.log('12 contrôles d’association des téléchargements réussis : origine, préparation lente, temps, type et ambiguïté.');

@@ -1,0 +1,18 @@
+const assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs'),path=require('node:path');
+const ctx={URL};vm.createContext(ctx);vm.runInContext(fs.readFileSync(path.join(__dirname,'../extension/research.js'),'utf8'),ctx);
+const research=ctx.FruchtResearch;
+const node=(text,marker='',label='')=>({innerText:text,getAttribute:key=>key==='data-e2e'?marker:key==='aria-label'?label:null});
+const card=nodes=>({querySelectorAll:()=>nodes});
+assert.equal(research.metrics(card([node('1.2M')])).views,null,'An unlabeled number is not a view count');
+assert.equal(research.metrics(card([node('1.2M')])).signal,1200000);
+assert.equal(research.metrics(card([node('1,2 Mio.','video-views')])).views,1200000);
+assert.equal(research.metrics(card([node('22K','like-count')])).likes,22000);
+assert.equal(research.metrics(card([node('22K','like-count')])).views,null,'Do not relabel likes as views');
+for(const text of ['12K views','12K vues','12K Aufrufe'])assert.equal(research.metrics(card([node('', '',text)])).views,12000);
+assert.equal(research.number('2026-10-31'),null,'Dates are not counters');
+const video='https://www.tiktok.com/@fruit/video/123';
+const safeCard={innerText:'A fruit story',querySelectorAll:selector=>selector.startsWith('a[')?[]:[node('300K','video-views')],querySelector:()=>null};
+const link={href:video,closest:()=>safeCard,getAttribute:()=>null};
+const rows=research.extract({querySelectorAll:()=>[link,link,{...link,href:'https://evil.example/@fruit/video/123'}]});
+assert.equal(rows.length,1);assert.equal(rows[0].views,300000);assert.equal(rows[0].date,'');
+console.log('Recherche TikTok : vues et likes identifiés, compteur inconnu conservé, dates non inventées, dédoublonnage et domaine vérifiés.');

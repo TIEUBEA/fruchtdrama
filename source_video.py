@@ -1,0 +1,156 @@
+"""The TikTok video to redo, seen by the AI (live of the Atelier creator, 03/11/2026: "Refaire une virale").
+
+Before, the AI only received the link. Now the studio fetches the public video once, makes one board of
+key frames and a local transcription, and the writing AI receives both. Two ways to redo it:
+- inspired (default): an original story that keeps what made the video work;
+- identical ("Recréer à l'identique"): same scenes in the same order, every line reworded.
+The video stays in the episode folder and is never published or sent anywhere else.
+Standard library only (urllib, cookies); ffmpeg for the board; faster-whisper only if already installed.
+"""
+from __future__ import annotations
+
+import base64
+import http.cookiejar
+import json
+import pathlib
+import re
+import shutil
+import subprocess
+import sys
+import urllib.parse
+import urllib.request
+
+UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36'
+MAX_BYTES = 120 * 1024 * 1024
+MAX_SECONDS = 600
+FRAMES = 8
+CAPTURES = 4
+CAPTURE_BYTES = 8 * 1024 * 1024
+TRANSCRIPT_CHARS = 3000
+VIDEO_HOSTS = re.compile(r'(^|\.)(tiktok\.com|tiktokcdn\.com|tiktokcdn-us\.com|tiktokv\.com|ibytedtos\.com|byteoversea\.com)$')
+MODES = ('inspired', 'identical')
+
+
+def _item(page: str) -> dict | None:
+    m = re.search(r'<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>(.*?)</script>', page, re.S)
+    if not m:
+        return None
+    try:
+        return json.loads(m.group(1))['__DEFAULT_SCOPE__']['webapp.video-detail']['itemInfo']['itemStruct']
+    except (ValueError, KeyError, TypeError):
+        return None
+
+
+def _opener():
+    # TikTok serves the video file only with the cookies set by its page (same session).
+    return urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+
+
+def download(url: str, dest: pathlib.Path, opener=None) -> dict:
+    """Fetch the public video of a TikTok page into dest. Returns its description and duration."""
+    opener = opener or _opener()
+    with opener.open(urllib.request.Request(url, headers={'User-Agent': UA}), timeout=20) as r:
+        page = r.read(4_000_000).decode('utf-8', 'replace')
+    item = _item(page)
+    if not item:
+        raise ValueError('Vidéo TikTok illisible (privée, supprimée ou page changée).')
+    video = item.get('video') or {}
+    duration = int(video.get('duration') or 0)
+    if duration > MAX_SECONDS:
+        raise ValueError('Vidéo trop longue pour être analysée (plus de 10 minutes).')
+    src = video.get('playAddr') or video.get('downloadAddr') or ''
+    host = urllib.parse.urlparse(src).hostname or ''
+    if not src.startswith('https://') or not VIDEO_HOSTS.search(host):
+        raise ValueError('Adresse de la vidéo TikTok absente ou inattendue.')
+    with opener.open(urllib.request.Request(src, headers={'User-Agent': UA, 'Referer': 'https://www.tiktok.com/'}), timeout=60) as r:
+        data = r.read(MAX_BYTES + 1)
+    if len(data) > MAX_BYTES:
+        raise ValueError('Vidéo TikTok trop lourde pour être analysée.')
+    if b'ftyp' not in data[:64]:
+        raise ValueError('TikTok n’a pas renvoyé de vidéo.')
+    dest.write_bytes(data)
+    return {'desc': str(item.get('desc') or '')[:400], 'duration': duration,
+            'account': str((item.get('author') or {}).get('uniqueId') or '')[:60]}
+
+
+def board(video: pathlib.Path, out: pathlib.Path, duration: float, frames: int = FRAMES) -> bool:
+    """One image with the key moments of the video, in order (4 x 2), for the writing AI."""
+    ff = shutil.which('ffmpeg')
+    if not ff or duration <= 0:
+        return False
+    step = max(duration / frames, 0.5)
+    run = subprocess.run([ff, '-v', 'error', '-y', '-i', str(video), '-vf',
+                          f'fps=1/{step:.3f},scale=360:-2,tile=4x2:padding=6:color=white', '-frames:v', '1', str(out)],
+                         capture_output=True, text=True, timeout=180)
+    return run.returncode == 0 and out.is_file()
+
+
+def transcribe(video: pathlib.Path, root: pathlib.Path) -> str:
+    """Spoken lines with their time, if the local checks (faster-whisper) are installed; '' otherwise."""
+    models = root / '.qc-models'
+    if not models.is_dir():
+        return ''
+    try:
+        sys.path.insert(0, str(root / '.qc-runtime'))
+        from faster_whisper import WhisperModel
+        model = WhisperModel('base', download_root=str(models), device='cpu', compute_type='int8', cpu_threads=4, local_files_only=True)
+        segments, _ = model.transcribe(str(video), beam_size=1, vad_filter=True)
+        lines = [f'[{int(s.start // 60):02d}:{int(s.start % 60):02d}] {s.text.strip()}' for s in segments]
+    except Exception:
+        return ''
+    return '\n'.join(lines)[:TRANSCRIPT_CHARS]
+
+
+def decode_captures(items) -> list[tuple[str, bytes]]:
+    """'Captures en plus': up to 4 images sent by the owner (data URLs or base64), checked before anything is created."""
+    if items is not None and not isinstance(items, list):
+        raise ValueError('Captures invalides.')
+    out = []
+    for item in (items or [])[:CAPTURES]:
+        data = str((item or {}).get('data', '') if isinstance(item, dict) else item)
+        data = data.split(',', 1)[1] if data.startswith('data:') else data
+        try:
+            raw = base64.b64decode(data, validate=True)
+        except ValueError:
+            raise ValueError('Capture illisible : envoie une image PNG, JPEG ou WebP.')
+        if len(raw) > CAPTURE_BYTES:
+            raise ValueError('Capture trop lourde (8 Mo au plus par image).')
+        ext = 'png' if raw[:8] == b'\x89PNG\r\n\x1a\n' else 'jpg' if raw[:3] == b'\xff\xd8\xff' else 'webp' if raw[:4] == b'RIFF' and raw[8:12] == b'WEBP' else None
+        if not ext:
+            raise ValueError('Capture illisible : envoie une image PNG, JPEG ou WebP.')
+        out.append((ext, raw))
+    return out
+
+
+def save_captures(decoded, folder: pathlib.Path) -> list[str]:
+    saved = []
+    for k, (ext, raw) in enumerate(decoded):
+        name = f'source_capture_{k + 1}.{ext}'
+        (folder / name).write_bytes(raw)
+        saved.append(name)
+    return saved
+
+
+def guidance(mode: str, analysis: dict | None, captures_count: int = 0) -> str:
+    """What the writing AI is told about the video to redo."""
+    analysis = analysis or {}
+    seen = []
+    if analysis.get('board'):
+        seen.append('la planche jointe montre ses moments clés dans l’ordre (de gauche à droite, puis ligne suivante)')
+    if captures_count:
+        seen.append(f'{captures_count} capture(s) jointe(s) envoyée(s) par le propriétaire')
+    text = 'Vidéo à refaire'
+    if analysis.get('desc'):
+        text += f' (description : « {analysis["desc"]} »)'
+    text += ' : ' + ('; '.join(seen) if seen else 'seul son lien est connu') + '.'
+    if analysis.get('transcript'):
+        text += '\nCe qui y est dit (transcription automatique, peut contenir des erreurs) :\n' + analysis['transcript']
+    if mode == 'identical':
+        text += ('\nMODE RECRÉER À L’IDENTIQUE, choisi par le propriétaire : refais la même histoire, scène par scène, dans le même ordre, '
+                 'avec les mêmes rôles, le même type de personnages et de décors, la même accroche, le même retournement et la même fin. '
+                 'Reformule chaque réplique avec d’autres mots (jamais mot pour mot), donne d’autres prénoms, et garde nos fruits anthropomorphes. '
+                 'Parmi les concepts comparés, donne le meilleur score au plus fidèle.')
+    else:
+        text += ('\nInspiration seulement : garde ce qui fait marcher la vidéo (type d’accroche, rythme, émotion, type de retournement), '
+                 'mais invente une autre histoire ; ne copie ni ses répliques ni ses plans.')
+    return text

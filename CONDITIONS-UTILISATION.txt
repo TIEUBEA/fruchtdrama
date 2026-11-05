@@ -1,0 +1,59 @@
+CONDITIONS D'UTILISATION — FRUCHTDRAMA LOCAL
+Version du 1er novembre 2026
+
+1. Objet
+Cette copie permet de produire et monter des vidéos sur votre propre ordinateur.
+L'utilisation et la modification pour vos besoins sont autorisées. Ces conditions
+ne constituent pas une cession exclusive du logiciel ni des composants tiers.
+
+2. Vos propres comptes
+Cette distribution ne fournit aucun compte, abonnement, crédit, mot de passe,
+cookie, session ou clé API. Connectez uniquement vos comptes ou ceux pour
+lesquels vous avez une autorisation. Ne partagez jamais vos identifiants.
+Les comptes IA et Google Flow peuvent être différents.
+
+3. Services et dépenses
+Respectez les conditions et les limites de Google, OpenAI, Anthropic et TikTok.
+L'accès gratuit, les tarifs, les modèles et les interfaces peuvent changer.
+Le studio ne souscrit pas d'abonnement et n'achète pas de crédits. Une génération
+utilise toutefois les crédits et quotas de VOS comptes. Vérifiez le coût prévu.
+N'utilisez pas plusieurs comptes pour contourner les limites d'un service.
+Une reconnexion, un CAPTCHA ou une autorisation Chrome exige votre intervention.
+
+4. Contenus et publication
+Vous êtes responsable des contenus, droits d'auteur, autorisations de personnes,
+musique et règles de publication applicables à vos vidéos. Créez des histoires
+originales ou utilisez des ressources pour lesquelles vous avez les droits.
+Respectez les règles d'étiquetage des contenus IA du service de publication.
+L'application ne garantit aucun nombre de vues, d'abonnés ou de revenus.
+
+5. Données et confidentialité
+Vos productions et les données d'appairage sont enregistrées dans data/.
+Les sessions de connexion restent dans vos profils de navigateur. Les prompts,
+images et fichiers nécessaires aux tâches sont transmis aux services que vous
+utilisez. Ils ne restent donc pas tous exclusivement sur votre ordinateur.
+Cette copie ne contient aucun dispositif ajouté de remontée de données vers
+l'ordinateur du fournisseur de la copie. Les services tiers ont leurs propres
+traitements de données. Sauvegardez data/ ; ne le partagez pas avec une archive.
+Le serveur est prévu pour 127.0.0.1 : ne l'exposez pas sur Internet.
+
+6. Limites et contrôle humain
+Les connecteurs sont expérimentaux. Une interface externe peut casser une étape.
+Le contrôle qualité et la transcription peuvent se tromper ; ils ne certifient
+pas les lèvres, les voix, l'absence de contrefaçon ou la qualité éditoriale.
+Vérifiez le résultat final avant publication. Ne renvoyez pas une génération
+dont la soumission est incertaine : récupérez d'abord le résultat existant.
+Aucune disponibilité continue, maintenance ou assistance permanente n'est promise.
+Ces indications ne retirent pas les droits que la loi vous accorde.
+
+7. Installation et composants tiers
+L'installateur crée un environnement Python local, télécharge ses dépendances
+et le modèle vocal Whisper. Internet et de l'espace disque sont nécessaires.
+Python, Chrome, FFmpeg, Pillow et les composants de transcription conservent
+leurs licences respectives. Cette copie ne réemballe pas leurs exécutables.
+
+8. Acceptation
+L'installateur et le lanceur présentent ces conditions et demandent de saisir
+ACCEPTER avant le premier usage. Cette acceptation est mémorisée localement.
+Si vous refusez, fermez l'installateur et n'utilisez pas cette copie.
+Le logiciel n'inclut ni activation distante, ni abonnement à son distributeur.

@@ -1,0 +1,264 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>FruchtDrama — Guide utilisateur</title><style>body{font-family:'IBM Plex Sans',Calibri,Arial,sans-serif;max-width:900px;margin:30px auto;color:#1f2430;line-height:1.55;padding:0 24px}h1{color:#355d42;font-size:30px}h2{color:#355d42;border-bottom:2px solid #e7f1da;padding-bottom:6px;margin-top:34px;page-break-after:avoid}figure{margin:14px 0;page-break-inside:avoid}figure img{max-width:100%;border:1px solid #dde2ea;border-radius:10px}figcaption{color:#828791;font-size:13px}table{border-collapse:collapse;width:100%;margin:12px 0}th,td{border:1px solid #dde2ea;padding:8px 10px;text-align:left;vertical-align:top}th{background:#eef4e8}code{background:#f2f4f7;padding:1px 5px;border-radius:4px}blockquote{border-left:4px solid #8b6cf0;margin:10px 0;padding:6px 14px;background:#f6f3ff}footer{color:#828791;font-size:12px;margin-top:30px}</style></head><body>
+<h1 id="fruchtdrama-guide-utilisateur-version-0.1.69">FruchtDrama —
+Guide utilisateur (version 0.1.69)</h1>
+<p>De l’installation à la publication TikTok d’une vidéo complète, étape
+par étape.</p>
+<figure>
+<img src="guide/g00-logo.png" alt="Logo FruchtDrama" />
+<figcaption aria-hidden="true">Logo FruchtDrama</figcaption>
+</figure>
+<hr />
+<h2 id="ce-quil-faut-envoyer">0. Ce qu’il faut envoyer</h2>
+<p><strong>Un seul fichier :
+<code>FruchtDrama-0.1.69.zip</code>.</strong> Il contient le logiciel et
+ce guide (<code>GUIDE-UTILISATEUR.pdf</code>, à la racine du dossier).
+Il ne contient aucun compte, aucune clé, aucune production : chacun
+utilise <strong>ses propres comptes</strong> (ChatGPT, Google Flow, et
+si voulu Grok, Claude). Aucun mot de passe n’est demandé.</p>
+<p>Envoi conseillé : WhatsApp (en « Document », pas en « Photo »),
+Google Drive ou e-mail. Message type :</p>
+<blockquote>
+<p>Voici FruchtDrama. Dézippe <code>FruchtDrama-0.1.69.zip</code> dans
+tes Documents, puis suis <code>GUIDE-UTILISATEUR.pdf</code> (dans le
+dossier) depuis l’étape 1. Il faut Google Chrome, Python 3.11 ou 3.12 et
+FFmpeg : le guide explique tout.</p>
+</blockquote>
+<hr />
+<h2 id="installer-une-seule-fois">1. Installer (une seule fois)</h2>
+<ol type="1">
+<li>Dézipper <code>FruchtDrama-0.1.69.zip</code> dans
+<strong>Documents</strong> : on obtient un dossier
+<code>FruchtDrama</code>. N’importe quel emplacement convient, mais ne
+lancez rien depuis l’intérieur du zip.</li>
+<li>Installer <strong>Google Chrome</strong>, <strong>Python 3.11 ou
+3.12</strong> 64 bits (python.org, cocher « Add python.exe to PATH ») et
+<strong>FFmpeg</strong> (Windows :
+<code>winget install --id Gyan.FFmpeg --exact</code> dans un terminal,
+puis fermer le terminal).</li>
+<li>Double-cliquer <strong><code>Installer.cmd</code></strong> (Windows)
+ou lancer <code>installer.sh</code> (Linux). Lire les conditions, taper
+<strong>ACCEPTER</strong>. L’installation télécharge ce qu’il faut
+(plusieurs minutes) et <strong>relie ce dossier à Chrome</strong>, sans
+droits administrateur.</li>
+<li>C’est tout : <strong>plus besoin de lancer le studio</strong>.
+L’extension (étape 2) le démarre toute seule, à chaque ouverture de
+Chrome, même après un redémarrage du PC. Si vous déplacez le dossier,
+relancez <code>Installer.cmd</code> une fois.</li>
+</ol>
+<p>Si le studio ne peut pas démarrer, la fenêtre FruchtDrama affiche
+<strong>« Le studio FruchtDrama ne tourne pas »</strong> avec la raison
+(installation à faire, port occupé…) et un bouton
+<strong>Réessayer</strong>. En secours, <code>Lancer-Studio.cmd</code>
+démarre le studio à la main.</p>
+<h2 id="ajouter-lextension-le-plugin-à-chrome">2. Ajouter l’extension
+(le « plugin ») à Chrome</h2>
+<ol type="1">
+<li>Dans Chrome, ouvrir
+<strong><code>chrome://extensions</code></strong>.</li>
+<li>Activer <strong>Mode développeur</strong> (en haut à droite).</li>
+<li>Cliquer <strong>Charger l’extension non empaquetée</strong> et
+choisir le dossier
+<strong><code>FruchtDrama/extension</code></strong>.</li>
+<li>La carte <strong>FruchtDrama</strong> apparaît avec le logo
+ci-dessus :</li>
+</ol>
+<figure>
+<img src="guide/g09-extensions.jpg"
+alt="Page des extensions avec FruchtDrama" />
+<figcaption aria-hidden="true">Page des extensions avec
+FruchtDrama</figcaption>
+</figure>
+<h2 id="épingler-lextension">3. Épingler l’extension</h2>
+<p>Cliquer sur la pièce de puzzle de Chrome, puis sur la punaise à côté
+de <strong>FruchtDrama</strong>. L’icône reste dans la barre (encadrée
+en orange) :</p>
+<figure>
+<img src="guide/g10-epingle.jpg" alt="Icône FruchtDrama épinglée" />
+<figcaption aria-hidden="true">Icône FruchtDrama épinglée</figcaption>
+</figure>
+<p><strong>Un clic sur cette icône ouvre la fenêtre FruchtDrama</strong>
+: le studio, plus ChatGPT, Grok et Flow dans des onglets, avec vos
+sessions. À l’ouverture, les sites sont revérifiés et les crédits de vos
+comptes relus. <strong>Rien à copier</strong> : l’extension se relie
+seule au studio (clé cachée).</p>
+<h2 id="ajouter-ses-comptes">4. Ajouter ses comptes</h2>
+<p>Page <strong>Mes comptes</strong> :</p>
+<figure>
+<img src="guide/g08-comptes.jpg" alt="Mes comptes" />
+<figcaption aria-hidden="true">Mes comptes</figcaption>
+</figure>
+<ol type="1">
+<li><strong>Sites</strong> (en haut) : chaque carte dit si vous êtes
+connecté. « Se connecter » ouvre le site dans la fenêtre ;
+connectez-vous <strong>vous-même</strong> une fois (ChatGPT obligatoire,
+Google Flow obligatoire, les autres facultatifs).</li>
+<li><strong>Comptes Google Flow</strong> — pour utiliser
+<strong>plusieurs comptes et leurs crédits</strong> :
+<ul>
+<li>dans la fenêtre FruchtDrama, ajoutez chaque compte Google à Chrome :
+photo de profil en haut à droite d’une page Google › <strong>Ajouter un
+compte</strong> ;</li>
+<li>cliquez <strong>Détecter mes comptes</strong> : le studio lit
+l’adresse et les <strong>crédits réels</strong> de chaque compte ;</li>
+<li>c’est tout : quand un compte n’a plus de crédits, le studio
+<strong>passe seul au suivant</strong>.</li>
+</ul></li>
+<li>États d’un compte Flow : <strong>Prêt</strong> (paie au moins un
+clip), <strong>Solde bas</strong> (ne paie plus un clip à 12 crédits :
+sauté), <strong>Vide</strong> (0 crédit).</li>
+<li>Réglages de la même page : <strong>langue</strong> des nouveaux
+épisodes, <strong>thème</strong>, <strong>contrôles des clips</strong>
+(Refaire tout seul / Signaler seulement / Pas de contrôle).</li>
+</ol>
+<p>Bandeau rouge en haut d’une page = un service est à sa limite (ex. «
+Limite Grok vidéos atteinte, ça revient vers 08:45 »). Attendez, ou
+connectez un autre compte de ce site puis <strong>J’ai changé de
+compte</strong>.</p>
+<h2 id="trouver-une-idée-le-filon">5. Trouver une idée : Le Filon</h2>
+<figure>
+<img src="guide/g01-filon.jpg" alt="Le Filon" />
+<figcaption aria-hidden="true">Le Filon</figcaption>
+</figure>
+<p>Les vidéos qui marchent dans la niche, avec leurs <strong>vrais
+chiffres</strong> (vues, vues/h, croissance, engagement, durée). Onglets
+<strong>Viral / Toutes les vidéos / Comptes</strong>, filtres de période
+et de durée (« 1 à 3 min, monétisables »). <strong>Recréer cette
+vidéo</strong> lance une histoire originale inspirée de celle-ci. Vous
+pouvez aussi glisser une carte sur « Créer » ou coller un lien TikTok
+n’importe où.</p>
+<h2 id="créer-une-vidéo">6. Créer une vidéo</h2>
+<figure>
+<img src="guide/g02-creer.jpg" alt="Créer" />
+<figcaption aria-hidden="true">Créer</figcaption>
+</figure>
+<ol type="1">
+<li><strong>Écrite par</strong> : ChatGPT (ou Claude).</li>
+<li><strong>Option</strong> : <em>Pas d’idée</em> (10 histoires
+proposées), <em>J’ai une idée</em>, <em>Refaire une virale</em> (lien
+TikTok), <em>Décide tout à ma place</em>.</li>
+<li><strong>Durée</strong> : 30 s (essai), <strong>1 min (minimum pour
+la rémunération TikTok)</strong>, 2 min, 3 min — le nombre de plans et
+le coût Flow estimé s’affichent.</li>
+<li><strong>Moteur vidéo</strong> (Flow, Grok, Arena),
+<strong>langue</strong>, format vertical.</li>
+<li><strong>Fabrication</strong> : « Lancer la production
+automatiquement » coché = tout s’enchaîne après la fiche ; décoché =
+vous validez la fiche vous-même. Réglages Flow : modèle,
+<strong>résolution 1080p</strong> si votre compte la propose.</li>
+</ol>
+<p>Puis : choisir une des <strong>dix histoires</strong>, relire la
+<strong>fiche de décision</strong> (moteur, obstacle, twist, 3 titres, 3
+premières répliques, appel de fin, casting) et <strong>Valider</strong>.
+Rien n’est payé avant.</p>
+<h2 id="suivre-la-fabrication-studio">7. Suivre la fabrication :
+Studio</h2>
+<figure>
+<img src="guide/g03-studio.jpg" alt="Studio" />
+<figcaption aria-hidden="true">Studio</figcaption>
+</figure>
+<p>Une carte par histoire : étape (À écrire, À dessiner, À tourner, À
+finir, Prête), barre de progression, <strong>prochaine action</strong>
+et son bouton direct. En bas à gauche du menu, <strong>En cours</strong>
+montre la production en train d’être faite. Cliquer une histoire montre
+ses <strong>parties</strong> :</p>
+<figure>
+<img src="guide/g04-histoire.jpg" alt="Histoire et parties" />
+<figcaption aria-hidden="true">Histoire et parties</figcaption>
+</figure>
+<p>Puis la page de la partie :</p>
+<figure>
+<img src="guide/g05-episode.jpg" alt="Page de la partie" />
+<figcaption aria-hidden="true">Page de la partie</figcaption>
+</figure>
+<ul>
+<li>cinq cases : Fiche, Personnages, Planches, Clips, Montage (avec
+Refaire… / Générer / Monter…) ;</li>
+<li><strong>▶ Boucle complète</strong> reprend exactement là où ça s’est
+arrêté ;</li>
+<li><strong>Vidéo finale</strong> : 1080 × 1920, sous-titres karaoké,
+<strong>accroche (hook) écrite à l’écran les 3 premières
+secondes</strong> ;</li>
+<li>Miniature, Publication, Personnages, Scènes. Un clic sur une scène
+montre <strong>la planche et le clip côte à côte</strong> :</li>
+</ul>
+<figure>
+<img src="guide/g06-scene.jpg" alt="Scène : planche et clip" />
+<figcaption aria-hidden="true">Scène : planche et clip</figcaption>
+</figure>
+<h2 id="avant-de-publier-hook-et-originalité">8. Avant de publier : hook
+et originalité</h2>
+<ul>
+<li><strong>Hook</strong> : la scène 1 s’ouvre sur l’instant le plus
+fort, la première réplique choc tombe dans les 2 premières secondes, et
+une <strong>accroche est écrite à l’écran</strong> (dernier mot en
+jaune). C’est ce qui retient les spectateurs.</li>
+<li><strong>Originalité</strong> (bouton <strong>Contrôler</strong> sous
+la miniature) : un <strong>pourcentage estimé</strong> et une
+recommandation.</li>
+</ul>
+<figure>
+<img src="guide/g07-originalite.jpg" alt="Originalité" />
+<figcaption aria-hidden="true">Originalité</figcaption>
+</figure>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Score</th>
+<th>Que faire</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>80 % et plus</td>
+<td><strong>Publication conseillée</strong></td>
+</tr>
+<tr class="even">
+<td>60 à 79 %</td>
+<td><strong>Corrigez avant de publier</strong> : suivez les conseils, ou
+<strong>Réécrire titre, accroche et description pour
+s’éloigner</strong></td>
+</tr>
+<tr class="odd">
+<td>moins de 60 %</td>
+<td><strong>Publication déconseillée</strong> : refaites les planches
+signalées ou recréez l’histoire</td>
+</tr>
+</tbody>
+</table>
+<p>Estimation locale : TikTok ne publie pas sa méthode. Elle compare vos
+images aux vidéos relevées, vos textes à la vidéo d’origine, signale la
+répétition de vos propres épisodes, la durée (moins d’1 min = pas de
+rémunération) et l’absence de mention IA.</p>
+<h2 id="publier-sur-tiktok">9. Publier sur TikTok</h2>
+<ol type="1">
+<li>Page de la partie › Vidéo finale › <strong>Télécharger</strong> (MP4
+1080 × 1920).</li>
+<li>Miniature › <strong>Télécharger</strong> ; Publication ›
+<strong>Tout copier</strong> (titre et description avec hashtags).</li>
+<li>Dans TikTok (téléphone ou tiktok.com/upload) : importer le MP4,
+coller la description, choisir la miniature, <strong>activer « Contenu
+généré par l’IA »</strong>, publier.</li>
+<li>Pour une série : <strong>Créer la partie 2</strong> sur la page de
+l’histoire (mêmes personnages, rien à repayer pour eux).</li>
+</ol>
+<h2 id="en-cas-de-souci">10. En cas de souci</h2>
+<ul>
+<li><strong>Bandeau rouge « Limite atteinte »</strong> : attendre
+l’heure indiquée ou changer de compte puis « J’ai changé de compte
+».</li>
+<li><strong>Flow « Solde bas »</strong> partout : ajoutez des comptes
+Google avec des crédits, puis <strong>Détecter mes
+comptes</strong>.</li>
+<li><strong>Connexion requise / vérification anti-robot</strong> : la
+faire vous-même dans l’onglet, puis <strong>▶ Boucle complète</strong>.
+FruchtDrama ne contourne jamais ces vérifications.</li>
+<li>Mes comptes › Réglages › <strong>Assistance</strong> › Copier un
+rapport de panne (sans mot de passe ni adresse).</li>
+</ul>
+<p><em>FruchtDrama — studio local. Aucun achat automatique, aucun mot de
+passe enregistré.</em></p>
+</body></html>
