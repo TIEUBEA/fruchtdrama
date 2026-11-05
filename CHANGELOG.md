@@ -5,6 +5,11 @@ correspondante (P0-xx, P1-x, P2-xx) détaillée dans `docs/sudf/`. Guide pour re
 `docs/sudf/REPRISE.md`. **Mode d'emploi détaillé** (installer, lancer, utiliser), mis à jour à chaque
 version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, version par version).
 
+## Prochaine version
+- Ajouté : **choix du modèle Claude et de l'effort** dans « Écrite par » quand Claude écrit l'histoire. Modèle : Opus 5.5 (le meilleur pour écrire, par défaut), Fable 5.1 (le plus puissant) ou Sonnet 5.5 (rapide). Effort : Élevé (par défaut), Extra ou Moyen. Le dernier choix est gardé pour les épisodes suivants.
+- Ajouté : avant de coller le prompt sur claude.ai, l'extension choisit ce modèle et cet effort dans le menu des modèles, en les cherchant par leur nom affiché. Si le menu est introuvable, rien ne bloque : l'onglet garde son modèle et le studio affiche « Modèle Claude non sélectionnable automatiquement : modèle de l'onglet conservé ». Nécessite de recharger l'extension FruchtDrama.
+- Les planches restent chez ChatGPT et les clips chez Google Flow : seule l'histoire change de main.
+
 ## 0.1.84 — 05/11/2026
 L'Atelier Gourmand 1.0.22 ouvert et parcouru bouton par bouton ; écarts corrigés (détail : `docs/sudf/REVUE-MODULES-2026-11-05.md`).
 - Ajouté : **espagnol et portugais (Brésil)**, cinq langues comme l'Atelier : écriture, recherche TikTok, contrôle des paroles, hashtags, horaires de publication, variantes.

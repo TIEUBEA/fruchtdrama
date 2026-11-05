@@ -205,3 +205,4 @@ details.lang-menu{border:0;padding:0;margin:0;position:relative}details.lang-men
 .ndot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-left:7px;background:var(--line,#ccc);vertical-align:middle}.ndot.ok{background:#3c9a5f}
 .recovered{margin-top:22px}.recovered-list{display:grid;gap:8px;margin-top:10px}.recovered-row{display:flex;align-items:center;gap:12px}.recovered-row img{width:40px;height:56px;object-fit:cover;border-radius:6px}.recovered-row>div{flex:1;min-width:0}.recovered-row small{display:block;color:var(--muted)}
 .niche-row .choice{display:inline-flex;flex-direction:row;align-items:center}
+.claude-options{margin-top:14px}.claude-options label{margin:0}

@@ -44,6 +44,19 @@ CREATION_LANGUAGES=('Deutsch (de-DE)','Français (fr-FR)','English (en-US)','Esp
 SITES=('chatgpt','flow','tiktok','grok','arena','claude')
 RESEARCH_QUERIES={'Deutsch (de-DE)':'KI Früchte Geschichten deutsch','Français (fr-FR)':'histoires fruits IA français','English (en-US)':'AI fruit drama stories English','Español (es-ES)':'historias de frutas IA español','Português (pt-BR)':'histórias de frutas IA português'}
 
+# Claude model and effort chosen in « Écrite par » (claude.ai interface, selected by the extension).
+CLAUDE_MODELS={'opus-5.5':'Opus 5.5','fable-5.1':'Fable 5.1','sonnet-5.5':'Sonnet 5.5'}
+CLAUDE_EFFORTS={'high':'Élevé','extra':'Extra','medium':'Moyen'}
+CLAUDE_DEFAULTS={'claude_model':'opus-5.5','claude_effort':'high'}
+
+def claude_choice(field,value):
+    """Validated Claude model or effort; None gives the default. A clear refusal otherwise."""
+    allowed=CLAUDE_MODELS if field=='claude_model' else CLAUDE_EFFORTS
+    value=CLAUDE_DEFAULTS[field] if value is None else value
+    if value not in allowed:
+        raise ValueError(('Modèle Claude inconnu' if field=='claude_model' else 'Effort Claude inconnu')+' : '+str(value)[:40]+'. Choix possibles : '+', '.join(allowed.values())+'.')
+    return value
+
 def creation_language(value):
     value=str(value).strip()
     if value not in CREATION_LANGUAGES:raise ValueError('Choisissez Français, English, Español, Português ou Deutsch')
@@ -582,6 +595,9 @@ def add_task(j, kind, payload, slot):
             # P2-07: nothing is sent while the service is at its limit; the production resumes by itself.
             j['status']='waiting_quota';j['wait_until']=q['retry_at']
             event(j,q['label']+' à sa limite : reprise automatique vers '+quotas.stamp(q['retry_at'])[11:16]+' UTC.');return
+    if kind=='chat_text' and payload.get('provider')=='claude':
+        # The extension selects this model and effort in claude.ai before sending (older episodes: defaults).
+        payload={**payload,**{k:j.get('config',{}).get(k) or CLAUDE_DEFAULTS[k] for k in CLAUDE_DEFAULTS}}
     t={'id':uid(),'job':j['id'],'kind':kind,'payload':payload,'slot':slot,'status':'queued','created':now(),'profile':j.get('flow_profile') if kind=='flow_video' else None}
     STATE['tasks'].append(t); j['status']='running'; event(j,f"Tâche préparée : {slot}")
 
@@ -1785,6 +1801,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     STATE['sites']={**{k:v for k,v in STATE.get('sites',{}).items() if not k.startswith('_')},**sites} if b.get('partial') else sites;save();return self.send_json({'ok':True})
                 elif path=='/api/settings':
                     if 'language' in b:STATE['settings']['language']=creation_language(b['language'])
+                    for k in CLAUDE_DEFAULTS:
+                        if k in b:STATE['settings'][k]=claude_choice(k,b[k])
                     if 'controls' in b:
                         if b['controls'] not in ('redo','report','none'):raise ValueError('Réglage de contrôle inconnu')
                         STATE['settings']['controls']=b['controls']
@@ -1833,6 +1851,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     cfg['flow_cost']=int(b.get('config',{}).get('flow_cost',{'gemini_omni_flash':12,'veo_3_1_lite':10,'veo_3_1_fast':20,'veo_3_1_quality':100}[cfg['flow_model']]))
                     if cfg['flow_cost'] not in {'gemini_omni_flash':(12,), 'veo_3_1_lite':(10,5), 'veo_3_1_fast':(20,10), 'veo_3_1_quality':(100,)}[cfg['flow_model']]:raise ValueError('Coût incompatible avec le modèle Flow choisi. Le coût réel sera vérifié avant tout envoi.')
                     cfg['language']=creation_language(cfg.get('language','Deutsch (de-DE)'))
+                    # Claude model and effort: request first, then the last choice kept in the settings.
+                    for k in CLAUDE_DEFAULTS:cfg[k]=claude_choice(k,cfg.get(k))
                     cfg['review_script']=bool(b.get('config',{}).get('review_script',False))
                     cfg['dry_run']=bool(b.get('config',{}).get('dry_run',False))
                     req=b.get('config',{})
@@ -1862,6 +1882,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     # An omitted or untouched German default follows the chosen language.
                     cfg['query']=RESEARCH_QUERIES[cfg['language']] if not requested_query or requested_query in RESEARCH_QUERIES.values() else requested_query[:200]
                     if not 3<=cfg['scene_count']<=40 or not 1<=cfg['flow_cost']<=100 or cfg['provider'] not in ('chatgpt','claude'): raise ValueError('Réglages invalides')
+                    if cfg['provider']=='claude':STATE['settings'].update({k:cfg[k] for k in CLAUDE_DEFAULTS})
                     j={'id':uid(),'title':'Nouvel épisode','brief':str(b.get('brief',''))[:4000], 'config':cfg,'editorial_version':2,'retention_version':1,'hook_version':1,'quality_version':1,'cover_style':'family_poster_v3','character_sheet':1,'flow_profile':b.get('flow_profile'),'status':'running','stage':'research','created':now(),'updated':now(),'events':[],'candidates':[],'characters':[],'scenes':[]}; STATE['jobs'].insert(0,j)
                     if source:
                         j['selected']={'title':'Vidéo fournie par le propriétaire','url':urllib.parse.urlunparse(('https',u.hostname,u.path,'','','')),'source':'owner_link'};thumbs.warm([j['selected']['url']],DATA);j['stage']='script'
