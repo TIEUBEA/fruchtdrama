@@ -5,6 +5,9 @@ correspondante (P0-xx, P1-x, P2-xx) détaillée dans `docs/sudf/`. Guide pour re
 `docs/sudf/REPRISE.md`. **Mode d'emploi détaillé** (installer, lancer, utiliser), mis à jour à chaque
 version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, version par version).
 
+## 0.1.81 — 05/11/2026
+- Corrigé : **chrono de fabrication incohérent** (« 678 min » pour un épisode commencé la veille). Il comptait depuis la création de l'épisode, nuits et pauses comprises. Il compte maintenant le temps de travail seulement : un silence de plus de 10 minutes dans le journal (pause, nuit, attente du propriétaire) n'est pas compté. Affichage en heures au-delà de 60 minutes (`activeSeconds`).
+
 ## 0.1.80 — 05/11/2026
 - Corrigé : **le studio ne démarrait plus** (port 8840 jamais ouvert, 100 % CPU). Au démarrage, la recherche de planches en double relisait chaque image entière pour chaque paire. L'empreinte d'une image est maintenant gardée en mémoire tant que le fichier ne change pas (`image_fingerprint`).
 - Ajouté (demande du propriétaire) : **« Boucle complète » décide seule aux contrôles qualité**. Paroles sous 85 % et réserves visuelles (y compris « incertain ») sont acceptées automatiquement, sans nouvelle génération ni crédit, et le montage continue. Un défaut technique (média illisible) arrête toujours. « Pause » rend la main au propriétaire.

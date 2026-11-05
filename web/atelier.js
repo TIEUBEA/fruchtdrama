@@ -25,7 +25,10 @@ function confirmCost(j,verb){if(['ideas','sheet','script'].includes(j.stage))ret
 function costText(scenes){const both=draft.format==='both',clips=scenes*(both?2:1),images=scenes*(both?2:1)+2,credits=draft.engine==='flow'?clips*12:null;
  return `environ ${images} images ChatGPT (feuille des personnages, ${scenes} planches${both?' en 9:16 et '+scenes+' en 16:9':''}, miniature) et ${clips} clips ${{flow:'Flow',grok:'Grok',arena:'Arena'}[draft.engine]}${credits?` (≈ ${credits} crédits Flow)`:''}${draft.quality==='normal'?', plus 3 clips refaits au plus si le contrôle en signale':''}`;}
 const estimate=j=>{const n=(j.config.scene_count||(j.scenes||[]).length||4);return [n*2,n*4];};
-function runClock(j){const [a,b]=estimate(j),s=Math.max(0,Math.round((Date.now()-Date.parse(j.created))/1000));return `${Math.floor(s/60)} min ${String(s%60).padStart(2,'0')} · en général ${a} à ${b} min`;}
+// Working time only: a gap of more than 10 min between two journal lines (pause, night, waiting for the owner) is not counted.
+function activeSeconds(j){const IDLE=600e3;const t=[Date.parse(j.created),...(j.events||[]).map(e=>Date.parse(e.at))].filter(Number.isFinite).sort((x,y)=>x-y);
+ if(j.status==='running')t.push(Date.now());let ms=0;for(let i=1;i<t.length;i++){const d=t[i]-t[i-1];if(d>0&&d<=IDLE)ms+=d;}return Math.round(ms/1000);}
+function runClock(j){const [a,b]=estimate(j),s=activeSeconds(j),h=Math.floor(s/3600),m=Math.floor(s%3600/60);return `${h?h+' h '+String(m).padStart(2,'0'):m+' min '+String(s%60).padStart(2,'0')} de travail · en général ${a} à ${b} min`;}
 setInterval(()=>document.querySelectorAll('.run-clock[data-job]').forEach(el=>{const j=state?.jobs?.find(x=>x.id===el.dataset.job);if(j)el.textContent=runClock(j);}),1000);
 
 // --- Navigation -----------------------------------------------------------------------------

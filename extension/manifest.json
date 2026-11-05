@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "FruchtDrama",
-  "version": "0.1.80",
+  "version": "0.1.81",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0nmBJjj18bVPgTObMfPPl+Dh84Jf84jX2AfEsBwDttjBgig79EpBnSnLeSLCZ+yi1pp6OHGrrkP3uDLaIPtaLND4XXizQ7JdN/0d+s3/vyDPXu4PDXFL0KtLtuMhRsdMrOOSSqgeZVG6v9cIwoiW/1NO1TFCk4QwmoiAPlyUVkrFIAqJ7Tusu4Wj28Ae2HjScc9r0gFlnF0isOnFEyvOkZlU8vlxElRfsocvDDJfA4s7z87BcyBcGOxEnjfSUNHYFO4aRZYnyGyOYfSP7X8wkoiLnpOUjnUJ8kwi7xHRVNXorDvqpbUaOSgqon00juCD3ziAQzT1xBGkQVJ1vP2jdQIDAQAB",
   "description": "Ouvre une fenêtre FruchtDrama où tout se passe : studio, IA, Flow et comptes. Relie vos sessions de création au studio local.",
   "permissions": [
