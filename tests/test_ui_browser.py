@@ -25,7 +25,9 @@ class BrowserInterfaceTests(unittest.TestCase):
                  'jobs': [{'id': cls.job, 'title': 'Épisode QA', 'brief': 'b', 'stage': 'clips', 'status': 'attention', 'created': now, 'updated': now,
                            'config': {'provider': 'chatgpt', 'scene_count': 2, 'language': 'Deutsch (de-DE)', 'flow_model': 'gemini_omni_flash', 'flow_cost': 12},
                            'events': [{'at': now, 'text': 'Redémarrage : génération précédente à vérifier avant de réessayer.'}],
-                           'candidates': [], 'characters': [{'id': 'orange', 'name': 'Oma', 'appearance': 'a', 'voice': 'v', 'image_prompt': 'p', 'file': 'sheet.png'}, {'id': 'kiwi', 'name': 'Kiko', 'appearance': 'k', 'voice': 'v', 'image_prompt': 'p', 'file': 'sheet.png'}], 'character_sheet': 1, 'character_sheet_file': 'sheet.png', 'scenes': scenes, 'flow_profile': 'flow'},
+                           'candidates': [], 'characters': [{'id': 'orange', 'name': 'Oma', 'appearance': 'a', 'voice': 'v', 'image_prompt': 'p', 'file': 'sheet.png'}, {'id': 'kiwi', 'name': 'Kiko', 'appearance': 'k', 'voice': 'v', 'image_prompt': 'p', 'file': 'sheet.png'}], 'character_sheet': 1, 'character_sheet_file': 'sheet.png', 'scenes': scenes, 'flow_profile': 'flow',
+                           'script': {'title': 'Épisode QA', 'cover_title': 'WER?', 'description': 'd', 'characters': [], 'scenes': scenes, 'state_changes': [{'from_scene': 2, 'character': 'orange', 'change': 'tablier déchiré'}]},
+                           'state_sheets': [{'from_scene': 2, 'character': 'orange', 'change': 'tablier déchiré', 'file': 'state.png'}]},
                           {'id': cls.review, 'title': 'Histoire à relire QA', 'brief': 'b', 'stage': 'characters', 'status': 'waiting_review', 'created': now, 'updated': now,
                            'config': {'provider': 'chatgpt', 'scene_count': 2, 'language': 'Deutsch (de-DE)', 'flow_model': 'gemini_omni_flash', 'flow_cost': 12, 'review_script': True},
                            'events': [], 'candidates': [], 'flow_profile': 'flow', 'characters': [{'id': 'orange', 'name': 'Oma', 'appearance': 'a', 'voice': 'v', 'image_prompt': 'p'}], 'scenes': scenes,
@@ -69,6 +71,11 @@ class BrowserInterfaceTests(unittest.TestCase):
         self.assertIn('Redémarrage : génération précédente à vérifier', html)
         self.assertIn('Feuille commune : Oma, Kiko', html); self.assertEqual(html.count('data-upload="characters"'), 1)
         self.assertNotIn('data-upload="character:kiwi"', html)
+
+    def test_story_states_section_like_the_atelier(self):
+        html = self.dom('#job=' + self.job)
+        self.assertIn('Au fil de l’histoire', html); self.assertIn('Dès la scène 2', html); self.assertIn('OMA : tablier déchiré', html)
+        self.assertIn(f'/media/{self.job}/state.png', html); self.assertIn('data-redo="state:0"', html)
 
     def test_story_review_editor_before_images(self):
         html = self.dom('#job=' + self.review)
