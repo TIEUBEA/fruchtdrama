@@ -37,7 +37,7 @@ def soften(prompt, level):
     return FRAME + text + (LEAVE_OUT if level >= 2 else '')
 
 
-IMAGE_SLOTS = re.compile(r'(?:characters|character:[a-z][a-z0-9_]{0,24}|image:\d+|cover)')
+IMAGE_SLOTS = re.compile(r'(?:characters|character:[a-z][a-z0-9_]{0,24}|state:\d+|image:\d+|cover)')
 
 
 def applies(task):

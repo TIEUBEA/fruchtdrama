@@ -5,6 +5,13 @@ correspondante (P0-xx, P1-x, P2-xx) détaillée dans `docs/sudf/`. Guide pour re
 `docs/sudf/REPRISE.md`. **Mode d'emploi détaillé** (installer, lancer, utiliser), mis à jour à chaque
 version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, version par version).
 
+## Prochaine version
+- Ajouté : **« Au fil de l'histoire » (feuilles d'état)**, comme l'Atelier. Quand l'histoire change vraiment l'apparence d'un personnage (blessure, vêtement déchiré, objet perdu, maquillage coulé), l'IA l'indique dans le scénario (0 à 3 changements, facultatif ; une indication mal formée est ignorée, le scénario n'est jamais refusé pour ça).
+- Ajouté : en qualité **Normale**, après la feuille des personnages, ChatGPT redessine la même feuille avec ce changement (une image par changement). En **Économie**, pas de feuille d'état. Aucune feuille d'état n'est payée si les planches concernées sont déjà dessinées.
+- Ajouté : à partir de la scène du changement, les planches où ce personnage apparaît reçoivent la feuille d'état à la place de la feuille de référence, et la consigne cite le changement : l'apparence reste la même jusqu'à la fin. Le contrôle des planches sait que ce changement est voulu.
+- Ajouté : page de l'épisode, sous les personnages : section « Au fil de l'histoire » (miniature, « Dès la scène N », « NOM : changement ») et « Refaire… » tant que les planches suivantes ne sont pas dessinées.
+- Si ChatGPT refuse la feuille d'état même reformulée, la production continue avec la feuille des personnages (rien ne bloque).
+
 ## 0.1.84 — 05/11/2026
 L'Atelier Gourmand 1.0.22 ouvert et parcouru bouton par bouton ; écarts corrigés (détail : `docs/sudf/REVUE-MODULES-2026-11-05.md`).
 - Ajouté : **espagnol et portugais (Brésil)**, cinq langues comme l'Atelier : écriture, recherche TikTok, contrôle des paroles, hashtags, horaires de publication, variantes.

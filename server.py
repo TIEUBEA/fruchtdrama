@@ -388,6 +388,62 @@ def sheet_prompt(j):
               'and make the skin texture, outfit, accessories and distinctive marks clearly readable.\n' if j['config'].get('characters_detail')=='detailed' else '')
             +cast)
 
+def state_changes(j): return (j.get('script') or {}).get('state_changes') or []
+
+def state_sheets_enabled(j):
+    # Like the Atelier: « Normale » makes state sheets, « Économie » does not.
+    return (j.get('config') or {}).get('quality')!='economy'
+
+def state_entry(j,change):
+    return next((x for x in j.get('state_sheets') or [] if x.get('character')==change['character'] and x.get('from_scene')==change['from_scene']),None)
+
+def slot_of_state(j,entry):
+    k=next((k for k,c in enumerate(state_changes(j)) if c['character']==entry.get('character') and c['from_scene']==entry.get('from_scene')),None)
+    return f'state:{k}' if k is not None else 'state'
+
+def state_reference(j,character,scene_number):
+    """State sheet of this character in force at this scene (numbered from 1), or None."""
+    rows=[x for x in j.get('state_sheets') or [] if x.get('character')==character and x.get('file') and x.get('from_scene',0)<=scene_number]
+    return max(rows,key=lambda x:x['from_scene'],default=None)
+
+def state_base(j,change):
+    """Image the state sheet is drawn from: an earlier state sheet of the same character, else its reference."""
+    earlier=state_reference(j,change['character'],change['from_scene']-1)
+    if earlier:return earlier['file']
+    return next((c.get('file') for c in j.get('characters',[]) if c['id']==change['character']),None)
+
+def state_needed(j,change):
+    """A state sheet is paid only if a board from its scene on, with this character, is still to draw."""
+    if not state_sheets_enabled(j) or state_entry(j,change) or not state_base(j,change):return False
+    return any(change['character'] in (s.get('characters') or []) and not s.get('image') for s in (j.get('scenes') or [])[change['from_scene']-1:])
+
+def state_sheet_prompt(j,change):
+    c=next(c for c in j['characters'] if c['id']==change['character'])
+    earlier=state_reference(j,change['character'],change['from_scene']-1)
+    return ('Redraw the attached character reference image exactly: same characters, same layout, same poses, same scale, '
+            'same background, same premium 3D animation style and the same small name labels, portrait 9:16. '
+            f"Change ONLY {c['name']} ({c['id']}): {change['change']}. "
+            +(f"Keep the earlier visible change of {c['name']}: {earlier['change']}. " if earlier else '')
+            +'Every other character and every other detail stays identical. No other text.')
+
+def scene_references(j,i):
+    """Board i: from its scene on, a character's state sheet replaces the reference sheet (same look all along)."""
+    scene=j['scenes'][i];states=[]
+    for c in j.get('characters',[]):
+        st=state_reference(j,c['id'],i+1) if c['id'] in (scene.get('characters') or []) else None
+        if st and st not in states:states.append(st)
+    if not states:return image_assets(j),[]
+    sheet=j.get('character_sheet_file');files=[x['file'] for x in states]
+    for c in j.get('characters',[]):
+        # A state sheet of the shared sheet shows the whole cast: the old sheet would contradict it.
+        if c.get('file') and not any(x['character']==c['id'] for x in states) and not (sheet and c['file']==sheet):files.append(c['file'])
+    return list(dict.fromkeys(asset_url(j,f) for f in files)),states
+
+def state_note(j,states):
+    if not states:return ''
+    names={c['id']:c['name'] for c in j.get('characters',[])}
+    return ' Changed look from this scene on (shown in the attached updated sheet, keep it): '+'; '.join(f"{names.get(x['character'],x['character'])}: {x['change']}" for x in states)+'.'
+
 FINGERPRINTS={}
 
 def image_fingerprint(j,file):
@@ -442,7 +498,7 @@ def import_browser_download(j,t,info):
 
 def duplicate_scene_source(j,file,index):
     fingerprint=image_fingerprint(j,file)
-    sources=[c.get('file') for c in j.get('characters',[])]+[s.get('image') for i,s in enumerate(j.get('scenes',[])) if i!=index]
+    sources=[c.get('file') for c in j.get('characters',[])]+[x.get('file') for x in j.get('state_sheets') or []]+[s.get('image') for i,s in enumerate(j.get('scenes',[])) if i!=index]
     for source in sources:
         if source and fingerprint==image_fingerprint(j,source):return source
     return None
@@ -520,7 +576,29 @@ def validate_script(s, n):
         if sum(len(x['text'].split()) for x in lines)>25: raise ValueError('Dialogue trop long pour un clip de huit secondes (25 mots maximum)')
     for k in ['title','cover_title','description']:
         if not isinstance(s.get(k),str) or not s[k].strip(): raise ValueError('Titre, couverture ou description manquant')
+    # Optional extra: a wrong entry is dropped, it never refuses the script.
+    changes=clean_state_changes(s.get('state_changes'),ids,n)
+    if changes:s['state_changes']=changes
+    else:s.pop('state_changes',None)
     return s
+
+STATE_CHANGES_MAX=3
+
+def clean_state_changes(raw,ids,n):
+    """« Au fil de l'histoire »: visible changes of a character from one scene on (wound, torn outfit, lost object).
+    Tolerant: invalid, duplicate or extra entries are ignored; at most three, ordered by scene."""
+    if not isinstance(raw,list):return []
+    clean=[];seen=set()
+    for x in raw:
+        if not isinstance(x,dict):continue
+        scene=x.get('from_scene')
+        if isinstance(scene,str) and scene.strip().isdigit():scene=int(scene.strip())
+        if isinstance(scene,bool) or not isinstance(scene,int) or not 1<=scene<=n:continue
+        character=x.get('character')
+        change=' '.join(str(x.get('change') or '').split())[:200] if isinstance(x.get('change'),str) else ''
+        if character not in ids or not change or (character,scene) in seen:continue
+        seen.add((character,scene));clean.append({'from_scene':scene,'character':character,'change':change})
+    return sorted(clean[:STATE_CHANGES_MAX],key=lambda x:x['from_scene'])
 
 def parse_json(text):
     text=re.sub(r'^```(?:json)?\s*|\s*```$','',str(text).strip())
@@ -539,7 +617,7 @@ def script_prompt(j):
     if (j.get('variant') or {}).get('kind')=='language':return translation_prompt(j)
     ref=j['selected']; n=j['config']['scene_count']
     language=j['config'].get('language','Deutsch (de-DE)')
-    schema={'production_id':j['id'],'title':'Titre dans la langue choisie','cover_title':'Question courte dans la langue choisie','hook_text':'Accroche écrite à l’écran pendant les 3 premières secondes : 4 à 7 mots, question ou promesse choc, sans révéler la fin','description':'Description TikTok dans la langue choisie, mentionnant la création par IA','characters':[{'id':'fruit_a','name':'Prénom dans la langue choisie','appearance':'Design de fruit et vêtements cohérents','voice':'Voix native de la langue choisie, âge, timbre','image_prompt':'Prompt de référence dans la langue choisie'}],'scenes':[{'title':'Titre court de la scène (2 à 4 mots, langue choisie)','characters':['fruit_a'],'meaning':'Action compréhensible sans le son','image_prompt':'Prompt d’image dans la langue choisie, 9:16','video_prompt':'Animation, caméra, action, position des locuteurs, lèvres et personnages silencieux','dialogue':[{'speaker':'fruit_a','text':'Réplique courte dans la langue choisie'}]}]}
+    schema={'production_id':j['id'],'title':'Titre dans la langue choisie','cover_title':'Question courte dans la langue choisie','hook_text':'Accroche écrite à l’écran pendant les 3 premières secondes : 4 à 7 mots, question ou promesse choc, sans révéler la fin','description':'Description TikTok dans la langue choisie, mentionnant la création par IA','characters':[{'id':'fruit_a','name':'Prénom dans la langue choisie','appearance':'Design de fruit et vêtements cohérents','voice':'Voix native de la langue choisie, âge, timbre','image_prompt':'Prompt de référence dans la langue choisie'}],'scenes':[{'title':'Titre court de la scène (2 à 4 mots, langue choisie)','characters':['fruit_a'],'meaning':'Action compréhensible sans le son','image_prompt':'Prompt d’image dans la langue choisie, 9:16','video_prompt':'Animation, caméra, action, position des locuteurs, lèvres et personnages silencieux','dialogue':[{'speaker':'fruit_a','text':'Réplique courte dans la langue choisie'}]}],'state_changes':[{'from_scene':2,'character':'fruit_a','change':'Changement d’apparence visible à partir de cette scène (blessure, vêtement déchiré, objet perdu, maquillage coulé…), langue choisie'}]}
     guidance=''
     # Announce the limit the validators actually enforce (editorial.validate: 20 for retention productions).
     word_limit=engines.word_limit(j,20 if j.get('editorial_version')==2 and j.get('retention_version')==1 else 25)
@@ -552,7 +630,7 @@ def script_prompt(j):
     owner_link=(ref or {}).get('source')=='owner_link'
     identical=owner_link and j['config'].get('recreate')=='identical'
     reference=(source_video.guidance(j['config'].get('recreate','inspired'),j.get('source_analysis'),len(j.get('source_captures') or []))+(f"\nInstructions en plus du propriétaire (à respecter) : {j['brief']}" if j.get('brief','').strip() else '')) if owner_link else None
-    return f'''Crée une mini-fiction de fruits {'qui refait fidèlement la vidéo indiquée' if identical else 'entièrement ORIGINALE'}. Langue demandée pour les dialogues, les voix, les textes de couverture, la description et les prompts (sauf les clés techniques et la signature narrative) : {language}. La langue demandée prime sur la langue française des instructions et des descriptions du schéma. Aucune traduction ni réplique dans une autre langue. Les personnages parlent avec des voix natives de la langue demandée. Réponds UNIQUEMENT avec du JSON valide, sans explication. Conserve les clés techniques du schéma en anglais. {reference if reference else 'Référence comme indice de tendance seulement, jamais copier les répliques ou les plans : '+json.dumps(ref,ensure_ascii=False)+'.'} Idée : {j['brief']}. Exactement {n} scènes de {engines.spec(j)['seconds']} secondes, 2 à 5 personnages (au moins 3 quand l’histoire le permet : héros, adversaire, témoin ou figurant). Au plus {word_limit} mots parlés par scène pour les langues avec espaces ; pour les autres, une réplique assez courte pour être prononcée naturellement en moins de 7 secondes. Maximum 2 locuteurs par scène. HOOK OBLIGATOIRE : la scène 1 s’ouvre sur l’instant le plus fort (danger, injustice, secret révélé), la première réplique est une phrase choc de moins de 10 mots dite dans les 2 premières secondes, et hook_text pose une question résolue seulement à la fin. Mouvement : chaque scène a un cadrage différent (gros plan, plan large, plongée), un mouvement de caméra (travelling, panoramique, zoom), des personnages qui se déplacent et agissent, un arrière-plan vivant (figurants, objets, lumière, météo) ; au moins deux lieux différents dans l’épisode. Retournement visible, conclusion satisfaisante. Pas de présentation comme fait réel. Animation 3D premium, fruits anthropomorphes avec peau de fruit aussi sur les mains, vêtements couvrants sans logos, grands visages expressifs, décor cohérent avec l’intrigue choisie et différent des épisodes récents, vertical 9:16. Même identité et tenue partout, aucune voix de narrateur, personnages parlant à l'écran, caméra en mouvement continu dans chaque clip. Sous-titres ajoutés au montage. {guidance} Le champ cover_title doit être une accroche de couverture de 3 à 5 mots maximum dans la langue demandée, sans révéler la fin. Schéma : {json.dumps(schema,ensure_ascii=False)}'''
+    return f'''Crée une mini-fiction de fruits {'qui refait fidèlement la vidéo indiquée' if identical else 'entièrement ORIGINALE'}. Langue demandée pour les dialogues, les voix, les textes de couverture, la description et les prompts (sauf les clés techniques et la signature narrative) : {language}. La langue demandée prime sur la langue française des instructions et des descriptions du schéma. Aucune traduction ni réplique dans une autre langue. Les personnages parlent avec des voix natives de la langue demandée. Réponds UNIQUEMENT avec du JSON valide, sans explication. Conserve les clés techniques du schéma en anglais. {reference if reference else 'Référence comme indice de tendance seulement, jamais copier les répliques ou les plans : '+json.dumps(ref,ensure_ascii=False)+'.'} Idée : {j['brief']}. Exactement {n} scènes de {engines.spec(j)['seconds']} secondes, 2 à 5 personnages (au moins 3 quand l’histoire le permet : héros, adversaire, témoin ou figurant). Au plus {word_limit} mots parlés par scène pour les langues avec espaces ; pour les autres, une réplique assez courte pour être prononcée naturellement en moins de 7 secondes. Maximum 2 locuteurs par scène. HOOK OBLIGATOIRE : la scène 1 s’ouvre sur l’instant le plus fort (danger, injustice, secret révélé), la première réplique est une phrase choc de moins de 10 mots dite dans les 2 premières secondes, et hook_text pose une question résolue seulement à la fin. Mouvement : chaque scène a un cadrage différent (gros plan, plan large, plongée), un mouvement de caméra (travelling, panoramique, zoom), des personnages qui se déplacent et agissent, un arrière-plan vivant (figurants, objets, lumière, météo) ; au moins deux lieux différents dans l’épisode. Retournement visible, conclusion satisfaisante. Pas de présentation comme fait réel. Animation 3D premium, fruits anthropomorphes avec peau de fruit aussi sur les mains, vêtements couvrants sans logos, grands visages expressifs, décor cohérent avec l’intrigue choisie et différent des épisodes récents, vertical 9:16. Même identité et tenue partout, aucune voix de narrateur, personnages parlant à l'écran, caméra en mouvement continu dans chaque clip. Sous-titres ajoutés au montage. {guidance} Champ state_changes FACULTATIF : seulement si l’histoire change vraiment l’apparence visible d’un personnage (blessure, vêtement déchiré, objet perdu, maquillage coulé…), de 0 à 3 entrées, from_scene = numéro de la première scène (1 à {n}) où le changement se voit, character = identifiant du personnage, change = description courte ; sinon une liste vide []. Le champ cover_title doit être une accroche de couverture de 3 à 5 mots maximum dans la langue demandée, sans révéler la fin. Schéma : {json.dumps(schema,ensure_ascii=False)}'''
 
 def horizontal(j): return (j.get('config') or {}).get('format')=='horizontal'
 def frame_size(j): return (1920,1080) if horizontal(j) else (1080,1920)  # best resolution for TikTok (owner priority)
@@ -726,11 +804,16 @@ def schedule(j):
         for c in j['characters']:
             if not c.get('file'):
                 add_task(j,'chat_image',{'provider':'chatgpt','prompt':c['image_prompt']+' Create one full-body character reference image. No text. Premium 3D animation, 9:16.'+correction(j.get('corrections',{}).get('character:'+c['id']))+capture_note(j),'attachments':captures_of(j)},f"character:{c['id']}"); return
+        for k,change in enumerate(state_changes(j)):
+            if state_needed(j,change):
+                # « Au fil de l'histoire »: the same sheet with the change applied, attached to later boards.
+                add_task(j,'chat_image',{'provider':'chatgpt','prompt':state_sheet_prompt(j,change)+correction(j.get('corrections',{}).get(f'state:{k}')),'attachments':[asset_url(j,state_base(j,change))]},f'state:{k}');return
         j['stage']='images'; schedule(j)
     elif step=='images':
         for i,s in enumerate(j['scenes']):
             if not s.get('image'):
-                add_task(j,'chat_image',{'provider':'chatgpt','prompt':s['image_prompt']+' Use attached character references. Same identity and outfit, no text, 9:16. Dynamic cinematic composition with a camera angle different from the other scenes, characters caught in action, detailed living background. Highest resolution available (at least 1024×1536), ultra sharp, no blur.'+correction(j.get('corrections',{}).get(f'image:{i}')),'attachments':image_assets(j)},f'image:{i}'); return
+                attachments,states=scene_references(j,i)
+                add_task(j,'chat_image',{'provider':'chatgpt','prompt':s['image_prompt']+' Use attached character references. Same identity and outfit, no text, 9:16. Dynamic cinematic composition with a camera angle different from the other scenes, characters caught in action, detailed living background. Highest resolution available (at least 1024×1536), ultra sharp, no blur.'+state_note(j,states)+correction(j.get('corrections',{}).get(f'image:{i}')),'attachments':attachments},f'image:{i}'); return
         if board_gate(j):return
         j['stage']='clips'; schedule(j)
     elif step=='clips':
@@ -824,7 +907,7 @@ def uncertain_message(j):
 def correction(note):
     return f'\nOwner correction for this new attempt (apply it, keep everything else unchanged): {note}' if note else ''
 
-REDO_STAGES={'characters':'characters','character':'characters','image':'images','clip':'clips','cover':'cover'}
+REDO_STAGES={'characters':'characters','character':'characters','state':'characters','image':'images','clip':'clips','cover':'cover'}
 
 def stale_clips(j):
     """Scenes whose board changed after their clip was made (only clips that know their board)."""
@@ -880,7 +963,7 @@ def redo(j,slot,note='',include_clip=False,start=True):
     slot=str(slot);note=' '.join(str(note or '').split())[:500]
     j.get('refusal_levels',{}).pop(slot,None)  # a new owner instruction restarts the rewording (P2-05)
     kind=slot.split(':')[0]
-    if kind not in REDO_STAGES or not re.fullmatch(r'(?:cover|characters|character:[a-z][a-z0-9_]{0,24}|image:\d+|clip:\d+)',slot):raise ValueError('Élément à refaire inconnu')
+    if kind not in REDO_STAGES or not re.fullmatch(r'(?:cover|characters|character:[a-z][a-z0-9_]{0,24}|state:\d+|image:\d+|clip:\d+)',slot):raise ValueError('Élément à refaire inconnu')
     if j.get('status')=='rendering' or j['id'] in BUSY:raise ValueError('Montage en cours : attendez sa fin avant de refaire un élément')
     if any(t['job']==j['id'] and t['status'] in ('queued','claimed') for t in STATE['tasks']):raise ValueError('Une tâche est en cours sur cette production : attendez sa fin')
     if not j.get('scenes'):raise ValueError('Aucun scénario : rien à refaire')
@@ -903,6 +986,17 @@ def redo(j,slot,note='',include_clip=False,start=True):
         for c in targets:
             if c.get('file'):remember('character:'+c['id'],c.pop('file'))
         if kind=='characters':j.pop('character_sheet_file',None)
+        for x in [x for x in j.get('state_sheets') or [] if any(x['character']==c['id'] for c in targets) or kind=='characters']:
+            # A state sheet is drawn from the reference: it is drawn again after it.
+            if x.get('file'):remember(slot_of_state(j,x),x['file'])
+            j['state_sheets'].remove(x)
+    elif kind=='state':
+        changes=state_changes(j);k=int(slot.split(':')[1])
+        entry=state_entry(j,changes[k]) if k<len(changes) else None
+        if not entry or not entry.get('file'):raise ValueError('Rien à refaire : feuille d’état pas encore créée')
+        later=[i+1 for i,x in enumerate(scenes) if i>=entry['from_scene']-1 and x.get('image') and entry['character'] in (x.get('characters') or [])]
+        if later:raise ValueError('Les planches '+', '.join(map(str,later))+' utilisent déjà cette feuille : refaites plutôt les planches concernées')
+        remember(slot,entry['file']);j['state_sheets'].remove(entry)
     elif kind=='image':
         if not scene.get('image'):raise ValueError('Rien à refaire : image pas encore créée')
         if scene.get('clip') and not include_clip:raise ValueError('Le clip de cette scène a été animé depuis cette image : refaites l’image et le clip ensemble')
@@ -933,7 +1027,7 @@ def board_gate(j):
     review=j.get('board_review')
     if not review:
         d=job_dir(j);sheets=board_check.make_sheets(d,[s['image'] for s in j['scenes']])
-        attachments=image_assets(j)+[asset_url(j,x) for x in sheets]
+        attachments=image_assets(j)+[asset_url(j,x['file']) for x in j.get('state_sheets') or [] if x.get('file')]+[asset_url(j,x) for x in sheets]
         add_task(j,'chat_text',{'provider':'chatgpt','prompt':board_check.prompt(j),'attachments':attachments,'response_kind':'board_review','scene_count':len(j['scenes'])},'board_review')
         event(j,'Contrôle des planches avant les clips : ChatGPT compare chaque planche à la feuille des personnages.');return True
     bad=board_check.failing(review);j['board_checked']=now()
@@ -1137,6 +1231,11 @@ def accept_task_result(t,result):
             if level<=refusal.MAX_LEVEL:
                 j['refusal_levels'][t['slot']]=level;j['status']='running'
                 event(j,'Image refusée par ChatGPT : reformulation automatique niveau '+str(level)+' sur '+str(refusal.MAX_LEVEL)+' (même style, vocabulaire adouci).');schedule(j);return
+            k=int(t['slot'].split(':')[1]) if t['slot'].startswith('state:') else None
+            if k is not None and k<len(state_changes(j)) and not state_entry(j,state_changes(j)[k]):
+                # A state sheet is an extra: refused for good, the boards keep the reference sheet and production goes on.
+                j.setdefault('state_sheets',[]).append({**state_changes(j)[k],'skipped':now()});j['status']='running'
+                event(j,'Feuille d’état refusée par ChatGPT même reformulée : les planches gardent la feuille des personnages.');schedule(j);return
             event(j,'ChatGPT refuse cette image même reformulée (niveau '+str(refusal.MAX_LEVEL)+'). Corrigez la consigne avec « Refaire » ou importez l’image.')
             return
         if t.get('kind')=='engine_video' and kind=='quota' and not was_paused:
@@ -1207,6 +1306,13 @@ def accept_task_result(t,result):
         elif slot=='characters':
             j['character_sheet_file']=file
             for c in j['characters']:c['file']=file
+        elif slot.startswith('state:'):
+            changes=state_changes(j);k=int(slot.split(':')[1])
+            if k>=len(changes):raise ValueError('Feuille d’état inconnue')
+            change=changes[k];base=state_base(j,change)
+            if base and (job_dir(j)/base).is_file() and image_fingerprint(j,file)==image_fingerprint(j,base):raise ValueError('Feuille d’état rejetée : copie exacte de la feuille de référence. Attente de la feuille modifiée.')
+            j['state_sheets']=[x for x in j.get('state_sheets') or [] if x is not state_entry(j,change)]+[{**change,'file':file}]
+            j['state_sheets'].sort(key=lambda x:x['from_scene'])
         elif slot.startswith('image:'):
             index=int(slot.split(':')[1])
             if duplicate_scene_source(j,file,index):raise ValueError('Image rejetée : copie exacte d’une référence ou d’une autre scène. Attente de la véritable image générée.')
@@ -1252,7 +1358,9 @@ def make_variant(j,kind,language=''):
          'characters':copy.deepcopy(j['characters']),'scenes':[],'character_sheet':j.get('character_sheet'),'cover_style':j.get('cover_style'),'quality_version':j.get('quality_version')}
     src,dst=job_dir(j),None
     STATE['jobs'].insert(0,nxt);dst=job_dir(nxt)
-    names=[f for f in [j.get('character_sheet_file')]+[c.get('file') for c in j['characters']]+([x.get('image') for x in j['scenes']] if kind=='language' else []) if f]
+    # State sheets come along (« Au fil de l'histoire »): never paid twice for the same story.
+    nxt['state_sheets']=[dict(x) for x in j.get('state_sheets') or [] if x.get('file')]
+    names=[f for f in [j.get('character_sheet_file')]+[c.get('file') for c in j['characters']]+[x['file'] for x in nxt['state_sheets']]+([x.get('image') for x in j['scenes']] if kind=='language' else []) if f]
     for f in dict.fromkeys(names):
         if (src/f).is_file():shutil.copyfile(src/f,dst/f)
     if kind=='horizontal':
@@ -1485,6 +1593,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         elif t['slot'].startswith('character:'):
                             item=next((x for x in j['characters'] if x['id']==t['slot'].split(':')[1]),None);missing=item and not item.get('file')
                         elif t['slot']=='cover':missing=not j.get('cover_file')
+                        elif t['slot'].startswith('state:'):
+                            k=int(t['slot'].split(':')[1]);missing=k<len(state_changes(j)) and not state_entry(j,state_changes(j)[k])
                         else:missing=t['slot'].startswith('image:') and not j['scenes'][int(t['slot'].split(':')[1])].get('image')
                         if missing:rows.append(t);seen.add(key)
                     return self.send_json(rows[:3])
@@ -1506,7 +1616,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 with LOCK:
                     j=job_by(m.group(1))
                     if not j:return self.send_json({'error':'Projet inconnu'},404)
-                    files=[f for f in [j.get('character_sheet_file')]+[c.get('file') for c in j['characters']]+[x.get('image') for x in j['scenes']]+[j.get('cover_file')] if f]
+                    files=[f for f in [j.get('character_sheet_file')]+[c.get('file') for c in j['characters']]+[x.get('file') for x in j.get('state_sheets') or []]+[x.get('image') for x in j['scenes']]+[j.get('cover_file')] if f]
                 import io
                 buf=io.BytesIO()
                 with zipfile.ZipFile(buf,'w',zipfile.ZIP_STORED) as z:
@@ -1542,9 +1652,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     if not j: raise ValueError('Projet inconnu')
                     ext=q.get('ext',[''])[0].lower()
                     if ext not in ('png','jpg','jpeg','webp','mp4','webm'): raise ValueError('Type média non accepté')
-                    if not re.fullmatch(r'(?:cover|characters|character:[a-z][a-z0-9_]{0,24}|image:\d+|clip:\d+)',slot): raise ValueError('Emplacement média invalide')
+                    if not re.fullmatch(r'(?:cover|characters|character:[a-z][a-z0-9_]{0,24}|state:\d+|image:\d+|clip:\d+)',slot): raise ValueError('Emplacement média invalide')
                     if slot.startswith('character:') and not any(c['id']==slot.split(':')[1] for c in j['characters']): raise ValueError('Personnage inconnu')
-                    if slot not in ('cover','characters') and not slot.startswith('character:') and int(slot.split(':')[1])>=len(j['scenes']): raise ValueError('Scène inconnue')
+                    if slot.startswith('state:') and int(slot.split(':')[1])>=len(state_changes(j)): raise ValueError('Feuille d’état inconnue')
+                    if slot not in ('cover','characters') and not slot.startswith(('character:','state:')) and int(slot.split(':')[1])>=len(j['scenes']): raise ValueError('Scène inconnue')
                     if slot.startswith('clip:') and ext not in ('mp4','webm'): raise ValueError('Un clip doit être une vidéo MP4 ou WebM')
                     if not slot.startswith('clip:') and ext not in ('png','jpg','jpeg','webp'): raise ValueError('Une image est attendue')
                     name=re.sub('[^a-zA-Z0-9_-]','_',slot)+'_'+uid()+'.'+ext; (job_dir(j)/name).write_bytes(raw)
