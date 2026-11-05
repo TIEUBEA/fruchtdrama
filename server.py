@@ -24,7 +24,7 @@ import power
 import maintenance
 import series
 import licence
-VERSION='0.1.85'
+VERSION='0.1.86'
 OFFICIAL_ORIGIN='chrome-extension://bhdmibhibonmaamgcbpmbhedhohfongj'  # extension/manifest.json "key"
 import sys
 import traceback
@@ -158,6 +158,40 @@ def readable_progress(text):
 def alert(j,level,text):
     # Shown as a banner at the top of the episode: 'action' = the owner must act, 'auto' = decided alone, to check.
     event(j,text);alerts=j.setdefault('alerts',[]);alerts.append({'at':now(),'level':level,'text':text});del alerts[:-6]
+STALL_ONLINE=180  # seconds without a heartbeat: the FruchtDrama window is considered gone
+STALL_QUIET={'chat_text':12,'chat_collect':6,'chat_image':10,'chat_image_collect':6,'research':12,'flow_video':20,'engine_video':20}  # minutes
+SERVICE={'chatgpt':'ChatGPT','claude':'Claude'}
+
+def stall_info(j,moment=None):
+    """Why a running episode does not move, said plainly (owner 05/11/2026: « on doit voir pourquoi la vidéo ne progresse pas »).
+    None while things move normally."""
+    if j.get('status')!='running' or j.get('filon_only'):return None
+    moment=moment or time.time()
+    def ago(at):
+        try:return moment-dt.datetime.fromisoformat(at).timestamp()
+        except (TypeError,ValueError):return None
+    task=next((t for t in STATE['tasks'] if t['job']==j['id'] and t['status']=='claimed'),None) or next((t for t in STATE['tasks'] if t['job']==j['id'] and t['status']=='queued'),None)
+    if not task:return None
+    kind=task.get('kind','');service=SERVICE.get((task.get('payload') or {}).get('provider'),'Google Flow' if kind=='flow_video' else 'Grok ou Arena' if kind=='engine_video' else 'le site')
+    online=[c for c in STATE['clients'].values() if not c.get('disabled') and (ago(c.get('seen')) or 1e9)<STALL_ONLINE]
+    paid=kind in ('flow_video','engine_video')
+    retry_note=('Vérifie d’abord dans '+service+' si le clip a été créé : le relancer peut coûter des crédits.' if paid else 'Relancer renvoie la demande à '+service+' (aucun crédit Flow).')
+    if task['status']=='queued':
+        if not online:
+            return {'reason':'Aucune fenêtre FruchtDrama n’est ouverte : l’étape attend qu’une fenêtre se connecte.','hint':'Ouvre la fenêtre FruchtDrama (icône épinglée), l’étape repart toute seule.','retry':False,'since':task.get('created')}
+        return None
+    client=STATE['clients'].get(task.get('client')) or {}
+    gone=ago(client.get('seen'))
+    if client.get('disabled') or gone is None or gone>=STALL_ONLINE:
+        when=dt.datetime.fromisoformat(client['seen']).astimezone().strftime('%H:%M') if client.get('seen') else '?'
+        return {'reason':f'La fenêtre FruchtDrama qui faisait cette étape ne répond plus depuis {when} (fermée, rechargée ou extension mise à jour) : sa réponse ne viendra pas.',
+                'hint':retry_note,'retry':True,'paid':paid,'since':client.get('seen')}
+    last=min([x for x in (ago(task.get('claimed')),ago((j.get('events') or [{}])[-1].get('at'))) if x is not None],default=None)
+    if last is not None and last>=STALL_QUIET.get(kind,12)*60:
+        return {'reason':f'Aucune nouvelle de {service} depuis {int(last//60)} min : l’onglet attend peut-être une connexion, une vérification anti-robot, ou la réponse s’est arrêtée.',
+                'hint':'Regarde l’onglet '+service+' dans la fenêtre FruchtDrama. '+retry_note,'retry':True,'paid':paid,'since':task.get('claimed')}
+    return None
+
 def public_state():
     s=copy.deepcopy(STATE); s.pop('token',None)
     for t in s['tasks']:
@@ -166,6 +200,7 @@ def public_state():
     for public,j in zip(s['jobs'],STATE['jobs']):
         for e in public.get('events',[]):e['text']=readable_progress(e['text'])
         public['uncertain_clips']=sorted({int(t['slot'].split(':')[1]) for t in uncertain_clip_tasks(j)})
+        public['stall']=stall_info(j)
     s['quota_status']=quotas.summary(STATE,time.time());s['version']=VERSION
     s['accounts']=identities.view(STATE,time.time(),int(STATE['settings'].get('flow_cost',12)));s.pop('extension_origin',None)
     s['key_saved']=bool(STATE['clients'])  # an extension holds the key once it has paired, manually or automatically
@@ -2045,6 +2080,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             if t['job']==id and t['status'] in ('queued','claimed'): t['status']='cancelled'
                         if b.get('flow_profile'): j['flow_profile']=b['flow_profile']
                         j.pop('last_error',None);j['status']='running'; event(j,'Reprise demandée ; passage automatique limité aux comptes Flow enregistrés.' if STATE.get('settings',{}).get('flow_auto') else 'Reprise demandée ; compte Flow sélectionné conservé.'); schedule(j)
+                    elif action=='retry_step':
+                        # « Relancer cette étape » from the blocked banner: the stuck task is dropped and the step asked again.
+                        info=stall_info(j)
+                        if not info or not info.get('retry'):raise ValueError('Cette étape avance encore : rien à relancer.')
+                        stuck=[t for t in STATE['tasks'] if t['job']==id and t['status'] in ('queued','claimed')]
+                        if any(t['kind'] in ('flow_video','engine_video') for t in stuck) and not b.get('confirm_paid'):
+                            raise ValueError('Un clip est peut-être déjà en cours chez le fournisseur : vérifie dans Flow, puis confirme la relance.')
+                        for t in stuck:t['status']='failed';t['error']='Relancée par le propriétaire : étape bloquée ('+info['reason'][:120]+')'
+                        if any(t['kind'] in ('flow_video','engine_video') for t in stuck):
+                            for t in stuck:t['acknowledged']=now()
+                        j.pop('last_error',None);event(j,'Étape relancée par le propriétaire : '+info['reason']);schedule(j)
                     elif action=='confirm_no_clip':
                         slot=str(b.get('slot',''))
                         pending=[t for t in uncertain_clip_tasks(j) if t['slot']==slot]

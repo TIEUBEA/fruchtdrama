@@ -71,7 +71,7 @@ function licenceBanner(){const L=state.licence||{};const end=L.expires_at?new Da
 // Like the Atelier, the journal is the live progress: its last line says what is happening right now.
 const ACTIVE=['running','rendering','waiting_source'];
 const isActive=j=>!!j&&(ACTIVE.includes(j.status)||state.tasks.some(t=>t.job===j.id&&t.status==='claimed'));
-const liveLine=j=>{const e=(j.events||[]).slice(-1)[0];return e&&isActive(j)?String(e.text).replace(/\s+/g,' ').slice(0,110):nextAction(j);};
+const liveLine=j=>{if(j.stall)return 'Bloqué : '+String(j.stall.reason).slice(0,100);const e=(j.events||[]).slice(-1)[0];return e&&isActive(j)?String(e.text).replace(/\s+/g,' ').slice(0,110):nextAction(j);};
 // "En cours" in the menu, like the Atelier: the production being made right now.
 // Atelier-like stack: every production being made, the one working right now first (four at most).
 function runWidget(){const box=$('#runWidget');if(!box)return;const ids=[];
@@ -274,7 +274,8 @@ document.addEventListener('click',e=>{const o=e.target.closest?.('[data-scene-op
  if(c&&box?.open){setTimeout(()=>box.close(),0);if(c.dataset.sceneClose)return;}
  if(!o)return;const j=state.jobs.find(j=>j.id===selected);if(!j)return;if(!box){box=document.createElement('dialog');box.id='sceneBox';box.addEventListener('click',ev=>{if(ev.target===box)box.close()});document.body.append(box);}
  box.innerHTML=sceneModal(j,Number(o.dataset.sceneOpen));paintIcons();box.showModal();});
-function alertsNotice(j){const al=j.alerts||[],act=al.filter(a=>a.level==='action'),auto=al.filter(a=>a.level==='auto');const last=[...(j.events||[])].reverse()[0];
+function alertsNotice(j){const st=j.stall?`<div class="notice human stall"><b>Bloqué : la vidéo ne progresse plus</b><p class="hint">${esc(j.stall.reason)}</p><p class="hint">${esc(j.stall.hint)}</p>${j.stall.retry?`<button class="primary" data-retry-step="${j.stall.paid?1:0}">Relancer cette étape</button>`:''}</div>`:'';return st+alertsNotice0(j)}
+function alertsNotice0(j){const al=j.alerts||[],act=al.filter(a=>a.level==='action'),auto=al.filter(a=>a.level==='auto');const last=[...(j.events||[])].reverse()[0];
  const fallback=j.status==='attention'&&!act.length&&!['login','challenge'].includes(j.last_error?.kind)&&last?[{text:last.text,at:last.at}]:[];
  const box=(cls,title,list)=>list.length?`<div class="notice ${cls}"><b>${title}</b>${list.map(a=>`<p class="hint">${esc(a.text)}</p>`).join('')}</div>`:'';
  return (j.status==='attention'?box('human','⚠ Action requise',[...act.slice(-2),...fallback]):'')+box('uncertain','Décidé automatiquement — à vérifier avant de publier',auto.slice(-3))}
@@ -521,3 +522,7 @@ function quickLight(j,verb=''){const hh=t=>new Date(t*1000).toLocaleTimeString('
  return {tone:'green',title:'Possible maintenant.'};}
 
 document.addEventListener('click',e=>{const t=e.target.closest?.('[data-open-episode]');if(!t)return;e.preventDefault();page='studio';selected=t.dataset.openEpisode;location.hash='job='+selected;render();window.scrollTo(0,0);});
+
+document.addEventListener('click',async e=>{const t=e.target.closest?.('[data-retry-step]');if(!t)return;e.preventDefault();const paid=t.dataset.retryStep==='1';
+ if(paid&&!window.confirm('As-tu vérifié dans Google Flow qu’aucun clip n’a été créé pour cette scène ? Relancer peut coûter des crédits.'))return;
+ try{await api('/api/job/'+selected,{action:'retry_step',confirm_paid:paid});await refresh(true);toast('Étape relancée');}catch(err){toast(err.message||String(err));}});

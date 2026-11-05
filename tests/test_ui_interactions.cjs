@@ -151,7 +151,7 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   await evaluate(`document.querySelector('#createForm').requestSubmit()`);
   const ideasJob=await waitFor(async()=>(await (await fetch(base+'/api/state')).json()).jobs.find(j=>j.stage==='ideas'),10000,'dix histoires demandées');
   assert.equal(ideasJob.config.scene_count,8);assert.equal(ideasJob.config.duration,60);
-  await waitFor(()=>evaluate(`document.querySelector('.ideas,.notice')?.innerText.includes('dix histoires')`),10000,'page épisode : attente des histoires');
+  await waitFor(()=>evaluate(`[...document.querySelectorAll('.ideas,.notice')].some(n=>n.innerText.includes('dix histoires'))`),10000,'page épisode : attente des histoires');
   assert.match(await waitFor(()=>evaluate(`document.querySelector('.run-clock')?.textContent`),5000,'chrono'),/^(\d+ h \d\d|\d+ min \d\d) de travail · en général \d+ à \d+ min$/,'running clock with the usual time');
   // 10 ter. Atelier lots 1-2: quality, format, characters, subtitles, cost confirmation, montage settings, backups.
   await evaluate(`document.querySelector('nav [data-action="new"]').click()`);
