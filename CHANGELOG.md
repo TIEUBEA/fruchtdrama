@@ -18,6 +18,9 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 - Ajouté : à partir de la scène du changement, les planches où ce personnage apparaît reçoivent la feuille d'état à la place de la feuille de référence, et la consigne cite le changement : l'apparence reste la même jusqu'à la fin. Le contrôle des planches sait que ce changement est voulu.
 - Ajouté : page de l'épisode, sous les personnages : section « Au fil de l'histoire » (miniature, « Dès la scène N », « NOM : changement ») et « Refaire… » tant que les planches suivantes ne sont pas dessinées.
 - Si ChatGPT refuse la feuille d'état même reformulée, la production continue avec la feuille des personnages (rien ne bloque).
+- Ajouté : **Apparence** (Mes comptes, ancienne section « Thème ») : sept palettes comme l'Atelier, en cartes avec quatre pastilles de couleur : Ardoise, Laiton, Lagon, Cinéma, Papier, Verre, Éditorial. Papier (clair) reste le thème de départ. L'ancien « Clair » devient Papier, l'ancien « Sombre » devient Ardoise, sans rien perdre. Le bouton rond en haut passe de Papier à Ardoise et inversement.
+- Amélioré : chaque palette est lisible partout (texte contrôlé à 4,5 pour 1 au moins sur Filon, Créer, Studio, Mes comptes, épisode et histoire).
+- Amélioré : **Personnages** comme l'Atelier, sur la page épisode et la page histoire : une petite pastille par personnage (nom, point vert s'il est dessiné, flèche) qui se déplie au clic pour montrer sa description, son image s'il a la sienne et « Remplacer ». À côté du titre, la bascule « Simple | Détaillé » change le niveau tant que rien n'est dessiné, puis montre seulement le niveau choisi. « Tout refaire » s'appelle maintenant « Refaire », à droite.
 
 ## 0.1.84 — 05/11/2026
 L'Atelier Gourmand 1.0.22 ouvert et parcouru bouton par bouton ; écarts corrigés (détail : `docs/sudf/REVUE-MODULES-2026-11-05.md`).

@@ -10,7 +10,7 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
 
 (async()=>{
  const temp=fs.mkdtempSync(path.join(os.tmpdir(),'frucht-ui-')),data=path.join(temp,'data');fs.mkdirSync(data);
- const now=new Date().toISOString(),job='c1b2c3d4e5f60718',done='d1b2c3d4e5f60718',switching='e1b2c3d4e5f60718';
+ const now=new Date().toISOString(),job='c1b2c3d4e5f60718',done='d1b2c3d4e5f60718',switching='e1b2c3d4e5f60718',castDraft='f1b2c3d4e5f60718';
  const scenes=[0,1].map(i=>({characters:['orange'],meaning:'Moment '+i,image_prompt:'p',video_prompt:'v',dialogue:[{speaker:'orange',text:'Hallo'}]}));
  fs.writeFileSync(path.join(data,'state.json'),JSON.stringify({version:1,token:'t',pair_code:'abcd1234',sites:{chatgpt:{connected:true,email:'olga@example.com',checked:now}},profiles:[],clients:{},tasks:[],
   settings:{provider:'chatgpt',language:'Deutsch (de-DE)',scene_count:4,clip_seconds:8,flow_model:'gemini_omni_flash',flow_resolution:'720p',flow_cost:12,query:'q',daily_budget:50},
@@ -26,7 +26,11 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   {id:switching,title:'Changement de compte QA',brief:'b',stage:'cover',status:'waiting_account',created:now,updated:now,events:[],candidates:[],flow_profile:null,
    config:{provider:'chatgpt',scene_count:2,language:'Deutsch (de-DE)',video_engine:'grok',flow_cost:12},account_switch:{engine:'grok',from:'a@x.com',to:'b@x.com',label:'Second'},
    characters:[{id:'orange',name:'Oma',appearance:'a',voice:'v',image_prompt:'p',file:'ref.png'}],scenes:scenes.map((x,i)=>({...x,image:'scene'+i+'.png',clip:'clip'+i+'.mp4'})),
-   script:{title:'Changement de compte QA',cover_title:'WER?',description:'d',characters:[],scenes}}]}));
+   script:{title:'Changement de compte QA',cover_title:'WER?',description:'d',characters:[],scenes}},
+  {id:castDraft,title:'Personnages à dessiner QA',brief:'b',stage:'script',status:'paused',created:now,updated:now,events:[],candidates:[],flow_profile:null,character_sheet:1,
+   config:{provider:'chatgpt',scene_count:2,language:'Deutsch (de-DE)',flow_model:'gemini_omni_flash',flow_cost:12,characters_detail:'simple'},
+   characters:[{id:'orange',name:'Oma',appearance:'a',voice:'v',image_prompt:'p'},{id:'kiwi',name:'Kiko',appearance:'k',voice:'v',image_prompt:'p'}],scenes,
+   script:{title:'Personnages à dessiner QA',cover_title:'WER?',description:'d',characters:[],scenes}}]}));
  const port=await freePort(),base='http://127.0.0.1:'+port;
  const server=spawn('python3',[path.join(root,'server.py')],{cwd:root,env:{...process.env,FRUCHT_DATA:data,FRUCHT_PORT:String(port)},stdio:'ignore'});
  let chrome;
@@ -180,6 +184,35 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   assert.ok(await evaluate(`!document.body.classList.contains('dark')`),'light theme by default');
   await evaluate(`document.querySelector('#theme').click()`);assert.ok(await evaluate(`document.body.classList.contains('dark')`),'dark theme on demand');
   await evaluate(`document.querySelector('#theme').click()`);
+  // 11 a. Apparence like the Atelier: seven palettes in cards (four colour dots), old names moved to their palette.
+  assert.ok(await evaluate(`document.body.classList.contains('theme-papier')`),'Papier is the light default');
+  await evaluate(`document.querySelector('nav [data-page="connections"]').click()`);
+  await waitFor(()=>evaluate(`document.querySelectorAll('[data-fold="theme"] .palette').length===7`),10000,'sept palettes');
+  assert.equal(await evaluate(`document.querySelector('[data-fold="theme"] .fold-title').textContent`),'Apparence');
+  assert.deepEqual(await evaluate(`[...document.querySelectorAll('.palette b')].map(b=>b.textContent)`),['Ardoise','Laiton','Lagon','Cinéma','Papier','Verre','Éditorial']);
+  assert.ok(await evaluate(`[...document.querySelectorAll('.palette')].every(p=>p.querySelectorAll('.swatches i').length===4&&p.querySelector('small').textContent.length>5)`),'four dots and a subtitle per palette');
+  await evaluate(`document.querySelector('[data-theme-pick="cinema"]').click()`);
+  await waitFor(()=>evaluate(`document.body.classList.contains('theme-cinema')&&document.body.classList.contains('dark')&&document.querySelector('[data-theme-pick="cinema"]').classList.contains('on')`),5000,'palette Cinéma');
+  assert.equal(await evaluate(`localStorage.getItem('frucht-theme')`),'cinema');
+  await evaluate(`localStorage.setItem('frucht-theme','dark');true`);await send('Page.reload',{});
+  await waitFor(()=>evaluate(`!!document.body&&document.body.classList.contains('theme-ardoise')&&localStorage.getItem('frucht-theme')==='ardoise'`),15000,'ancien « Sombre » devenu Ardoise');
+  await evaluate(`localStorage.setItem('frucht-theme','light');true`);await send('Page.reload',{});
+  await waitFor(()=>evaluate(`!!document.body&&document.body.classList.contains('theme-papier')&&!document.body.classList.contains('dark')&&localStorage.getItem('frucht-theme')==='papier'`),15000,'ancien « Clair » devenu Papier');
+  // 11 b. Personnages like the Atelier: compact pills that unfold; Simple | Détaillé switch; Refaire on the right.
+  await send('Page.navigate',{url:base+'/#job='+done});
+  await waitFor(()=>evaluate(`!!document.querySelector('.cast-head .seg-switch')&&!!document.querySelector('.cast-pill')`),15000,'pastilles des personnages');
+  assert.ok(await evaluate(`document.querySelector('.cast-head .seg-switch.locked .on').textContent==='Simple'&&!document.querySelector('.cast-head [data-cast-detail]')`),'drawn cast: the switch only shows the level');
+  assert.ok(await evaluate(`document.querySelector('.cast-head [data-redo="character:orange"]').textContent==='Refaire'`),'Refaire on the right');
+  assert.ok(await evaluate(`(()=>{const d=document.querySelector('.cast-pill');return !d.open&&d.querySelector('summary').innerText.includes('OMA')&&!d.querySelector('.cast-more').checkVisibility()})()`),'folded pill: name only');
+  await evaluate(`document.querySelector('.cast-pill summary').click()`);
+  await waitFor(()=>evaluate(`(()=>{const d=document.querySelector('.cast-pill');return d.open&&d.querySelector('.cast-more').checkVisibility()&&!!d.querySelector('.cast-more img')&&d.querySelector('[data-upload="character:orange"]')?.textContent==='Remplacer'})()`),5000,'pastille dépliée : image, description, Remplacer');
+  await evaluate(`render();true`);
+  assert.ok(await evaluate(`document.querySelector('.cast-pill').open`),'unfolded pill survives the refresh');
+  await send('Page.navigate',{url:base+'/#job='+castDraft});
+  await waitFor(()=>evaluate(`!!document.querySelector('.cast-head [data-cast-detail="detailed"]')`),15000,'bascule Simple | Détaillé');
+  await evaluate(`document.querySelector('[data-cast-detail="detailed"]').click()`);
+  await waitFor(async()=>(await (await fetch(base+'/api/state')).json()).jobs.find(x=>x.id===castDraft).config.characters_detail==='detailed',10000,'niveau Détaillé enregistré');
+  await waitFor(()=>evaluate(`document.querySelector('[data-cast-detail="detailed"]').classList.contains('on')`),10000,'Détaillé affiché');
   await evaluate(`document.querySelector('nav [data-page="filon"]').click()`);
   await waitFor(()=>evaluate(`document.querySelector('.filon-card')?.innerText.includes('1,2 M')`),10000,'Filon');
   assert.equal(await waitFor(()=>evaluate(`document.querySelector('.filon-card iframe.filon-player')?.src.split('?')[0]`),5000,'lecture automatique'),'https://www.tiktok.com/player/v1/4242424242','video plays by itself when visible');

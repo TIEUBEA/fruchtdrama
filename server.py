@@ -2179,6 +2179,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         target=maintenance.trash_job(DATA,id)
                         STATE['jobs'].remove(j);STATE['tasks']=[t for t in STATE['tasks'] if t['job']!=id]
                         save();return self.send_json({**public_state(),'trashed':target.name})
+                    elif action=='characters_detail':
+                        # Personnages Simple | Détaillé on the episode page: only while nothing is drawn yet.
+                        level=b.get('level')
+                        if level not in ('simple','detailed'):raise ValueError('Niveau de personnages inconnu')
+                        if j.get('character_sheet_file') or any(c.get('file') for c in j.get('characters',[])):raise ValueError('Personnages déjà dessinés : utilisez Refaire')
+                        if any(t['job']==id and t['status'] in ('queued','claimed') and str(t.get('slot','')).startswith('character') for t in STATE['tasks']):raise ValueError('Personnages en cours de dessin : attendez la fin')
+                        j['config']['characters_detail']=level;event(j,'Personnages : niveau '+('Détaillé' if level=='detailed' else 'Simple')+'.')
                     elif action=='provider':
                         if b.get('provider') not in ('chatgpt','claude'): raise ValueError('IA inconnue')
                         j['config']['provider']=b['provider']; event(j,'IA de scénario modifiée ; médias conservés.')

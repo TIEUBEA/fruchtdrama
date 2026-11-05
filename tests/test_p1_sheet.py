@@ -97,6 +97,23 @@ class SheetHttpTests(unittest.TestCase):
     def test_new_productions_use_the_sheet(self):
         self.req('/api/job', {'brief': 'x', 'config': {}}); self.assertEqual(s.STATE['jobs'][0]['character_sheet'], 1)
 
+    def test_characters_detail_switch_only_before_drawing(self):
+        # Episode page « Simple | Détaillé »: changes the level while nothing is drawn, then only shows it.
+        j = make_job(); j['config']['characters_detail'] = 'simple'
+        with self.assertRaises(urllib.error.HTTPError) as e:
+            self.req('/api/job/' + j['id'], {'action': 'characters_detail', 'level': 'detailed'})
+        self.assertIn('en cours de dessin', json.load(e.exception)['error'], 'sheet already queued')
+        for t in active():
+            t['status'] = 'cancelled'
+        self.req('/api/job/' + j['id'], {'action': 'characters_detail', 'level': 'detailed'})
+        self.assertEqual(j['config']['characters_detail'], 'detailed')
+        with self.assertRaises(urllib.error.HTTPError):
+            self.req('/api/job/' + j['id'], {'action': 'characters_detail', 'level': 'ultra'})
+        j['character_sheet_file'] = 'characters_x.png'
+        with self.assertRaises(urllib.error.HTTPError) as e:
+            self.req('/api/job/' + j['id'], {'action': 'characters_detail', 'level': 'simple'})
+        self.assertIn('déjà dessinés', json.load(e.exception)['error']); self.assertEqual(j['config']['characters_detail'], 'detailed')
+
     def test_manual_sheet_upload_and_invalid_slot(self):
         j = make_job()
         self.req(f"/api/upload?job={j['id']}&slot=characters&ext=png", raw=png(), headers={'Content-Type': 'application/octet-stream'})
