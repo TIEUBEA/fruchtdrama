@@ -90,10 +90,11 @@ def analyse(j,folder):
         try:
             speech=transcribe_all(j,folder)
             for i,result in enumerate(speech):
+                # 0.1.101 (owner 06/11/2026: « annule cette vérification »): the transcription only places the subtitles;
+                # a gap with the script is never a warning any more (it was mostly transcription errors).
                 report['clips'][i]['speech']=result
-                report['warnings'] += [f'Scène {i+1} : {x}' for x in result['warnings']]
         except Exception as e:
-            report['warnings'].append('Transcription locale indisponible : '+type(e).__name__+'. Aucun contrôle des paroles revendiqué.')
+            report.setdefault('notes',[]).append('Transcription locale indisponible : '+type(e).__name__+'. Sous-titres placés sans elle.')
     report['status']='review_required' if report['hard_errors'] or report['warnings'] else 'pass'
     return report
 
