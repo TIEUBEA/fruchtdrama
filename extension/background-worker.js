@@ -261,6 +261,21 @@ async function begin(task,tab,cfg,key=LANE_KEY[laneOf(task)]){
   }else throw Error('Une génération précédente reste à vérifier dans cet onglet ; aucun nouveau prompt envoyé.');
  }
  const attachments=await loadAttachments(task.payload.attachments);
+ // Flow no longer keeps an <input type=file> in the page: « Importer » makes a detached one and clicks it, which
+ // opened Chrome's native file dialog that no extension can fill (06/11/2026: imports stuck for 5 min, clips failed).
+ // In the page's own world, a click on a file input of this tab receives the board directly: no dialog at all.
+ if(task.kind==='flow_video'&&attachments?.length)await chrome.scripting.executeScript({target:{tabId:tab.id},world:'MAIN',args:[attachments.map(a=>({name:a.name,mime:a.mime,data:a.data}))],func:files=>{
+  window.__fruchtFiles=files;
+  if(window.__fruchtClickPatched)return;window.__fruchtClickPatched=true;
+  const original=HTMLInputElement.prototype.click;
+  HTMLInputElement.prototype.click=function(){
+   if(this.type!=='file'||!window.__fruchtFiles?.length)return original.apply(this,arguments);
+   const dt=new DataTransfer();
+   for(const f of window.__fruchtFiles){const bin=atob(f.data);dt.items.add(new File([Uint8Array.from(bin,c=>c.charCodeAt(0))],f.name,{type:f.mime||'image/png'}));}
+   this.files=dt.files;window.__fruchtFiles=null;
+   this.dispatchEvent(new Event('input',{bubbles:true}));this.dispatchEvent(new Event('change',{bubbles:true}));
+  };
+ }}).catch(()=>{});
  const active={task,key,tabId:tab.id,windowId:tab.windowId,client:cfg.client,startedAt:Date.now(),recoveryAttempts:0,submissionIntent:false,expectedJob:task.kind==='chat_text'?task.job:undefined,expectedTask:task.kind==='chat_text'?task.id:undefined};
  const data=await chrome.storage.local.get('scenarioTabs');const tabs=data.scenarioTabs||{};
  if(FruchtRecovery.isScenario(task)){tabs[task.job]={...active,pending:true};await chrome.storage.local.set({scenarioTabs:tabs});}

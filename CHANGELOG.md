@@ -10,6 +10,7 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 Les comptes se règlent dans **Mes comptes, avant de commencer** (demande du propriétaire : « la connexion, les vérifications anti-robot, on devrait faire ça dans le menu Comptes et ajouter tous les comptes avant de commencer quoi que ce soit »). Cas réel : en pleine production, deux clips Flow ont échoué « Page du fournisseur indisponible ou vide après 90 secondes » et l'épisode est passé en « Action requise » ; il a fallu chercher l'onglet en arrière-plan.
 
 **Corrigé (essai réel 06/11)**
+- Import de la planche dans Flow bloqué 5 min puis clip en échec : Flow ne garde plus de champ fichier dans la page, « Importer » ouvrait la fenêtre de fichiers de Chrome que l'extension ne peut pas remplir. L'extension donne maintenant la planche directement au champ que Flow crée, sans fenêtre : import, sélection et pose en « Début » en 21 s, onglet en arrière-plan (vérifié sur un vrai compte).
 - Google renumérote les comptes connectés (/u/0, /u/1…) quand on en ajoute ou retire un : le projet Flow d'un compte répondait 404 ou « compte non confirmé » et les clips échouaient. L'extension vérifie l'adresse du compte dans l'onglet ; si elle ne correspond pas, elle retrouve le compte par son adresse, prévient le studio du nouveau numéro (profil, clips en file, projets) et continue, sans rien envoyer avant.
 
 **Ajouté**

@@ -256,7 +256,7 @@ globalThis.FruchtFlow={
   const hadThumbnail=!!start?.querySelector?.('img');
   if(start)this.activate(doc,start);
   let uploadClicked=false,emptyStartClicked=false;
-  for(let n=0;n<80;n++){
+  for(let n=0;n<160;n++){
    if(this.uploadConsent(doc)){await pause(400);}
    reuse=selectExisting();if(reuse)return reuse;
    input=this.fileInput(doc);if(input)return input;
@@ -271,7 +271,7 @@ globalThis.FruchtFlow={
    await pause(250);
   }
   const buttons=[...doc.querySelectorAll('button,[role="button"]')].filter(b=>b.getClientRects().length).map(b=>(b.getAttribute('aria-label')||b.innerText||'').trim()).filter(Boolean).slice(-18);
-  throw Error('Flow : '+(start?'clic sur Start effectué':'bouton Start non reconnu')+', mais ni fichier existant sélectionnable ni champ d’import détecté après 20 secondes. '+(buttons.length?'Boutons visibles : '+buttons.join(' / '):'Une capture du sélecteur permettra d’identifier le blocage.'));
+  throw Error('Flow : '+(start?'clic sur Start effectué':'bouton Start non reconnu')+', mais ni fichier existant sélectionnable ni champ d’import détecté après 40 secondes. '+(buttons.length?'Boutons visibles : '+buttons.join(' / '):'Une capture du sélecteur permettra d’identifier le blocage.'));
  }
 };
 
