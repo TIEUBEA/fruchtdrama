@@ -10,7 +10,7 @@ ENGINES = {
     # Flow: 10 s for new episodes (Flow offers 4/6/8/10 s); an episode made before 0.1.97 keeps 8 s (flow_seconds).
     'flow': {'label': 'Google Flow', 'seconds': 10, 'range': (9.5, 10.5), 'home': 'https://labs.google/fx/tools/flow'},
     # Grok Imagine: its connector has no duration setting, the site makes 6 s clips.
-    'grok': {'label': 'Grok Imagine', 'seconds': 6, 'range': (5.5, 10.5), 'home': 'https://grok.com/imagine'},
+    'grok': {'label': 'Grok Imagine', 'seconds': 10, 'range': (5.5, 15.5), 'home': 'https://grok.com/imagine'},
 }
 # Engines whose browser connector is available in this version.
 AVAILABLE = ('flow', 'grok')

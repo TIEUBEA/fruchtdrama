@@ -118,7 +118,7 @@ class ChainScheduleTests(unittest.TestCase):
         self.assertEqual(j['status'], 'running'); self.assertFalse([a for a in j.get('alerts', []) if a['level'] == 'action'], 'no « Action requise »')
         self.assertIn('Clip 1 : Flow a échoué (coût affiché différent du budget prévu) → essai sur Grok.', [e['text'] for e in j['events']])
         t = queued(j)[0]; self.assertEqual((t['slot'], engine_of(t)), ('clip:0', 'grok'), 'Grok at once, no validation asked')
-        self.assertIn('6 seconds', t['payload']['prompt']); self.assertNotIn('All-audiences', t['payload']['prompt'])
+        self.assertIn('10 seconds', t['payload']['prompt']); self.assertNotIn('All-audiences', t['payload']['prompt'])
         fail(t, {'ok': False, 'error_kind': 'timeout', 'generation_submitted': True, 'error': 'Grok Imagine : vidéo non détectée après 4 minutes.'})
         self.assertEqual(s.held_clips(j), {0}); self.assertEqual(j['stage'], 'clips', 'no board redrawn')
         alert = j['alerts'][-1]; self.assertEqual(alert['level'], 'action')
