@@ -140,6 +140,16 @@ class ChainScheduleTests(unittest.TestCase):
         self.assertIn('sans bagarre', t['payload']['prompt'])
         self.assertFalse([a for a in j['alerts'] if 'clip(s) en échec' in a['text'] or a['text'].startswith('Clip 1 : ')])
 
+    def test_tab_cut_by_extension_reload_is_not_a_try(self):
+        # 0.1.102 (06/11/2026 23:13): clips « failed » while the extension reloaded itself.
+        s.STATE = fresh(); j = clip_job(); s.schedule(j)
+        fail(queued(j)[0], NOTHING_SENT)
+        t = queued(j)[0]; self.assertEqual(engine_of(t), 'grok')
+        fail(t, {'ok': False, 'error': 'Could not establish connection. Receiving end does not exist.'})
+        self.assertEqual(engine_chain.tried(j['scenes'][0]), ['flow'], 'not counted')
+        s.schedule(j); self.assertTrue(any(x['slot'] == 'clip:0' and engine_of(x) == 'grok' for x in queued(j)), 'Grok again')
+        self.assertFalse(s.held_clips(j))
+
     def test_clip_set_aside_is_redone_while_the_others_run(self):
         s.STATE = fresh(sites=('chatgpt',)); j = clip_job(); s.schedule(j)
         fail(queued(j)[0], NOTHING_SENT)
