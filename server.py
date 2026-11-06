@@ -79,6 +79,9 @@ def read_state():
     for j in state.get('jobs',[]):
         r=j.get('quality_report') or {}
         if any('Durée incompatible' in x for x in r.get('hard_errors',[])):j['quality_report']={}
+        # …and the episode stopped by it starts again by itself, without its old banner.
+        if j.get('status')=='attention' and any('Durée incompatible' in (a.get('text') or '') for a in (j.get('alerts') or [])[-1:]):
+            j['quality_report']={};j['alerts']=[a for a in j['alerts'] if 'Durée incompatible' not in (a.get('text') or '')];j['status']='running'
     return state
 STATE=read_state()
 if not os.environ.get('FRUCHT_NO_THUMBS'):
