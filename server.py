@@ -81,12 +81,13 @@ def read_state():
         state['fast_0102']=True
     for j in state.get('jobs',[]):
         sc=j.get('scenes') or []
-        if sc and 2*sum(1 for x in sc if x.get('still'))>len(sc) and j.get('status')!='done':
+        if sc and 2*sum(1 for x in sc if x.get('still'))>len(sc) and not j.get('stills_redone'):
             # 0.1.102: clips lost to an extension reload were turned into boards; they are made again.
             for x in sc:
                 if x.get('still'):
                     for k in ('clip','still','engine_tries','engine_round','engine_exhausted','transient'):x.pop(k,None)
-            j['stage']='clips';j['status']='running';j['quality_report']={};j.pop('final',None)
+            j['stage']='clips';j['status']='running';j['quality_report']={};j['stills_redone']=True
+            if j.get('final'):j['final_with_boards']=j.pop('final')  # the video made of boards stays on disk, never deleted
             j['alerts']=[a for a in j.get('alerts') or [] if 'planche animée' not in str(a.get('text',''))]
             j.setdefault('events',[]).append({'at':dt.datetime.now(dt.timezone.utc).isoformat(),'text':'Clips refaits : ils avaient été perdus pendant la mise à jour de l’extension (planches animées retirées).'})
     for j in state.get('jobs',[]):
