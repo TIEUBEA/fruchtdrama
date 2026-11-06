@@ -36,7 +36,9 @@ async function ready(id,task,targetUrl){
   }
   await delay(500);
  }
- throw Error('Page du fournisseur indisponible ou vide après 90 secondes (connexion requise, vérification anti-robot ou blocage) : aucun prompt envoyé. Ouvrez l’onglet dans la fenêtre FruchtDrama, connectez-vous vous-même, puis Reprendre.');
+ // Say what was seen (06/11/2026: Flow clip refused here twice with no clue).
+ let seen='';try{const tab=await chrome.tabs.get(id);let host='';try{host=new URL(tab.url).hostname;}catch{}const [probe]=!expected.includes(host)?[]:await chrome.scripting.executeScript({target:{tabId:id},func:()=>({href:location.href,ready:document.readyState,editors:[...document.querySelectorAll('textarea:not([disabled]),[contenteditable="true"]')].map(e=>e.getClientRects().length).join(','),dialog:[...document.querySelectorAll('[role="dialog"]')].map(d=>(d.innerText||'').slice(0,50)).join(' | ')})});seen=' Vu : '+JSON.stringify({tab:tab.url,status:tab.status,discarded:tab.discarded,frozen:tab.frozen,expected:targetUrl||'',...(probe?.result||{})}).slice(0,400);}catch(e){seen=' Vu : onglet illisible ('+e.message+')';}
+ throw Error('Page du fournisseur indisponible ou vide après 90 secondes (connexion requise, vérification anti-robot ou blocage) : aucun prompt envoyé. Ouvrez l’onglet dans la fenêtre FruchtDrama, connectez-vous vous-même, puis Reprendre.'+seen);
 }
 async function loadAttachments(paths){
  const files=[];
