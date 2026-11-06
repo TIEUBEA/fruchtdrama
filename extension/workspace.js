@@ -22,16 +22,18 @@ globalThis.FruchtWorkspace={
  // Single flight (owner report 04/11/2026, several windows on « Revérifier »): checks running at the same
  // time all wait for the same window instead of each creating one.
  async ensure(chrome,{focus=false}={}){
-  if(!this._ensuring)this._ensuring=this._ensure(chrome).finally(()=>{this._ensuring=null;});
+  if(!this._ensuring)this._ensuring=this._ensure(chrome,focus).finally(()=>{this._ensuring=null;});
   const {id,created}=await this._ensuring;
   if(focus&&!created)await chrome.windows.update(id,{focused:true});
   return id;
  },
- async _ensure(chrome){
+ async _ensure(chrome,focus=false){
   const id=await this.windowId(chrome);
   if(id!==null)return {id,created:false};
   // Like the Atelier: the window opens on the studio only; accounts and gateway live in its Mes comptes page.
-  const w=await chrome.windows.create({url:this.STUDIO,focused:true,type:'normal'});
+  // Opened for a task (not by the owner's click): it never takes the foreground (owner, 06/11/2026: « on doit rester
+  // dans l'onglet FruchtDrama, ce qui se passe à côté ne nous concerne pas »).
+  const w=await chrome.windows.create({url:this.STUDIO,focused:!!focus,type:'normal'});
   await chrome.storage.local.set({workspaceWindow:w.id});
   return {id:w.id,created:true};
  },

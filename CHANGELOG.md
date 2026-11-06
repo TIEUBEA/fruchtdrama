@@ -8,6 +8,7 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 ## 0.1.89 (06/11/2026)
 **Amélioré**
+- La fenêtre FruchtDrama, quand l'extension doit la recréer pour une tâche, s'ouvre sans passer au premier plan : on reste sur l'onglet où l'on est, comme dans l'Atelier. Seul un clic sur l'icône la met devant.
 - Quand ChatGPT atteint sa limite d'images, les planches attendent mais les clips des planches déjà dessinées continuent chez Flow ou Grok.
 - **Clips en parallèle des planches**, comme l'Atelier Gourmand (« les clips partent chez Grok pendant que ChatGPT dessine les planches ») : l'épisode travaille sur deux voies, la voie texte et images (ChatGPT, Claude) et la voie vidéo (Flow, Grok, Arena), avec au plus une tâche active par voie. Dès que la planche 1 est reçue, son clip part pendant que la planche 2 est dessinée ; le temps de création baisse d'autant.
 - Un clip ne part que pour une planche dessinée et validée : avec le contrôle des planches (contrôle groupé), aucun clip avant son verdict ; une planche refusée est redessinée d'abord, puis animée. « Refaire » une planche retire toujours son clip avant qu'il reparte.
