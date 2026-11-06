@@ -5,6 +5,13 @@ correspondante (P0-xx, P1-x, P2-xx) détaillée dans `docs/sudf/`. Guide pour re
 `docs/sudf/REPRISE.md`. **Mode d'emploi détaillé** (installer, lancer, utiliser), mis à jour à chaque
 version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, version par version).
 
+## 0.1.87 — 06/11/2026
+Repris de l'essai réel de l'Atelier Gourmand 1.0.22 (vidéo virale refaite en entier, demandes à Claude et ChatGPT observées).
+- Amélioré : **l'IA voit vraiment la vidéo à refaire** : la toute première image, une image toutes les 6 secondes avec le temps écrit dessus, et une image à chaque changement de plan (au lieu d'une seule planche). Transcription au dixième de seconde. Consigne : regarder image par image qui parle (sa bouche s'ouvre), qui a peur, pleure, transpire, crie.
+- Amélioré : **plans riches** comme l'Atelier : chaque scène dit à quoi elle sert, ce que le spectateur apprend de neuf, ce que montre l'image, le cadrage, la caméra, trois actions dont le geste qui ferme le plan (la transition), le jeu de chaque réplique et les personnages muets ; chaque personnage a sa tenue, son détail reconnaissable de loin et sa place fixe dans le cadre ; l'épisode décrit son monde et ses lieux une fois. Ces champs passent dans les demandes d'images et de clips (« qui parle, à quelle place, comment »).
+- Amélioré : demande de planche : les visages jouent les répliques, le fruit fait tout le corps (quatre doigts), aucun humain, une seule prise de vue plein cadre, aucun personnage hors de la feuille.
+- Ajouté : refus d'un détail de personnage qui parle de taille (« énorme », « grosses »…) : il fait grossir le personnage dans la vidéo ; l'IA le corrige.
+
 ## 0.1.86 — 05/11/2026
 - Ajouté (demande du propriétaire) : **bandeau « Bloqué : la vidéo ne progresse plus »** en haut de l'épisode, et « Bloqué : … » dans la barre de fabrication, la carte du Studio et la carte « En cours ». Il dit pourquoi : la fenêtre FruchtDrama qui faisait l'étape ne répond plus (avec l'heure), aucune fenêtre n'est ouverte, ou aucune nouvelle du service depuis X minutes (onglet en attente de connexion, de vérification ou réponse arrêtée). Cas réel : une recréation attendait depuis 17:04 la réponse d'une fenêtre fermée, sans rien afficher.
 - Ajouté : bouton **« Relancer cette étape »** dans ce bandeau : l'étape bloquée est abandonnée et redemandée (un message ChatGPT ou Claude, aucun crédit Flow). Pour un clip Flow ou Grok, le studio demande d'abord de vérifier dans le service qu'aucun clip n'a été créé.

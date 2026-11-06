@@ -24,7 +24,7 @@ import power
 import maintenance
 import series
 import licence
-VERSION='0.1.86'
+VERSION='0.1.87'
 OFFICIAL_ORIGIN='chrome-extension://bhdmibhibonmaamgcbpmbhedhohfongj'  # extension/manifest.json "key"
 import sys
 import traceback
@@ -624,6 +624,12 @@ def plan_image_block(j,s):
     marks=[f"{c.get('name')}: {_txt(c.get('tenue'),120)}; {_txt(c.get('detail'),120)}; {_txt(c.get('place'),120)}" for c in j.get('characters',[]) if c.get('id') in s.get('characters',[]) and (c.get('detail') or c.get('place'))]
     if marks:parts.append('EACH CHARACTER, ALWAYS THE SAME: '+' | '.join(marks))
     if s.get('actions'):parts.append('Catch the moment of: '+_txt((s['actions'] or [''])[0],200)+' Faces show the emotion strongly (exaggerated, readable on a phone).')
+    names={c.get('id'):c.get('name') for c in j.get('characters',[])}
+    said=[f"{names.get(x.get('speaker'),x.get('speaker'))} says « {_txt(x.get('text'),160)} »"+(f" ({_txt(x.get('jeu'),80)})" if x.get('jeu') else '') for x in s.get('dialogue',[])]
+    if parts and said:parts.append('THE FACES PLAY THESE LINES (no text in the image): '+' / '.join(said))
+    if parts:parts.append('HOW THEY ARE MADE: the fruit is the WHOLE body (head, face, neck, arms, hands, fingers), four fingers per hand, fully clothed in ordinary covering clothes, no human, no human skin. '
+                          'The attached sheet rules faces, species, proportions and outfits; a character who is not on the sheet does not exist in this image. '
+                          'ONE single shot filling the whole frame edge to edge, like a still from the film; no text, letters, numbers, watermark or subtitles.')
     return ('\n'+'\n'.join(parts)) if parts else ''
 def plan_video_block(j,s):
     parts=[]
