@@ -17,8 +17,8 @@ import flow_refill
 
 FRESH = 15 * 60          # a check older than this is done again before a production
 CHECK_TIMEOUT = 120      # a production never waits longer than this for a check that does not come back
-SITE_LABELS = {'chatgpt': 'ChatGPT', 'claude': 'Claude', 'grok': 'Grok', 'arena': 'Arena', 'vidogrid': 'Vidogrid', 'flow': 'Google Flow'}
-ENGINE_SITES = ('grok', 'arena', 'vidogrid')
+SITE_LABELS = {'chatgpt': 'ChatGPT', 'claude': 'Claude', 'grok': 'Grok', 'flow': 'Google Flow'}
+ENGINE_SITES = ('grok',)  # 0.1.97: Arena and Vidogrid removed; their old entries in the state are ignored
 NOT_READY = ('fix', 'no_access')
 STATES = ('ready', 'fix', 'no_access')
 CHAT_STAGES = ('research', 'ideas', 'sheet', 'script', 'characters', 'images', 'clips', 'quality', 'cover')
@@ -100,7 +100,7 @@ def setup_missing(state):
     if not site_has_account(state, 'chatgpt'):
         missing.append({'key': 'site:chatgpt', 'service': 'chatgpt', 'label': 'ChatGPT', 'reason': 'aucun compte prêt (personnages et planches)'})
     if not (flow_has_account(state) or any(site_has_account(state, e) for e in ENGINE_SITES)):
-        missing.append({'key': 'engine', 'service': 'flow', 'label': 'Clips', 'reason': 'aucun compte Google Flow, Arena, Vidogrid ni Grok prêt'})
+        missing.append({'key': 'engine', 'service': 'flow', 'label': 'Clips', 'reason': 'aucun compte Google Flow ni Grok prêt'})
     return missing
 
 
@@ -158,7 +158,7 @@ def checks_needed(state, cfg, stage, cost, moment, eligible, limit=2):
 
 
 def full_targets(state):
-    """« Préparer mes comptes »: ChatGPT, Claude if used, Grok / Arena if registered, every registered Flow account."""
+    """« Préparer mes comptes »: ChatGPT, Claude if used, Grok if registered, every registered Flow account."""
     sites = ['chatgpt']
     seen = state.get('sites') or {}
     identities = state.get('identities') or []

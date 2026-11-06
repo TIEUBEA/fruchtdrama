@@ -11,16 +11,13 @@ assert.equal(probe('tiktok',doc({buttons:['For You','Upload']})).connected,true)
 const flow=probe('flow',doc({avatar:'Compte Google arnaud chewa (ArnaudChewa65@gmail.com)'}));assert.equal(flow.connected,true);assert.equal(flow.email,'arnaudchewa65@gmail.com');
 assert.equal(probe('flow',doc({})).connected,false);
 assert.equal(probe('claude',doc({editor:true}),'claude.ai','/login').connected,false);
-// 0.1.93 Vidogrid: signed in when its credits show; its sign-in page is not.
-assert.equal(probe('vidogrid',{...doc({editor:true}),body:{innerText:'FREE TRIAL Credits remaining: 40'}},'vidogrid.ai','/app/video-gen/grok').connected,true);
-assert.equal(probe('vidogrid',{...doc({buttons:['Continue with Google']}),body:{innerText:'Continue with Google'}},'vidogrid.ai','/auth/login').connected,false);
 (async()=>{
  const created=[],removed=[];
  const chrome={tabs:{query:async()=>[{id:1,url:'https://chatgpt.com/c/1'}],remove:async id=>removed.push(id)},scripting:{executeScript:async({target,func,args})=>func?[{result:{connected:target.tabId===1,site:args[0]}}]:[]}};
  const ws={createTab:async(c,p)=>{const t={id:100+created.length,url:p.url};created.push(p.url);return t;},close:async(c,ids)=>removed.push(...ids)};
  const out=await S.check(chrome,ws,async()=>{});
- assert.equal(out.chatgpt.connected,true);assert.equal(Object.keys(out).length,7);
- assert.equal(created.length,6,'only missing sites opened');assert.deepEqual(removed.sort(),[100,101,102,103,104,105],'only the tabs it opened are closed');
+ assert.equal(out.chatgpt.connected,true);assert.equal(Object.keys(out).length,5,'ChatGPT, Flow, TikTok, Grok, Claude (Arena and Vidogrid removed in 0.1.97)');
+ assert.equal(created.length,4,'only missing sites opened');assert.deepEqual(removed.sort(),[100,101,102,103],'only the tabs it opened are closed');
  assert.ok(!removed.includes(1),'the owner’s ChatGPT tab is kept');
  console.log('Comptes façon Atelier : détection connecté / non connecté (libellés réels), adresse Flow lue, onglets ouverts pour vérifier puis refermés, onglets du propriétaire gardés.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

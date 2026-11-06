@@ -6,11 +6,9 @@ globalThis.FruchtSites={
   flow:{url:'https://flow.google.com/',hosts:['flow.google.com','labs.google']},
   tiktok:{url:'https://www.tiktok.com/',hosts:['www.tiktok.com','tiktok.com']},
   grok:{url:'https://grok.com/imagine',hosts:['grok.com']},
-  arena:{url:'https://arena.ai/video',hosts:['arena.ai','lmarena.ai']},
-  vidogrid:{url:'https://vidogrid.ai/app/video-gen/grok',hosts:['vidogrid.ai','www.vidogrid.ai']},
   claude:{url:'https://claude.ai/new',hosts:['claude.ai']}
  },
- label(name){return {chatgpt:'ChatGPT',flow:'Google Flow',tiktok:'TikTok',grok:'Grok',arena:'LMArena',vidogrid:'Vidogrid',claude:'Claude'}[name]||name;},
+ label(name){return {chatgpt:'ChatGPT',flow:'Google Flow',tiktok:'TikTok',grok:'Grok',claude:'Claude'}[name]||name;},
  // Runs inside the site's tab.
  probe(name,doc){
   const visible=e=>{const r=e.getBoundingClientRect?.();return !!r&&r.width>4&&r.height>4;};
@@ -24,9 +22,6 @@ globalThis.FruchtSites={
   if(challenge)connected=false;
   else if(name==='flow')connected=!!email;
   else if(name==='claude')connected=editor&&!/\/login/.test(location.pathname);
-  else if(name==='arena')connected=!signIn||editor;
-  // Vidogrid (fruit-france vidogrid_verifier.py): signed in when the app shows its credits or the free trial; /auth/login otherwise.
-  else if(name==='vidogrid')connected=!/\/auth\/login/.test(location.pathname)&&/Credits remaining|FREE TRIAL|Credits &/i.test(doc.body?.innerText||'');
   else connected=!signIn&&(name==='tiktok'||editor);
   return {connected,email,challenge,host};
  },

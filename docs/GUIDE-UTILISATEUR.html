@@ -96,8 +96,8 @@ masquée)</figcaption>
 <ol type="1">
 <li>Chaque carte dit si vous êtes <strong>connecté</strong>. ChatGPT,
 Google Flow et « Accès à tes fichiers » sont
-<strong>nécessaires</strong> ; TikTok, Claude, Grok et LMArena sont
-facultatifs.</li>
+<strong>nécessaires</strong> ; TikTok, Claude et Grok sont
+facultatifs (Grok est conseillé : il prend les clips que Flow ne fait pas).</li>
 <li><strong>Changer de compte</strong> ouvre le site dans un onglet de
 la fenêtre : connectez-vous <strong>vous-même</strong>. La carte passe
 au vert toute seule et l’onglet se referme.</li>
@@ -183,9 +183,15 @@ Créatures, Gourmandises, Avatar humain, Cartoon, Survie).</li>
 <li><strong>Durée</strong> : Essai · 30 s, <strong>Courte · 1 min (le
 minimum pour être payé par TikTok)</strong>, Moyenne · 2 min, Longue · 3
 min, Très longue · 4 min. Le nombre de plans et le coût Flow estimé
-s’affichent dessous.</li>
-<li><strong>Moteur vidéo</strong> : Google Flow (conseillé), Grok ou
-Arena (expérimentaux).</li>
+s’affichent dessous. Les plans durent <strong>10 s</strong> chez Flow :
+« Courte · 1 min » = <strong>7 clips de 10 s ≈ 70 s</strong>, assez pour
+TikTok Creator Rewards (vidéos d’au moins 1 min). Au plus 30 mots parlés
+par plan (3 mots par seconde). Les épisodes déjà créés gardent leurs plans
+de 8 s.</li>
+<li><strong>Moteur vidéo</strong> : Google Flow (conseillé, 10 s par
+clip) ou Grok (6 s par clip). Chaque clip fait un essai sur Flow ; si le
+clip n’est pas généré, il part <strong>aussitôt sur Grok</strong>, sans
+rien vous demander.</li>
 <li><strong>Langue</strong> : <strong>cinq langues</strong> — Français,
 English, Español, Português (Brasil), Deutsch. Répliques, titre, voix et
 sous-titres sont dans cette langue.</li>
@@ -222,7 +228,9 @@ répliques).</li>
 <li>Case <strong>Recréer à l’identique</strong> cochée : <strong>la même
 histoire, scène par scène</strong> — mêmes personnages, mêmes lieux,
 mêmes événements, même fin ; seules les répliques sont reformulées et
-les prénoms changent. Attention : plus c’est proche de l’original, plus
+les prénoms changent. L’histoire est <strong>condensée en ~1 min</strong>
+(7 plans de 10 s) pour la monétisation TikTok, même si l’original est plus
+long : les temps forts sont gardés, le reste est fusionné. Attention : plus c’est proche de l’original, plus
 TikTok risque de juger la vidéo non originale (moins de vues, pas de
 rémunération).</li>
 <li><strong>Captures en plus</strong> (jusqu’à 4 images, par exemple
@@ -310,6 +318,20 @@ alt="Bandeau rouge « Action requise »" />
 <li><strong>Rouge « Action requise »</strong> : le studio vous attend
 (la raison est écrite). Faites ce qui est demandé, puis <strong>▶ Boucle
 complète</strong>.</li>
+<li><strong>Rouge « Bloqué : … depuis N min »</strong> : une étape
+(scénario, planches, clips, montage) dépasse sa durée normale. La raison
+est écrite ; <strong>Relancer cette étape</strong> la redemande. Le même
+bandeau apparaît sur la carte du Studio et dans le menu.</li>
+<li><strong>Gros bandeau « En pause — rien ne tourne »</strong> ou
+<strong>« Arrêté — action requise »</strong> : la raison et
+<strong>Reprendre</strong>.</li>
+<li><strong>« N clips en échec »</strong> : Flow puis Grok n’ont pas fait
+ces clips (« Clip N : Flow (raison) puis Grok (raison) — clip à refaire »).
+Les autres clips continuent ; le montage attend. Ouvrez la scène,
+<strong>Refaire…</strong> ou <strong>Importer</strong> un clip.</li>
+<li><strong>Envoi Flow incertain</strong> : n’arrête plus rien. Le clip
+part sur Grok ; si le clip Flow est retrouvé ensuite, il complète ou
+remplace celui de Grok.</li>
 <li><strong>Orange « Décidé automatiquement — à vérifier avant de
 publier »</strong> : les scènes acceptées seules par la boucle.
 Regardez-les avant de publier.</li>

@@ -42,7 +42,7 @@ async function run(task,attachments){
  await sleep(1500);blocked();
  if(task.kind==='chat_collect')return collectScenario(task);
  if(['chat_text','chat_image'].includes(task.kind)&&globalThis.FruchtComposer.loggedOut?.(document))throw fail('login',(location.hostname==='claude.ai'?'Claude':'ChatGPT')+' : non connecté. Connectez-vous vous-même dans l’onglet de la fenêtre FruchtDrama, puis Reprendre. Aucun prompt envoyé.');
- // P5-09/P5-10: Grok Imagine and LMArena video.
+ // P5-09: Grok Imagine video.
  if(task.kind==='engine_video')return globalThis.FruchtEngines.run(task,attachments,{document,sleep,fill,blocked,fail,DataTransfer,File,Event,now:()=>Date.now(),
   // Bound: called as h.atob(), the bare browser atob throws « Illegal invocation » (real page 06/11/2026).
   atob:s=>atob(s),

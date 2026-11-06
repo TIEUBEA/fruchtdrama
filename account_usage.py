@@ -3,13 +3,13 @@ quelle IA est utilisée et à quel moment »). Pure functions on the state; no c
 
 Keys, shared with « Mes comptes » (web/accounts.js):
   flow:<profile id>             one Google Flow account
-  engine:<engine>:<email>       one registered Grok / Arena / Vidogrid account
+  engine:<engine>:<email>       one registered Grok account
   site:<service>                the session open in the FruchtDrama window (ChatGPT, Claude, or an engine without
                                 registered accounts)
 """
 import readiness
 
-LABELS = {'flow': 'Google Flow', 'grok': 'Grok', 'arena': 'Arena', 'vidogrid': 'Vidogrid', 'chatgpt': 'ChatGPT', 'claude': 'Claude'}
+LABELS = {'flow': 'Google Flow', 'grok': 'Grok', 'chatgpt': 'ChatGPT', 'claude': 'Claude'}
 SLOTS = {'script': 'Scénario', 'ideas': 'Idées', 'sheet': 'Fiche de l’histoire', 'research': 'Recherche TikTok',
          'characters': 'Personnages', 'cover': 'Miniature', 'cover_review': 'Contrôle de la miniature',
          'board_review': 'Contrôle des planches', 'quality_review': 'Contrôle des clips', 'rewrite_meta': 'Titre et description'}

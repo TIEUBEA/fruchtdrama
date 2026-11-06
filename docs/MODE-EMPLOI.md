@@ -97,7 +97,7 @@ Bon à savoir :
 
 Toujours **vous-même**, dans la fenêtre FruchtDrama. Le studio ne demande ni ne stocke aucun mot de passe et ne contourne aucune vérification.
 
-**Ajouter une adresse une seule fois** (depuis 0.1.53) : Mes comptes → bloc **Mes comptes** → adresse, nom facultatif, cocher les services que cette adresse ouvre (ChatGPT, Claude, Google Flow, Grok, Arena), crédits Flow si connus → **Ajouter ce compte**. Une seule ligne par adresse ; « Ajouter » / « Retirer » dans une colonne pour un service, « Retirer » au bout de la ligne pour tout supprimer. Les étapes ci-dessous (connexion dans la fenêtre, mémoriser le compte Flow) restent nécessaires.
+**Ajouter une adresse une seule fois** (depuis 0.1.53) : Mes comptes → bloc **Mes comptes** → adresse, nom facultatif, cocher les services que cette adresse ouvre (ChatGPT, Claude, Google Flow, Grok), crédits Flow si connus → **Ajouter ce compte**. Une seule ligne par adresse ; « Ajouter » / « Retirer » dans une colonne pour un service, « Retirer » au bout de la ligne pour tout supprimer. Les étapes ci-dessous (connexion dans la fenêtre, mémoriser le compte Flow) restent nécessaires.
 
 **ChatGPT / Claude / TikTok** : ouvrir un onglet dans la fenêtre FruchtDrama, aller sur chatgpt.com (et claude.ai, tiktok.com), se connecter. C'est tout.
 
@@ -107,12 +107,12 @@ Toujours **vous-même**, dans la fenêtre FruchtDrama. Le studio ne demande ni n
 3. Studio → Mes comptes › **Navigateur** → **Mémoriser le compte Flow ouvert**. Le dernier onglet Flow consulté est utilisé ; le résultat s'affiche sous les boutons.
 4. Vérifier l'adresse e-mail affichée dans Mes comptes.
 
-**Grok Imagine et LMArena (expérimental)**
-1. Dans la fenêtre FruchtDrama, ouvrir https://grok.com/imagine (ou https://lmarena.ai) et se connecter soi-même.
-2. **Mes comptes** → section **Comptes Grok et Arena** : choisir le moteur, saisir l'**adresse** du compte (jamais de mot de passe), **Ajouter ce compte**. Répéter pour chaque compte, dans l'ordre d'utilisation voulu.
+**Grok Imagine** (prend les clips que Flow ne fait pas)
+1. Dans la fenêtre FruchtDrama, ouvrir https://grok.com/imagine et se connecter soi-même.
+2. **Mes comptes** → bloc **Grok** : saisir l'**adresse** du compte (jamais de mot de passe), **Ajouter ce compte**. Répéter pour chaque compte, dans l'ordre d'utilisation voulu.
 3. Quand un compte atteint sa limite, la production passe « Changement de compte » : dans l'onglet du site, se déconnecter, se connecter au compte indiqué dans le bandeau, puis cliquer **J'ai changé de compte**. Le connecteur vérifie le compte affiché avant d'envoyer.
 4. Si tous les comptes sont à leur limite : « Limite atteinte, reprise automatique » ; la production repart seule à l'heure indiquée. **Oublier la limite** (Mes comptes) force une nouvelle tentative.
-5. Toujours commencer par un **essai à blanc** : ces sites changent souvent et les connecteurs n'ont pas encore été vérifiés sur vos comptes.
+5. Commencer par un **essai à blanc** : le site change souvent.
 
 **Plusieurs comptes Flow dans la même fenêtre** (passage automatique quand les crédits s'épuisent)
 1. Dans la fenêtre FruchtDrama, menu du compte Google (photo en haut à droite d'une page Google) → **Ajouter un compte** ; répéter pour chaque compte.
@@ -128,9 +128,9 @@ Studio → **Nouvelle production** :
 |---|---|
 | Point de départ | Facultatif : une idée, sinon l'IA cherche une référence sur TikTok. |
 | IA de scénario | ChatGPT ou Claude. Les images passent toujours par ChatGPT. |
-| Format | 4 scènes (32 s) pour commencer. |
+| Format | Durée au choix ; « Courte · 1 min » = 7 plans de 10 s ≈ 70 s (monétisation TikTok : au moins 1 min). |
 | Langue | Deutsch, Français ou English : dialogues, voix, sous-titres, couverture. |
-| Moteur vidéo | **Google Flow** (8 s par clip, crédits Flow). Grok Imagine (6 s) et LMArena (4 à 10 s) sont **expérimentaux** : essai à blanc d'abord ; comptes à enregistrer dans Mes comptes (section 7). La longueur des dialogues s'adapte au moteur. |
+| Moteur vidéo | **Google Flow** (10 s par clip, crédits Flow ; 8 s pour les épisodes créés avant 0.1.97) ou Grok Imagine (6 s, pas de réglage de durée). Chaque clip fait un essai Flow, puis part aussitôt sur Grok s'il n'est pas généré. Au plus 30 mots parlés par plan de 10 s (3 mots par seconde). |
 | Modèle vidéo Flow | Omni 12 crédits, Lite 10, Fast 20, Quality 100 par clip (Ultra : Lite 5, Fast 10). Le coût affiché dans Flow est vérifié avant tout envoi. |
 | Relire et corriger l'histoire avant de payer les images | **Recommandé** au début : la production s'arrête pour que vous relisiez les dialogues. |
 | Essai à blanc des clips Flow | **Recommandé pour le premier essai** : tout est préparé dans Flow mais rien n'est envoyé, aucun crédit consommé. |
@@ -150,7 +150,7 @@ Lien direct vers une production : `http://127.0.0.1:8840/#job=<identifiant>`.
 | En pause | Vous avez mis en pause, ou essai à blanc réussi. | **Reprendre**. Après un essai à blanc : désactiver l'essai, puis Reprendre. |
 | Crédits insuffisants | Aucun compte Flow n'a assez de crédits. | Mettre à jour le solde dans Mes comptes ou ajouter un compte. |
 | À vérifier | Un problème demande votre regard (voir bandeaux ci-dessous). | Lire le dernier message, corriger, **Reprendre**. |
-| Changement de compte | Un compte Grok/Arena a atteint sa limite. | Se connecter au compte indiqué dans l'onglet du site, puis **J'ai changé de compte**. |
+| Changement de compte | Un compte Grok a atteint sa limite. | Se connecter au compte indiqué dans l'onglet du site, puis **J'ai changé de compte**. |
 | Limite atteinte, reprise automatique | Tous les comptes du moteur sont à leur limite. | Rien : reprise seule à l'heure indiquée. Ou ajouter un compte. |
 | En file de nuit | Attend son tour dans la file de nuit. | Rien, ou « Retirer de la file de nuit ». |
 | Montage en cours | Montage local ffmpeg. | Attendre. |
@@ -158,7 +158,10 @@ Lien direct vers une production : `http://127.0.0.1:8840/#job=<identifiant>`.
 
 Bandeaux possibles :
 - **Action de votre part requise** (rouge) : connexion demandée ou vérification anti-robot. Aller dans l'onglet concerné de la fenêtre, se connecter ou résoudre la vérification **soi-même**, puis **Reprendre**.
-- **Envoi Flow incertain** (orange) : un clip a peut-être été généré et facturé sans être reçu. Ouvrir le projet Flow : la passerelle récupère un clip existant, ou importez-le. Ne cliquer « aucun clip dans Flow » que si vous avez vérifié qu'il n'existe pas.
+- **Bloqué : … depuis N min** (rouge, aussi sur la carte du Studio et dans le menu) : une étape (scénario, planches, clips, montage) dépasse sa durée normale. La raison est écrite ; **Relancer cette étape**.
+- **En pause — rien ne tourne** / **Arrêté — action requise** (gros bandeau) : la raison et **Reprendre**.
+- **N clips en échec** : Flow puis Grok n'ont pas fait ces clips (« Clip N : Flow (raison) puis Grok (raison) — clip à refaire »). Les autres clips continuent, le montage attend : **Refaire…** ou **Importer** chaque clip.
+- **Envoi Flow incertain** (orange) : un clip a peut-être été généré et facturé sans être reçu. L'épisode ne s'arrête pas : le clip part sur Grok, jamais renvoyé sur Flow. Si la passerelle retrouve ensuite le clip Flow, il complète ou remplace celui de Grok. Ne cliquer « aucun clip dans Flow » que si vous avez vérifié qu'il n'existe pas.
 - **Essai à blanc** (bleu) : rappel que rien n'est envoyé ; bouton pour passer en production réelle.
 
 ## 10. Corriger : Refaire, relecture, contrôle qualité
@@ -176,11 +179,11 @@ Bandeaux possibles :
 
 1. Sur chaque production à lancer : **Ajouter à la file de nuit** (pas en essai à blanc ; une histoire à relire doit d'abord être validée).
 2. En haut du Studio, panneau **File de nuit** → **Démarrer la file de nuit**.
-3. Le studio traite une production à la fois, dans l'ordre. Il relance seul jusqu'à 3 fois une erreur technique, attend les limites et les crédits, et retire avec la raison toute production qui a besoin de vous (connexion, anti-robot, clip Flow incertain, réserves du contrôle qualité, pause). Le journal de la file garde la trace de tout.
+3. Le studio traite une production à la fois, dans l'ordre. Il relance seul jusqu'à 3 fois une erreur technique, attend les limites et les crédits, et retire avec la raison toute production qui a besoin de vous (connexion, anti-robot, réserves du contrôle qualité, pause). Le journal de la file garde la trace de tout.
 4. Pendant la file, Windows ne se met pas en veille (l'écran peut s'éteindre). Laisser le PC branché, Chrome et la fenêtre FruchtDrama ouverts.
 5. **Arrêter la file** : la production en cours continue, les suivantes attendent.
 
-Quand ChatGPT refuse une image, le studio la redemande seul deux fois avec une formulation adoucie (même style). Quand un service est à sa limite, la production attend et repart seule ; voir **Mes comptes → Limites apprises**.
+Quand ChatGPT refuse une image, le studio la redemande seul deux fois avec une formulation adoucie (même style). Les clips vidéo, eux, ne sont plus adoucis : Flow puis Grok, puis le clip vous attend. Quand un service est à sa limite, la production attend et repart seule ; voir **Mes comptes → Limites apprises**.
 
 ## 11. Arrêter, redémarrer, dépanner
 
@@ -212,6 +215,7 @@ Quand ChatGPT refuse une image, le studio la redemande seul deux fois avec une f
 | 0.1.91 | **Mes comptes simple** : un bloc par service, une ligne par compte, « + Ajouter un compte », « Supprimer », « Tout supprimer ». **Préparer mes comptes** vérifie chaque compte en arrière-plan (sans crédit ni prompt) : Prêt / À régler (raison) / Pas d'accès, « Régler maintenant » puis « C'est fait ». Rien ne démarre tant qu'un compte nécessaire est à régler ; il faut un compte ChatGPT et un compte Flow ou Grok prêts pour commencer. Une page qui ne s'ouvre pas pendant la production fait passer le clip au compte Flow suivant. **Deux clips Flow en même temps** sur deux comptes Google. **Recharger l'extension FruchtDrama.** |
 | 0.1.93 | **Un essai par moteur et par clip** : un clip que Flow ne fait pas (refus, page bloquée, import qui n'avance plus depuis 90 s, délai) part aussitôt sur **Arena**, puis **Vidogrid**, puis **Grok** ; un moteur sans compte prêt est sauté. Si tous échouent, le prompt est **adouci** et Flow réessaie une fois ; ensuite seulement « Action requise », avec la raison de chaque moteur. Un envoi Flow incertain n'est jamais renvoyé, mais **les autres clips continuent**. Nouveau compte **Vidogrid** dans Mes comptes (connexion « Continue with Google » faite par toi) et **ordre des moteurs** réglable. L'extension se met à jour seule. |
 | 0.1.95 | **Quel compte travaille, maintenant** : dans Mes comptes, encadré « En ce moment » et, pour chaque service, « Utilisé maintenant » (compte, tâche, heure de début) avec un badge **En cours** sur la ligne du compte ; sinon « Dernier utilisé il y a … ». Comptes Flow **numérotés** (le numéro ne change jamais) et **triés par crédits**, vides et à régler en bas avec l'heure de recharge. Dans l'épisode, chaque carte Planches/Clips dit « IA : Flow · compte 2 (…, 38 crédits) » ou « IA : ChatGPT », et chaque clip reçu dit quel moteur et quel compte l'ont fait. Le journal écrit les bascules « Compte Flow 2 (…, vide) → compte 3 (…) ». Épisode allégé : **« Ce qui se passe »** toujours visible (4 dernières lignes utiles, « Tout le journal » pour le reste) ; plus de menus « Compte Flow » ni « IA de scénario » ; « Supprimer l'épisode… » en petit lien sous le titre. |
+| 0.1.97 | **Plus que Google Flow et Grok** (Arena et Vidogrid retirés). Chaque clip : un essai Flow, puis **Grok aussitôt**, sans validation (plus de bouton « Utiliser Grok »). Flow puis Grok en échec : « Clip N : Flow (raison) puis Grok (raison) — clip à refaire », les autres clips continuent. Envoi Flow incertain : plus d'arrêt, le clip part sur Grok. **Bandeau rouge « Bloqué : … depuis N min »** dès qu'une étape dépasse sa durée normale (épisode, carte Studio, menu), gros bandeau « En pause — rien ne tourne » / « Arrêté — action requise ». **Plans de 10 s** chez Flow : « Courte · 1 min » = 7 clips ≈ 70 s, 30 mots par plan ; « Refaire une virale » condensée en ~1 min. Les épisodes existants gardent leurs 8 s. |
 | 0.1.78 | **Coût affiché** avant chaque action payante (Boucle complète, Dessiner, Tourner, Refaire). Fenêtre d'une scène : **versions précédentes** de la planche et du clip, bouton **Remettre** (gratuit). Bandeau **Remonter la vidéo** quand un clip a changé. |
 | 0.1.77 | Studio : une histoire en fabrication porte la pastille **En cours** ; un clic ouvre la partie en cours. La dernière ligne du journal (« ce qui se passe maintenant ») s'affiche dans l'épisode, dans le menu et sur la carte. |
 | 0.1.76 | Studio : un clic sur la carte d'une partie ouvre l'épisode et sa progression, même pendant la fabrication. |

@@ -9,6 +9,21 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 
 
+## 0.1.97 (06/11/2026)
+Demande du propriétaire, 06/11 au soir : « On va faire beaucoup plus simple. On n'a plus que Flow et Grok. Tu ne dois bloquer sur aucune étape. » Cas réel du soir : « Envoi Flow incertain pour la scène 1, 3, 4, 7, 16 », épisode en Action requise, tout arrêté.
+
+**Modifié**
+- **Arena et Vidogrid retirés de tout le studio** : page Créer, Mes comptes, vérification des comptes, extension (connecteurs, sites, permissions). Les comptes Arena/Vidogrid déjà enregistrés sont ignorés sans erreur ; un clip déjà fait par Arena garde sa durée au montage.
+- **Chaîne par clip : un essai Flow, puis Grok tout de suite**, sans validation (plus de bouton « Utiliser Grok »). Clip reçu de Grok : ajouté au studio, la production continue.
+- **Si Flow puis Grok échouent** : alerte « Clip N : Flow (raison) puis Grok (raison) — clip à refaire », le clip est mis de côté et les autres continuent. L'épisode montre « N clips en échec » avec « Refaire » par clip (possible pendant que les autres clips tournent) ; le montage attend tous les clips. Plus de prompt adouci ni de planche redessinée automatiquement.
+- **Envoi Flow incertain** : n'arrête plus jamais l'épisode. Le clip part sur Grok aussitôt et n'est jamais renvoyé sur Flow tant que le doute reste (réservation de crédits inchangée). Si le clip Flow est retrouvé ensuite (récupération automatique, possible pendant que l'épisode continue), il complète l'épisode ou remplace le clip Grok (gardé dans les versions précédentes). « Reprendre » n'est plus jamais refusé pour un envoi incertain.
+- **Plans de 10 s** (monétisation TikTok Creator Rewards : vidéos d'au moins 1 minute) : Flow fait des clips de 10 s ; « Courte · 1 min » = 7 clips ≈ 70 s. 3 mots par seconde : 30 mots parlés au plus par plan. Scénario, montage et contrôle qualité suivent (plages 9,5 à 10,5 s). Grok Imagine reste à 6 s : son connecteur n'a aucun réglage de durée. Les épisodes existants gardent leurs 8 s.
+- **Refaire une virale** : l'histoire est condensée en environ 1 minute (7 plans de 10 s) même si l'original est plus long ; temps forts gardés, le reste fusionné. Dit dans la page Créer et dans la consigne du scénario.
+
+**Ajouté**
+- **Jamais d'étape silencieuse** : une étape plus longue que d'habitude (scénario 10 min, planche 5 min, clip Flow 10 min, clip Grok 8 min, montage 20 min, contrôle local 25 min) ou un épisode « en production » sans rien en cours depuis 3 min affiche « Bloqué : l'étape depuis N min » en rouge, avec la raison et « Relancer cette étape », sur la page épisode, la carte du Studio et le menu latéral. La barre ne dit plus « Fabrication » et n'affiche plus le chrono dans ce cas.
+- **Gros bandeau en pause / arrêté** : « En pause — rien ne tourne » ou « Arrêté — action requise » en haut de l'épisode, avec la raison et Reprendre ; la carte du Studio et le menu latéral le disent aussi. « En attente — rien ne tourne » pour les attentes de crédits ou de limite.
+
 ## 0.1.96 (06/11/2026)
 Cas réel du 06/11 à 15 h 36 : Arena « Page vide ou bloquée » puis Grok « champ d'image introuvable ». Corrigé en regardant les vraies pages (Chrome invisible, profil du propriétaire).
 

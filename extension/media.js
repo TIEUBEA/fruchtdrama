@@ -67,8 +67,8 @@ globalThis.FruchtMedia={
   if(!src)throw Error('Vidéo sans adresse.');
   const url=new URL(src,location.href);
   if(!['https:','blob:'].includes(url.protocol))throw Error('Source vidéo non prise en charge.');
-  // Arena's clips live on a presigned storage address that refuses credentialed reads (CORS « * »): read it again
-  // without cookies (real page 06/11/2026).
+  // A clip on a presigned storage address may refuse credentialed reads (CORS « * »): read it again
+  // without cookies (seen on a real page 06/11/2026).
   let response;
   try{response=await fetch(src,{credentials:'include',signal:AbortSignal.timeout(30000)});}
   catch(e){if(url.protocol!=='https:')throw e;response=await fetch(src,{credentials:'omit',signal:AbortSignal.timeout(60000)});}
