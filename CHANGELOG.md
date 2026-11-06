@@ -12,6 +12,7 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 - L'extension se met à jour toute seule : quand une nouvelle version est posée dans son dossier, elle se recharge d'elle-même entre deux tâches (plus de rechargement manuel dans chrome://extensions après chaque correctif).
 
 **Corrigé**
+- Flow écrit pourquoi une génération a échoué : l'extension lit ce message dès qu'il apparaît et arrête l'attente avec les mots de Flow (« Flow a refusé ce clip : … »), au lieu d'attendre 8 à 10 min « Génération trop longue ».
 - La barre de fabrication n'affiche plus le diagnostic technique « Diagnostic import Flow : {…} » mais « Import de la planche dans Flow… ».
 
 ## 0.1.91 (06/11/2026)

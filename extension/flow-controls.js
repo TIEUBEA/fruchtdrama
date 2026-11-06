@@ -185,6 +185,12 @@ globalThis.FruchtFlow={
   });
   return candidates.length===1?candidates[0]:null;
  },
+ // Flow writes why a generation failed on the page (owner 06/11/2026: « lis aussi le message d'erreur dans Flow »):
+ // a NEW line with a failure wording, absent before the click, ends the wait at once with Flow's own words.
+ generationError(doc,before){
+  const lines=String(doc.body?.innerText||'').split('\n').map(x=>x.trim()).filter(x=>x&&x.length<400&&!(before&&before.has(x)));
+  return lines.find(x=>/impossible de générer|n.a pas pu|non conforme|a échoué|échec de (?:la )?génération|activité inhabituelle|pourrait enfreindre|enfreint|règles|policy|violat|couldn.t generate|could not generate|generation failed|failed to generate|unusual activity|try again|réessaie|réessayez|something went wrong|une erreur s.est produite/i.test(x))||null;
+ },
  openNewVideo(doc,oldImages,oldElements){
   const images=[...doc.images].filter(img=>img.complete&&/^(?:Miniaturansicht des erstellten Videos|Generated video thumbnail|Miniature de la vidéo générée)$/i.test(img.alt||'')&&!oldImages.has(img.currentSrc||img.src)&&!oldElements.has(img)&&img.getClientRects().length);
   if(images.length!==1)return false;
