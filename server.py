@@ -148,7 +148,7 @@ def event(j, text): j['events'].append({'at':now(),'text':text}); j['updated']=n
 # Parallel clips (owner 06/11/2026: « deux comptes en même temps »): several Flow clips at once, one per Google account,
 # each in its own tab. Never twice the same account at once, so a reservation is never made twice on the same credits.
 def parallel_cap():
-    try:return max(1,min(4,int(STATE.get('settings',{}).get('parallel_flow',2))))
+    try:return max(1,min(4,int(STATE.get('settings',{}).get('parallel_flow',4))))
     except (TypeError,ValueError):return 2
 def video_tasks(j): return [t for t in STATE['tasks'] if t['job']==j['id'] and t['status'] in ('queued','claimed') and lane_of(t)=='video']
 def video_slots(j):
