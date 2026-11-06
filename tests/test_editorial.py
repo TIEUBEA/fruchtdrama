@@ -43,7 +43,7 @@ class EditorialTests(unittest.TestCase):
     def test_accepts_winning_concept_and_rejects_wrong_choice(self):
         draft=story();editorial.validate(draft,self.job,s.STATE['jobs'])
         draft['creative_selection']['selected_index']=1
-        with self.assertRaisesRegex(editorial.Rejection,'meilleur score'):editorial.validate(draft,self.job,s.STATE['jobs'])
+        editorial.validate(draft,self.job,s.STATE['jobs'])  # 0.1.102: the concept comparison never refuses a script
 
     def test_rejects_recycled_story_with_only_a_different_title(self):
         self.add_old();draft=story();draft['title']='Another title';draft['creative_selection']['candidates'][0]['title']=draft['title']
@@ -62,7 +62,7 @@ class EditorialTests(unittest.TestCase):
         s.store_script(self.job,draft);self.assertEqual(self.job['title'],draft['title'])
 
     def test_bad_new_script_rewrites_at_most_twice_before_any_image_generation(self):
-        draft=story();draft.pop('creative_selection')
+        self.add_old();draft=story();draft['title']='Another title'  # a real defect (same story) still refuses
         for attempt in range(3):
             t={'id':str(attempt),'job':self.job['id'],'kind':'chat_text','slot':'script','status':'claimed'}
             s.STATE['tasks'].append(t);s.accept_task_result(t,{'ok':True,'text':json.dumps(draft)})
@@ -91,14 +91,12 @@ class EditorialTests(unittest.TestCase):
         self.job['retention_version']=1
         self.assertIn('0–2 secondes',s.script_prompt(self.job))
         self.assertIn('image_prompt ET video_prompt',s.script_prompt(self.job))
-        with self.assertRaisesRegex(editorial.Rejection,'8 mots'):
-            editorial.validate(draft,self.job,s.STATE['jobs'])
-        draft['scenes'][0]['dialogue'][0]['text']='Give me my ticket!'
-        draft['creative_selection']['candidates'][0]['hook']='Give me my ticket!'
+        # 0.1.102: shortened by the studio instead of a rewrite.
         editorial.validate(draft,self.job,s.STATE['jobs'])
-        draft['scenes'][1]['dialogue'][0]['text']=' '.join(['word']*21)
-        with self.assertRaisesRegex(editorial.Rejection,'20 mots'):
-            editorial.validate(draft,self.job,s.STATE['jobs'])
+        self.assertLessEqual(len(draft['scenes'][0]['dialogue'][0]['text'].split()),8)
+        draft['scenes'][1]['dialogue'][0]['text']=' '.join(['word']*41)
+        editorial.validate(draft,self.job,s.STATE['jobs'])
+        self.assertLessEqual(sum(len(x['text'].split()) for x in draft['scenes'][1]['dialogue']),s.engines.word_limit(self.job))
 
     def opening_story(self):
         self.job.update(hook_version=1,retention_version=1)
@@ -114,18 +112,17 @@ class EditorialTests(unittest.TestCase):
     def test_new_hooks_accept_natural_german_over_eight_words_and_validate_visual_anchor(self):
         draft=self.opening_story();editorial.validate(draft,self.job,s.STATE['jobs'])
         draft['scenes'][0]['video_prompt']='Moving camera with no visible object.'
-        with self.assertRaisesRegex(editorial.Rejection,'détail visible'):
-            editorial.validate(draft,self.job,s.STATE['jobs'])
+        editorial.validate(draft,self.job,s.STATE['jobs'])  # 0.1.102: the detail is added to the prompt
+        self.assertIn('altes Foto',draft['scenes'][0]['video_prompt'])
 
     def test_new_hooks_require_a_resolution_scene_and_reject_overlong_opening(self):
         draft=self.opening_story();draft['opening_plan']['payoff_scene']=4
-        with self.assertRaisesRegex(editorial.Rejection,'résolution existante'):
-            editorial.validate(draft,self.job,s.STATE['jobs'])
-        draft['opening_plan']['payoff_scene']=3
+        editorial.validate(draft,self.job,s.STATE['jobs'])  # 0.1.102: set to the last scene, no refusal
+        self.assertEqual(draft['opening_plan']['payoff_scene'],len(draft['scenes']))
         first=' '.join(['Wort']*13)
         draft['scenes'][0]['dialogue'][0]['text']=first;draft['creative_selection']['candidates'][0]['hook']=first
-        with self.assertRaisesRegex(editorial.Rejection,'12 mots'):
-            editorial.validate(draft,self.job,s.STATE['jobs'])
+        editorial.validate(draft,self.job,s.STATE['jobs'])
+        self.assertLessEqual(len(draft['scenes'][0]['dialogue'][0]['text'].split()),12)
 
     def test_new_hooks_prompt_contains_emotional_variety_and_native_language_without_migrating_old_jobs(self):
         old=self.add_old();before=copy.deepcopy(old);self.job['hook_version']=1;self.job['retention_version']=1

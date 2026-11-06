@@ -27,7 +27,7 @@ import maintenance
 import series
 import licence
 import readiness
-VERSION='0.1.101'
+VERSION='0.1.102'
 OFFICIAL_ORIGIN='chrome-extension://bhdmibhibonmaamgcbpmbhedhohfongj'  # extension/manifest.json "key"
 import sys
 import traceback
@@ -75,6 +75,10 @@ def read_state():
     state=json.loads(p.read_text('utf-8')) if p.exists() else fresh()
     if 'flow_model' not in state['settings']:
         state['settings'].update(flow_model='gemini_omni_flash',flow_resolution='720p',flow_cost=12)
+    if not state.get('fast_0102'):
+        # 0.1.102, owner 06/11/2026 « retire les actions pas très importantes »: fast defaults, once.
+        state['settings']['clip_look']='ear';state['settings']['cover_controls']='none';state['settings']['board_controls']='none'
+        state['fast_0102']=True
     # 0.1.99: a length outside the engine's range no longer blocks; old reports holding that block are run again.
     for j in state.get('jobs',[]):
         r=j.get('quality_report') or {}
@@ -226,7 +230,7 @@ COVER_REVIEW_PROMPT=('Review the attached TikTok COVER image. Do not generate an
 def cover_check_pending(j):
     """Atelier "Miniature de la boucle complète": ChatGPT looks at the cover once (one attachment) and it is redrawn once
     when it sees a defect ('fix'), or the defect is only reported ('report'). True while the check holds the montage back."""
-    mode=j['config'].get('cover_controls',STATE.get('settings',{}).get('cover_controls','fix'))
+    mode=j['config'].get('cover_controls',STATE.get('settings',{}).get('cover_controls','none'))  # 0.1.102: off by default
     if mode=='none' or not j.get('cover_file') or j.get('cover_checked')==j['cover_file']:return False
     review=j.get('cover_review')
     if not review or review.get('file')!=j['cover_file']:
@@ -907,12 +911,13 @@ def validate_script(s, n, check_size=True, words=25):
         problems=size_problems(chars)
         if problems:raise ValueError(' ; '.join(problems))
     # Optional extra: a wrong entry is dropped, it never refuses the script.
-    changes=clean_state_changes(s.get('state_changes'),ids,n)
+    changes=clean_state_changes(s.get('state_changes'),ids,n) if STATE_SHEETS else []
     if changes:s['state_changes']=changes
     else:s.pop('state_changes',None)
     return s
 
 STATE_CHANGES_MAX=3
+STATE_SHEETS=False  # 0.1.102: « Au fil de l'histoire » sheets dropped (3 ChatGPT images); the reference sheet is enough
 
 def clean_state_changes(raw,ids,n):
     """« Au fil de l'histoire »: visible changes of a character from one scene on (wound, torn outfit, lost object).
@@ -1260,6 +1265,20 @@ def held_message(j):
     return (f'{len(rows)} clip(s) en échec : '+' ; '.join(r['text'].split(' — ')[0] for r in rows)
             +'. Refais-les (« Refaire » sur la scène, avec une consigne si besoin) ou importe un clip : le montage attend tous les clips.')
 
+def still_clip(j,i):
+    """The board of scene i as a silent clip of the episode's clip length, with a slow zoom (no AI, no credit)."""
+    scene=j['scenes'][i];d=job_dir(j)
+    if not scene.get('image') or not (d/scene['image']).is_file():return False
+    secs=engines.flow_seconds(j);w,h=frame_size(j);name=f'still_{i:02}.mp4'
+    try:
+        run_command([shutil.which('ffmpeg') or 'ffmpeg','-v','error','-y','-loop','1','-i',str(d/scene['image']),'-f','lavfi','-i','anullsrc=r=48000:cl=stereo',
+                     '-t',str(secs),'-vf',f"scale={w*2}:{h*2}:force_original_aspect_ratio=increase,crop={w*2}:{h*2},zoompan=z='min(1+0.0015*on,1.25)':d={secs*25}:s={w}x{h}:fps=25",
+                     '-c:v','libx264','-preset','ultrafast','-pix_fmt','yuv420p','-c:a','aac','-shortest',str(d/name)])
+    except Exception as e:
+        log_error('Planche animée',e);return False
+    scene['clip']=name;scene['still']=True;scene['engine_exhausted']=False
+    event(j,f'Clip {i+1} : planche animée à la place du clip (Flow et Grok en échec).');return True
+
 def schedule_clips(j):
     """Clips stage. Returns True while clips remain to make (queued, in flight or set aside); False when every clip is in.
     One clip first (unchanged rules: switch, wait for credits); then, with Flow and the automatic switch, more clips at
@@ -1270,8 +1289,16 @@ def schedule_clips(j):
     if not todo:
         if active:return True
         if held:
-            if j['status']=='running':j['status']='attention';alert(j,'action',held_message(j))
-            return True
+            # 0.1.102 (owner: « ça doit continuer jusqu'à la fin sans arrêt »): a clip neither Flow nor Grok could make is
+            # replaced by its board, slowly zoomed, and the montage goes on. Said in the banner; « Refaire » still works.
+            # A Flow clip maybe already generated and charged keeps the owner's check (recovery or « il n'existe pas »).
+            doubt={int(t['slot'].split(':')[1]) for t in uncertain_clip_tasks(j)}
+            stills=[i for i in sorted(held) if i not in doubt and still_clip(j,i)]
+            if stills:
+                alert(j,'auto','Clip(s) '+', '.join(str(i+1) for i in stills)+' : Flow et Grok ont échoué, la planche animée les remplace pour finir la vidéo. Refais-les ou importe un clip si tu veux mieux.')
+            if held_clips(j):
+                if j['status']=='running':j['status']='attention';alert(j,'action',held_message(j))
+                return True
         return False
     if not active:
         schedule_clip(j,todo.pop(0))
@@ -1715,7 +1742,8 @@ def schedule_quality(j):
         else:
             j['status']='attention';alert(j,'action','Paroles à vérifier : scène(s) '+(', '.join(low) or '?')+' sous 85 %. Écoute-les, puis « J’ai écouté les dialogues » ou « Boucle complète » pour laisser le studio décider.');return
     visual=report.get('visual')
-    if not visual and j['config'].get('clip_look')=='ear':
+    # 0.1.102: no ChatGPT look at the clips unless the owner asks for it (« Les regarder aussi »): about 40 min saved.
+    if not visual and j['config'].get('clip_look',STATE.get('settings',{}).get('clip_look','ear'))!='look':
         # "À l'oreille seulement": no ChatGPT look at the clips; said plainly in the report, never shown as checked.
         visual=report['visual']={'skipped':True,'scenes':[{'index':i,'status':'pass','detail':'Non regardé : contrôle à l’oreille seulement (réglage du propriétaire).'} for i in range(len(j['scenes']))],
                                  'continuity':{'status':'pass','detail':'Non regardée : contrôle à l’oreille seulement.'}}
@@ -1797,6 +1825,10 @@ def edit_script(j,changes):
 def store_script(j,s):
     if s.get('production_id') and s['production_id']!=j['id']:raise ValueError('Ce scénario appartient à une autre production')
     identical=is_identical(j)
+    if isinstance(s,dict):
+        # 0.1.102: scenes a little too long are shortened here, no rewrite asked to the AI (5 to 7 min each).
+        fixed=editorial.fit_dialogue(s,engines.word_limit(j))
+        if fixed:j.setdefault('events',[]);event(j,'Répliques raccourcies par le studio (scène(s) '+', '.join(map(str,fixed))+') pour tenir dans les clips, sans réécriture.')
     validate_script(s,j['config']['scene_count'],check_size=not identical,words=max(25,engines.word_limit(j)))
     if identical:
         # Faithful remake: no concept comparison, no novelty check against the history; only what fits in the clips.

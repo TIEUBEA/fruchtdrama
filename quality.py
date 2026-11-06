@@ -79,6 +79,7 @@ def analyse(j,folder):
             'limits':['La transcription peut se tromper, surtout sur les noms propres.','Identité du locuteur et synchronisation des lèvres non certifiées automatiquement.']}
     for i,scene in enumerate(j['scenes']):
         result=technical(folder/scene['clip'],engines.clip_range(j,scene),(j.get('config') or {}).get('format')=='horizontal');report['clips'].append(result)
+        if scene.get('still'):result['hard_errors']=[x for x in result['hard_errors'] if 'silencieux' not in x]  # board without voice, on purpose
         report['hard_errors'] += [f"Scène {i+1} : {x}" for x in result['hard_errors']]
         report.setdefault('notes',[]).extend(f"Scène {i+1} : {x}" for x in result.get('notes',[]))
         # Actual sampled frames, never the generated input still presented as clip evidence.
@@ -86,7 +87,8 @@ def analyse(j,folder):
         run=subprocess.run([shutil.which('ffmpeg') or 'ffmpeg','-v','error','-y','-i',str(folder/scene['clip']),'-vf','fps=1/2,scale=288:-1,tile=4x1','-frames:v','1',str(folder/sheet)],capture_output=True,text=True,timeout=60)
         if run.returncode:report['hard_errors'].append(f'Scène {i+1} : extraction des images de contrôle impossible.')
         else:result['sheet']=sheet
-    if not report['hard_errors']:
+    # 0.1.102: the transcription only places the subtitles; without subtitles it is skipped (2 to 5 min saved).
+    if not report['hard_errors'] and (j.get('config') or {}).get('subtitles',True):
         try:
             speech=transcribe_all(j,folder)
             for i,result in enumerate(speech):

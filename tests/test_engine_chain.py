@@ -128,11 +128,13 @@ class ChainScheduleTests(unittest.TestCase):
         t = queued(j)[0]; self.assertEqual((t['slot'], engine_of(t)), ('clip:1', 'flow')); self.assertEqual(j['status'], 'running')
         for k in (1, 2, 3):
             deliver(j, next(x for x in queued(j) if x['slot'] == f'clip:{k}'))
-        self.assertEqual(j['status'], 'attention'); self.assertEqual(queued(j), [])
-        self.assertTrue(j['alerts'][-1]['text'].startswith('1 clip(s) en échec : Clip 1 : Flow'), j['alerts'][-1]['text'])
-        self.assertEqual([x['index'] for x in s.failed_clips(j)], [0])
-        self.assertEqual(j['stage'], 'clips', 'the montage waits for every clip')
+        # 0.1.102: no stop at the end; the board, slowly zoomed, stands in for the clip and the episode goes on.
+        self.assertNotEqual(j['status'], 'attention'); self.assertEqual(queued(j), [])
+        self.assertTrue(j['scenes'][0]['still']); self.assertTrue((s.job_dir(j) / j['scenes'][0]['clip']).is_file())
+        self.assertIn('planche animée', j['alerts'][-1]['text']); self.assertEqual(j['alerts'][-1]['level'], 'auto')
+        self.assertEqual(s.failed_clips(j), []); self.assertNotEqual(j['stage'], 'clips')
         # « Refaire » with the owner's instruction: Flow first again.
+        j['status'] = 'done'; s.BUSY.discard(j['id'])  # the (test) montage ends; « Refaire » then works as before
         s.redo(j, 'clip:0', 'sans bagarre')
         t = queued(j)[0]; self.assertEqual((t['slot'], engine_of(t)), ('clip:0', 'flow'))
         self.assertIn('sans bagarre', t['payload']['prompt'])
