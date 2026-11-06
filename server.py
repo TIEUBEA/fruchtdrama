@@ -1167,7 +1167,7 @@ def schedule_images(j):
         else:
             if not board_gate(j):
                 # Every board drawn and validated: the clips stage waits for a clip still in progress, then goes on.
-                j['stage']='clips';j.pop('early_clips_off',None);schedule(j);return
+                j['stage']='clips';j.pop('early_clips_off',None);j['alerts']=[a for a in j.get('alerts',[]) if a.get('stage')!='images'];schedule(j);return
     if j['stage']=='images' and (j['status']=='running' or (j['status']=='waiting_quota' and j.get('quota_lane')=='chat')):early_clip(j)
 
 def board_ready(j,i):
@@ -1664,7 +1664,8 @@ def accept_task_result(t,result):
             # A clip sent ahead failed: the boards go on (ChatGPT is not blocked by Flow); the clips wait for the clips
             # stage, where a possibly sent clip is checked by the owner before anything is sent again.
             j['early_clips_off']=True;j['status']='running'
-            alert(j,'action','Clip '+str(int(t['slot'].split(':')[1])+1)+' en échec ('+str(result.get('error',''))[:120]+'). Les planches continuent ; vérifie le projet Flow avant que les clips reprennent.')
+            alert(j,'action','Clip '+str(int(t['slot'].split(':')[1])+1)+' en échec ('+str(result.get('error','')).split(' : ')[0][:120]+'). Les planches continuent ; vérifie le projet Flow avant que les clips reprennent.')
+            j['alerts'][-1]['stage']='images'  # said for the boards stage only: dropped when the clips stage starts
             schedule(j)
         return
     slot=t['slot']

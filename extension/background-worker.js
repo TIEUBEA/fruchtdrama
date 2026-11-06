@@ -475,7 +475,16 @@ async function runLane(lane){
   }
   claimed=await call('/api/bridge/task?client='+encodeURIComponent(cfg.client)+'&lane='+(lane==='chat'?'chat':'video'));if(!claimed)return;
   // The task is followed under this lane's key, whatever its kind (an older studio may ignore lane).
-  await begin(claimed,await tabForTask(claimed,cfg,key),cfg,key);
+  // A tab closed under the task before anything was sent (real case 06/11/2026 13:10 « No tab with id ») : open a
+  // fresh one and try once more, instead of stopping the episode. Never after a submission.
+  for(let attempt=0;;attempt++){
+   try{await begin(claimed,await tabForTask(claimed,cfg,key),cfg,key);break;}
+   catch(e){
+    const saved=(await chrome.storage.local.get(key))[key];
+    if(attempt>0||!/No tab with id|Tab .* not found|No tab with given id/i.test(e.message)||saved?.submitted||saved?.submissionIntent===true)throw e;
+    await chrome.storage.local.remove(['flowTab']);
+   }
+  }
  }catch(e){
   const active=cfg?.[key]||(await chrome.storage.local.get(key))[key];
   const task=claimed||active?.task;
