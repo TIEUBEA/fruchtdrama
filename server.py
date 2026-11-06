@@ -27,7 +27,7 @@ import maintenance
 import series
 import licence
 import readiness
-VERSION='0.1.99'
+VERSION='0.1.100'
 OFFICIAL_ORIGIN='chrome-extension://bhdmibhibonmaamgcbpmbhedhohfongj'  # extension/manifest.json "key"
 import sys
 import traceback
@@ -314,6 +314,7 @@ def event_all(text):
 def alert(j,level,text):
     # Shown as a banner at the top of the episode: 'action' = the owner must act, 'auto' = decided alone, to check.
     event(j,text);alerts=j.setdefault('alerts',[]);alerts.append({'at':now(),'level':level,'text':text});del alerts[:-6]
+CHAT_RETRIES=2  # automatic new tries of a failed text or board before the episode stops
 STALL_ONLINE=180  # seconds without a heartbeat: the FruchtDrama window is considered gone
 STALL_QUIET={'chat_text':10,'chat_collect':5,'chat_image':5,'chat_image_collect':4,'research':8,'flow_video':10,'engine_video':8}  # minutes : past this, « Bloqué » in bold (owner 06/11/2026: never let a stalled step look like it runs)
 SERVICE={'chatgpt':'ChatGPT','claude':'Claude'}
@@ -1869,6 +1870,14 @@ def accept_task_result(t,result):
             if old:old['recover_tries']=old.get('recover_tries',0)+1
             j['status']='running';event(j,'Clip '+str(int(t['slot'].split(':')[1])+1)+' : clip Flow existant non récupéré ('+engine_chain.short(result.get('error',''))+'). La production continue.')
             schedule(j);return
+        # 0.1.99 (owner: « ça doit continuer jusqu'à la fin sans arrêt »): a text or board that fails (frozen tab, page
+        # not loaded…) is asked again twice at once; no Flow credit is at stake. Quotas and refusals keep their own path.
+        # An image already drawn but not read yet keeps its recovery path (recoverable-media): nothing is drawn twice.
+        if lane_of(t)=='chat' and kind in errors.RETRYABLE and not result.get('not_ready') and not re.search(r'pas encore charg',str(result.get('error',''))) and not was_paused:
+            tries=j.setdefault('chat_retries',{});n=tries.get(t['slot'],0)+1
+            if n<=CHAT_RETRIES:
+                tries[t['slot']]=n;t['status']='failed';j['status']='running'
+                event(j,'« '+str(t['slot'])+' » : '+str(result.get('error',''))[:140]+' Nouvel essai automatique '+str(n)+' sur '+str(CHAT_RETRIES)+'.');schedule(j);return
         t['status']='failed'; j['status']='paused' if was_paused else 'attention'; event(j,errors.message(kind,result.get('error')))
         name=quotas.service(t)
         if kind=='quota' and name and not was_paused:

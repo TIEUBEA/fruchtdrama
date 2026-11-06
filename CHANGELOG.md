@@ -5,6 +5,13 @@ correspondante (P0-xx, P1-x, P2-xx) détaillée dans `docs/sudf/`. Guide pour re
 `docs/sudf/REPRISE.md`. **Mode d'emploi détaillé** (installer, lancer, utiliser), mis à jour à chaque
 version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, version par version).
 
+## 0.1.100 (06/11/2026)
+
+**Corrigé**
+- Les 3 nouvelles vidéos ne bougeaient plus depuis 22:04 : l'onglet ChatGPT d'une planche ne répondait plus, et l'extension l'attendait sans fin. Au bout de 4 min, la voie ChatGPT rend maintenant la tâche au studio et passe à la suivante.
+- Une étape ChatGPT en échec (onglet figé, page pas chargée…) arrêtait l'épisode. Elle est maintenant redemandée 2 fois automatiquement avant tout arrêt. La connexion et la vérification anti-robot restent à faire par toi.
+- Version 0.1.100 : l'extension restée en 0.1.98 se met à jour toute seule.
+
 ## 0.1.99 (06/11/2026)
 
 **Corrigé**
