@@ -37,6 +37,21 @@ globalThis.FruchtReadiness={
    ready:['interactive','complete'].includes(doc.readyState)};
  },
  hostOf(url){try{return new URL(url).hostname;}catch{return '';}},
+ // Real page 06/11/2026: arena.ai (Next.js / React 19) opened in a background tab stays an empty skeleton (body text
+ // empty, « Page vide ou bloquée ») because React reveals its streamed content on requestAnimationFrame, which Chrome
+ // never fires in a hidden tab. In the page's own world, while the tab is hidden, animation frames become short timers
+ // and the content already received is shown. Display only: nothing is typed, clicked or sent.
+ // A plain function (not a method shorthand): chrome.scripting sends its source text to the page.
+ revealHidden:function(){
+  if(!window.__fruchtRaf){
+   window.__fruchtRaf=true;const raf=window.requestAnimationFrame.bind(window),caf=window.cancelAnimationFrame.bind(window),timers=new Set();
+   window.requestAnimationFrame=function(cb){if(!document.hidden)return raf(cb);const id=setTimeout(()=>{timers.delete(id);cb(performance.now());},16);timers.add(id);return id;};
+   window.cancelAnimationFrame=function(id){if(timers.has(id)){timers.delete(id);clearTimeout(id);}else caf(id);};
+  }
+  if(document.hidden&&Array.isArray(window.$RB)&&window.$RB.length&&typeof window.$RV==='function')window.$RV(window.$RB);
+  return true;
+ },
+ async reveal(chrome,tabId){try{await chrome.scripting.executeScript({target:{tabId},world:'MAIN',func:this.revealHidden});}catch{}},
  async probeTab(chrome,tabId,name){
   await chrome.scripting.executeScript({target:{tabId},files:['composer.js','sites.js','flow-session.js','readiness.js']});
   const [r]=await chrome.scripting.executeScript({target:{tabId},func:n=>globalThis.FruchtReadiness.read(document,n),args:[name]});
@@ -49,7 +64,7 @@ globalThis.FruchtReadiness={
    let current;try{current=await chrome.tabs.get(tab.id);}catch{return {verdict:{state:'fix',reason:'Onglet fermé pendant la vérification'},info};}
    const host=this.hostOf(current.url||current.pendingUrl);
    info={kind:name==='flow'?'flow':'site',name,host,expectedHosts:this.HOSTS[name],unavailable:/\/unavailable(?:[/?#]|$)/.test(current.url||''),...extra};
-   if(this.HOSTS[name].includes(host)&&!info.unavailable){try{Object.assign(info,await this.probeTab(chrome,tab.id,name));}catch{}}
+   if(this.HOSTS[name].includes(host)&&!info.unavailable){if(name!=='flow')await this.reveal(chrome,tab.id);try{Object.assign(info,await this.probeTab(chrome,tab.id,name));}catch{}}
    verdict=this.classify(info);
    if(verdict.state!=='fix'||info.challenge||(k>=2&&!this.HOSTS[name].includes(host)))break;
    await wait(3000);

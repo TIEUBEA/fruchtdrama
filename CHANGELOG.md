@@ -9,6 +9,24 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 
 
+## 0.1.96 (06/11/2026)
+Cas réel du 06/11 à 15 h 36 : Arena « Page vide ou bloquée » puis Grok « champ d'image introuvable ». Corrigé en regardant les vraies pages (Chrome invisible, profil du propriétaire).
+
+**Corrigé**
+- **Arena vide en arrière-plan** : arena.ai (React 19) ne montre son contenu qu'à la première image d'animation, que Chrome ne donne jamais à un onglet caché ; la page restait un squelette sans texte pendant 90 s. L'extension affiche maintenant le contenu déjà reçu (dans la page, uniquement pendant que l'onglet est caché ; rien n'est tapé ni envoyé). Même chose dans « Préparer mes comptes ».
+- **Grok : mauvais champ d'image** : /imagine a trois champs fichier cachés ; les deux premiers appartiennent aux cartes « Text Edit » et « Precise Edit » et lancent un autre outil. Le connecteur prend le champ du formulaire de saisie, attend « Remove image » (planche importée) avant d'écrire le prompt.
+- **Onglet réutilisé sur une autre page** (conversation Grok, ancien /imagine/post, conversation Arena /c/…) : Grok et Arena repartent d'une page rechargée pour chaque clip, comme Vidogrid.
+- **Import d'image impossible sur Grok et Arena** : `h.atob` non lié levait « Illegal invocation » dans Chrome. Corrigé dans runner.js.
+- **Arena : « Video ▾ » est un menu**, pas un bouton de mode : il n'est plus cliqué. Bouton d'envoi « Send message » reconnu.
+- **Vidéo Arena jamais détectée** : les clips (preload « none ») et ceux d'un onglet caché ne se chargent pas ; une adresse https .mp4 suffit. Le clip de promotion d'Arena est ignoré. Le fichier, sur un stockage qui refuse les lectures avec cookies, est relu sans cookies.
+- **Arena en mode Battle** : un des deux modèles peut échouer (« Something went wrong with this response ») pendant que l'autre livre : on prend le clip livré ; si les deux échouent, le clip passe au moteur suivant.
+
+**Ajouté**
+- **Limite Grok lue avant l'envoi** : le bouton « 100% credits used » du formulaire → « quota », rien n'est envoyé, le clip passe au moteur suivant. Le message réel après envoi (« You've hit your weekly limit · Resets November 7 ») est aussi reconnu, avec la date de reprise.
+
+**Modifié**
+- Délai Arena après envoi : 40 min (essai réel : 34 min de « Generating video... » avant le clip ; 7 min abandonnait toujours trop tôt). Alerte « aucune nouvelle » des moteurs vidéo à 45 min.
+
 ## 0.1.95.1 (06/11/2026)
 - Grok n'est jamais utilisé sans l'accord du propriétaire (gros consommateur) : quand Flow, Arena et Vidogrid échouent, l'épisode propose « Utiliser Grok pour cet épisode ». Ordre : Flow → Arena → Vidogrid → (Grok sur validation).
 - Téléchargements Flow un par un : deux clips finis à la même seconde ne pouvaient pas être distingués (clips 6 et 9 générés mais non rangés, importés à la main).
