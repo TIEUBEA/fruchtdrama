@@ -3003,11 +3003,19 @@ def recover_after_restart():
             # P4-1: bounded state, with a copy kept before any cleanup.
             maintenance.backup_state(DATA,STATE);maintenance.purge(STATE,time.time())
         except Exception as e:log_error('Purge au démarrage',e)
-        # Never automatically resend an ambiguous generation after a restart.
+        # 0.1.99 (owner 06/11/2026: « ça doit continuer jusqu'à la fin sans arrêt »): a studio restart no longer stops
+        # anything. A task in progress stays with the FruchtDrama window, which keeps following its tab and delivers the
+        # result; nothing is sent again. A window that is gone is handled by release_dead_chat and the stall banner.
         for t in STATE['tasks']:
             if t['status']=='claimed':
-                t['status']='failed'; j=job_by(t['job']); j['status']='attention'; event(j,'Redémarrage : génération précédente à vérifier avant de réessayer.')
-                j['last_error']={'kind':'restart','slot':t.get('slot'),'task':t.get('id'),'at':now()}
+                j=job_by(t['job'])
+                if j:event(j,'Studio redémarré : « '+str(t.get('slot'))+' » continue dans son onglet, rien n’est renvoyé.')
+        # Episodes stopped by an earlier restart on a text or a board (no Flow credit at stake) start again by themselves.
+        tasks={t['id']:t for t in STATE['tasks']}
+        for j in STATE['jobs']:
+            err=j.get('last_error') or {}
+            if j.get('status')=='attention' and err.get('kind')=='restart' and lane_of(tasks.get(err.get('task')) or {})=='chat':
+                j['status']='running';j['last_error']=None;event(j,'Reprise automatique après le redémarrage du studio.');schedule(j)
         for j in STATE['jobs']:
             if j.get('status')=='waiting_source':threading.Thread(target=prepare_source,args=(j['id'],),daemon=True).start()
         for j in STATE['jobs']:
