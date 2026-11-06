@@ -10,6 +10,8 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 **Corrigé**
 - Trois vidéos lancées en même temps n'avançaient pas pendant 30 min : une seule voie ChatGPT servait tous les épisodes, et chaque scénario attendait la fin du précédent. L'extension ouvre maintenant jusqu'à 3 voies ChatGPT. Chacune travaille sur un épisode différent, dans son propre onglet.
 - « Contrôle qualité bloquant : Durée incompatible avec le moteur vidéo » après un clip remplacé à la main (10 s au lieu de 8 s). Une durée différente ne bloque plus : elle est notée dans le journal, et le clip garde sa vraie longueur au montage. Seule une durée inutilisable bloque : moins de 2 s ou plus de 16 s. Les anciens contrôles bloqués pour cette raison sont refaits.
+- « Redémarrage : génération précédente à vérifier » arrêtait les épisodes à chaque redémarrage du studio. Le travail en cours reste maintenant dans son onglet et continue, sans rien renvoyer. Les épisodes déjà arrêtés ainsi sur un texte ou une planche repartent seuls.
+- La mise à jour automatique de l'extension est retentée toutes les 10 min, au lieu d'une seule fois.
 
 ## 0.1.98 (06/11/2026)
 - Grok aussi en clips de 10 s : le connecteur choisit « Video duration › 10s » (Grok s'ouvre sur 6 s ; 6/10/15 s vus sur la vraie page). Flow et Grok font donc des plans de 10 s, vidéo d'au moins 1 min.

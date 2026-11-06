@@ -82,7 +82,7 @@ class MontageRecoveryTests(Base):
         s.recover_after_restart()
         self.assertEqual(self.renders, [rendering['id']]); self.assertEqual(rendering['status'], 'rendering')
         self.assertIn('Redémarrage pendant le montage', rendering['events'][-2]['text'])
-        self.assertEqual(done['status'], 'done'); self.assertEqual(t['status'], 'failed'); self.assertEqual(claimed['status'], 'attention')
+        self.assertEqual(done['status'], 'done'); self.assertEqual(t['status'], 'claimed', '0.1.99: the clip stays with its window, nothing sent again'); self.assertEqual(claimed['status'], 'running')
         self.assertTrue((pathlib.Path(TEMP.name) / 'state.json').is_file(), 'recovery is persisted')
 
 

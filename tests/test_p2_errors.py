@@ -107,7 +107,13 @@ class BridgeTests(unittest.TestCase):
         self.report(t, {'ok': True, 'file': '../evil.png'})
         self.assertEqual(j['last_error']['kind'], 'other')
         j2 = job(); j2['status'] = 'running'; s.schedule(j2); self.claim()
-        s.recover_after_restart(); self.assertEqual(j2['last_error']['kind'], 'restart')
+        t2 = s.STATE['tasks'][-1]
+        # 0.1.99: a restart never stops the episode; the task stays with its window.
+        s.recover_after_restart(); self.assertEqual(t2['status'], 'claimed'); self.assertEqual(j2['status'], 'running')
+        # An episode stopped by an older restart on a text or board starts again by itself.
+        j3 = job(); j3['status'] = 'running'; s.schedule(j3); t3 = self.claim(); t3['status'] = 'failed'
+        j3['status'] = 'attention'; j3['last_error'] = {'kind': 'restart', 'task': t3['id']}
+        s.recover_after_restart(); self.assertEqual(j3['status'], 'running'); self.assertFalse(j3['last_error'])
 
 
 if __name__ == '__main__':
