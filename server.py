@@ -1298,7 +1298,9 @@ def store_script(j,s):
         # Faithful remake: no concept comparison, no novelty check against the history; only what fits in the clips.
         # Like the Atelier, every defect is listed in one refusal: one rewrite fixes them all (one per refusal cost 5 min each).
         problems=size_problems(s['characters'])
-        limit=engines.word_limit(j)
+        # The prompt asks for word_limit; the refusal only falls past 3 words a second (the Atelier refuses 22 words in 6 s,
+        # not 21): a rewrite costs 5 to 7 min, one word over is not worth it.
+        limit=max(engines.word_limit(j),int(3*engines.spec(j)['seconds']))
         for i,scene in enumerate(s['scenes']):
             lines=scene.get('dialogue',[]);words=sum(len(x['text'].split()) for x in lines)
             if len(lines)>2 or words>limit:

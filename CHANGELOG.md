@@ -9,6 +9,8 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 ## 0.1.88 (06/11/2026)
 **Corrigé**
 - Recréation à l'identique : un scénario refusé listait un seul défaut à la fois ; chaque réécriture (5 à 7 min) en révélait un autre et l'épisode tombait en « Action requise » au 3ᵉ refus. Tous les défauts (mots de taille, scènes trop parlées) sont maintenant listés dans un seul refus, comme l'Atelier.
+- Recréation à l'identique : la consigne reste à 20 mots par clip de 8 s, mais le refus ne tombe qu'au-delà de 3 mots par seconde (24 mots), comme l'Atelier ; un mot de trop ne coûte plus une réécriture de 7 min.
+- Reprendre un épisode bloqué au scénario redonne ses 3 réécritures automatiques.
 - La consigne d'écriture interdit d'avance les mots de taille dans le détail et la tenue des personnages (avant, seul le contrôle les refusait).
 
 **Ajouté**

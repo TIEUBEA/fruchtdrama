@@ -47,6 +47,13 @@ class RichPlanTests(unittest.TestCase):
         self.assertIn('immenses', str(e.exception))
         self.assertIn('Scène 1 : 1 réplique(s) et 30 mots', str(e.exception))
 
+    def test_identical_remake_tolerates_one_word_over_the_prompt_limit(self):
+        ok = script()
+        ok['scenes'][0]['dialogue'] = [{'speaker': 'a', 'text': 'mot ' * 21}]
+        j = {'id': 'x', 'events': [], 'selected': {'source': 'owner_link'}, 'config': {'recreate': 'identical', 'scene_count': 1}}
+        s.store_script(j, ok)
+        self.assertEqual(j['stage'], 'characters')
+
     def test_rich_fields_reach_image_and_clip_prompts(self):
         j = {'characters': [{'id': 'a', 'name': 'Pomette', 'tenue': 'robe jaune', 'detail': 'mèche blanche', 'place': 'À GAUCHE'}, {'id': 'b', 'name': 'Bananito'}],
              'script': {'lieu': 'Ville la nuit', 'lieux': {'RESTO': 'Façade chic'}}}
