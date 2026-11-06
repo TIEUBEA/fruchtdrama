@@ -15,14 +15,17 @@ function showAccountsBlock(list){accountsBlock={list:list||[],at:Date.now()};if(
 // One line per account of a service: {key, email, label, tone, text, reason, fix, del}
 function accountRows(svc){const R=accReady(),pending=new Set(R.pending||[]),now=Date.now()/1000;
  if(svc==='flow'){const cost=Number(state.settings?.flow_cost||12);
-  return (state.profiles||[]).filter(p=>p.flow_email||p.label).sort((a,b)=>(a.slot??99)-(b.slot??99)).map(p=>{const r=p.readiness||{},key='flow:'+p.id;let tone,text,reason='';
+  // 0.1.95 (owner 06/11/2026): most credits first, empty then blocked at the bottom; « Compte N » is the account's own
+  // number (server account_usage.number_flow), so the journal's « compte 2 → compte 3 » still names the same accounts.
+  return (state.profiles||[]).filter(p=>p.flow_email||p.label).map(p=>{const r=p.readiness||{},key='flow:'+p.id;let tone,text,reason='',rank=0;
    if(pending.has(key)){tone='idle';text='Vérification…';}
-   else if(r.state==='fix'){tone='bad';text='À régler';reason=r.reason||'';}
-   else if(p.blocked==='unavailable'||r.state==='no_access'){tone='bad';text='Pas d’accès à Flow';}
-   else if((p.balance||0)<cost){tone='warn';text=p.refill_at?'Vide · recharge à '+accHH(p.refill_at):'Vide';}
+   else if(r.state==='fix'){tone='bad';text='À régler';reason=r.reason||'';rank=2;}
+   else if(p.blocked==='unavailable'||r.state==='no_access'){tone='bad';text='Pas d’accès à Flow';rank=2;}
+   else if((p.balance||0)<cost){tone='warn';text='Vide';reason=p.refill_at?'Recharge à '+accHH(p.refill_at):'Heure de recharge pas encore connue';rank=1;}
    else if(r.state==='ready'){tone='ok';text='Prêt';}
    else{tone='idle';text=p.flow_url?'Non vérifié':'À détecter';}
-   return {key,email:p.flow_email||p.label,tone,text,reason,credits:p.balance||0,fix:r.state==='fix',del:{profile:p.id}};});}
+   return {key,ukeys:[key],number:p.number,email:p.flow_email||p.label,tone,text,reason,rank,credits:p.balance||0,fix:r.state==='fix',del:{profile:p.id}};})
+   .sort((a,b)=>a.rank-b.rank||b.credits-a.credits||(a.number||99)-(b.number||99));}
  const session=(R.sites||{})[svc],seen=(state.sites||{})[svc]||{},live=session?.email||seen.email||null,key='site:'+svc;
  let emails=(state.identities||[]).filter(i=>(i.services||[]).includes(svc)).map(i=>i.email);
  const engine=['grok','arena','vidogrid'].includes(svc)?(state.engine_accounts||[]).filter(a=>a.engine===svc):[];
@@ -41,7 +44,38 @@ function accountRows(svc){const R=accReady(),pending=new Set(R.pending||[]),now=
   else if(session?.state==='fix'){tone='bad';text='À régler';reason=session.reason||'';}
   else if(session?.state==='ready'||(!session&&seen.connected)){tone='ok';text=session?'Prêt':'Connecté · non vérifié';}
   else{tone='bad';text='Pas connecté';}
-  return {key,email:row.email,tone,text,reason,fix:mine&&session?.state==='fix',del:row.email?(acc?{engine:acc.id}:{service:svc,email:row.email}):null};});}
+  const ukeys=[...(acc?['engine:'+svc+':'+acc.email]:[]),...(mine?['site:'+svc]:[])];
+  return {key,ukeys,email:row.email,tone,text,reason,fix:mine&&session?.state==='fix',del:row.email?(acc?{engine:acc.id}:{service:svc,email:row.email}):null};});}
+// « Utilisé maintenant » (0.1.95, owner 06/11/2026: « je ne sais pas quel compte est utilisé ») from STATE.usage:
+// in_use = tasks taken by the FruchtDrama window right now, last_used = when each account last took one.
+const accUsage=()=>state.usage||{in_use:[],last_used:{}};
+const accAgo=t=>{const m=Math.max(0,Math.floor((Date.now()/1000-t)/60));if(m<1)return 'à l’instant';if(m<60)return 'il y a '+m+' min';
+ if(m<1440)return 'il y a '+Math.floor(m/60)+' h'+(m%60?' '+String(m%60).padStart(2,'0'):'');return 'le '+new Date(t*1000).toLocaleDateString('fr-FR')+' à '+accHH(t);};
+const usageOf=svc=>accUsage().in_use.filter(u=>u.service===svc);
+const rowUses=r=>accUsage().in_use.filter(u=>(r.ukeys||[]).includes(u.key));
+const rowLast=r=>Math.max(0,...(r.ukeys||[]).map(k=>accUsage().last_used?.[k]||0));
+// « Compte 2 (ar•••5@example.com, 38 crédits) » for Flow, the address (or « compte de cette fenêtre ») for the others.
+function usageWho(u,svc){if(svc==='flow')return `<b>Compte ${u.number||'?'}</b> (${esc(accMask(u.email||''))}, ${u.credits} crédit${Math.abs(u.credits)>1?'s':''})`;
+ const live=u.email||(accReady().sites||{})[svc]?.email||(state.sites||{})[svc]?.email;return live?`<b>${esc(accMask(live))}</b>`:'<b>le compte de cette fenêtre</b>';}
+function usageBanner(svc,rows){const now=usageOf(svc);if(!now.length&&!rows.length)return '';  // no account: the empty line says it
+ if(now.length)return `<div class="acc-now on" role="status"><span class="acc-dot" aria-hidden="true"></span><div><b class="acc-now-t">Utilisé maintenant</b>${now.map(u=>`<p>${usageWho(u,svc)} · ${esc(u.what)}${u.since?` <small>depuis ${accHH(Date.parse(u.since)/1000)}</small>`:''}</p>`).join('')}</div></div>`;
+ const last=rows.map(r=>[r,rowLast(r)]).filter(([,t])=>t).sort((a,b)=>b[1]-a[1])[0];
+ if(!last)return `<div class="acc-now"><span>Pas utilisé en ce moment.</span></div>`;
+ const [r,t]=last,who=svc==='flow'?`compte ${r.number||'?'} (${esc(accMask(r.email))})`:r.email?esc(accMask(r.email)):'le compte de cette fenêtre';
+ return `<div class="acc-now"><span>Pas utilisé en ce moment · dernier : ${who}, ${accAgo(t)}.</span></div>`;}
+// Episode page (0.1.95): « IA : Flow · compte 2 (ar•••5@example.com, 38 crédits) » or « IA : ChatGPT » for each task at work.
+function usageAI(u){if(u.service==='flow')return `Flow · compte ${u.number||'?'} (${accMask(u.email||'')}, ${u.credits} crédit${Math.abs(u.credits)>1?'s':''})`;
+ return (ENGINE_NAMES[u.service]||u.label)+(u.email?' · '+accMask(u.email):'');}
+const TRACK_OF=slot=>{slot=String(slot||'');return slot.startsWith('clip:')?3:slot.startsWith('image:')||slot==='board_review'?2:slot.startsWith('character')||slot.startsWith('state:')?1:['cover','cover_review','quality_review','rewrite_meta'].includes(slot)?4:0;};
+function trackAI(j,i){const rows=accUsage().in_use.filter(u=>u.job===j.id&&TRACK_OF(u.slot)===i);if(!rows.length)return '';
+ return `<div class="track-ai">${rows.map(u=>`<p><span class="acc-dot" aria-hidden="true"></span><span>${esc(u.short||u.what)} · <b>IA : ${esc(usageAI(u))}</b></span></p>`).join('')}</div>`;}
+// Under a received clip: the engine and the account that made it (scenes[i].engine since 0.1.93, .account since 0.1.95).
+function madeBy(s,full){if(!s?.clip||!s.engine)return '';const name=ENGINE_NAMES[s.engine]||s.engine,a=s.account||{};
+ if(s.engine==='flow'){const p=(state.profiles||[]).find(x=>x.id===a.profile);const n=p?.number;return name+(n?' · compte '+n:'')+(full&&a.email?' ('+accMask(a.email)+')':'');}
+ return name+(full&&a.email?' · '+accMask(a.email):'');}
+// Top of Mes comptes: every account working right now, in one glance.
+function usageSummary(){const all=accUsage().in_use;if(!all.length)return '';
+ return `<section class="panel acc-live-sum" role="status"><h2><span class="acc-dot" aria-hidden="true"></span>En ce moment</h2><ul>${all.map(u=>`<li><span class="acc-ai">${esc(u.label)}</span>${usageWho(u,u.service)}<span class="acc-what">${esc(u.what)}</span></li>`).join('')}</ul></section>`;}
 // Sidebar subtitle: the real state (real case 06/11/2026 12:46: « tout est prêt » while Flow blocked the episode).
 function accountsSummary(){if(!state)return '';if((state.setup||[]).length)return 'ajoute tes comptes';
  const all=ACC_SERVICES.flatMap(([k])=>accountRows(k)),fix=all.filter(r=>r.text==='À régler'||r.text==='Pas d’accès à Flow').length;
@@ -58,11 +92,13 @@ function accountsHome(){const R=accReady(),checked=R.checked?new Date(R.checked)
  const block=([svc,name,needed,role])=>{const rows=accountRows(svc);  // every block shown: the clip engines are all in the order (0.1.93)
   const add=svc==='flow'?`<button class="primary big" data-add-google="1">+ Ajouter un compte</button>`:`<button class="primary big" data-site-open="${svc}">+ Ajouter un compte</button>`;
   const verify=svc==='flow'?`<button class="secondary" data-acc-verify="flow">Vérifier</button>`:`<button class="secondary" data-ready-recheck="site:${svc}">Vérifier</button>`;
-  const line=r=>`<li class="acc-row"><span class="acc-mail">${r.email?esc(accMask(r.email)):'Compte de cette fenêtre'}</span>${svc==='flow'?`<span class="acc-credits">${r.credits} crédits</span>`:''}<span class="acc-state">${pill(r.tone,r.text)}${r.reason?`<small>${esc(r.reason)}</small>`:''}</span><span class="acc-act">${r.fix?`<button class="primary" data-ready-fix="${r.key}">Régler maintenant</button><button class="secondary" data-ready-recheck="${r.key}">C’est fait</button>`:''}${r.del?`<button class="link-btn danger" data-acc-del='${esc(JSON.stringify(r.del))}' data-acc-name="${esc(accMask(r.email||''))}">Supprimer</button>`:''}</span></li>`;
-  return `<section class="panel acc-service"><div class="acc-head"><div><h2>${name} <span class="tag">${needed?'NÉCESSAIRE':'FACULTATIF'}</span></h2><p class="hint">${role}</p></div><div class="acc-buttons">${add}${verify}</div></div>
-<ul class="acc-list">${rows.map(line).join('')||`<li class="acc-empty">Aucun compte. Clique « + Ajouter un compte », connecte-toi dans l’onglet qui s’ouvre, reviens ici et clique « Vérifier ».</li>`}</ul>${rows.some(r=>r.del)&&rows.length>1?`<div class="acc-foot"><button class="link-btn danger" data-acc-del-all="${svc}" data-acc-name="${name}">Tout supprimer</button></div>`:''}</section>`;};
+  const line=r=>{const uses=rowUses(r),last=rowLast(r);
+   const use=uses.length?`<span class="acc-use live">En cours</span><small class="acc-what">${uses.map(u=>esc(u.what)).join(' · ')}</small>`:last?`<small class="acc-last">Dernier utilisé ${accAgo(last)}</small>`:'';
+   return `<li class="acc-row${uses.length?' live':''}"><span class="acc-mail">${svc==='flow'?`<span class="acc-num">Compte ${r.number||'?'}</span>`:''}${r.email?esc(accMask(r.email)):'Compte de cette fenêtre'}</span>${svc==='flow'?`<span class="acc-credits${r.credits<Number(state.settings?.flow_cost||12)?' low':''}"><b>${r.credits}</b> crédit${Math.abs(r.credits)>1?'s':''}</span>`:''}<span class="acc-state">${pill(r.tone,r.text)}${r.reason?`<small>${esc(r.reason)}</small>`:''}${use}</span><span class="acc-act">${r.fix?`<button class="primary" data-ready-fix="${r.key}">Régler maintenant</button><button class="secondary" data-ready-recheck="${r.key}">C’est fait</button>`:''}${r.del?`<button class="link-btn danger" data-acc-del='${esc(JSON.stringify(r.del))}' data-acc-name="${esc(accMask(r.email||''))}">Supprimer</button>`:''}</span></li>`;};
+  return `<section class="panel acc-service${usageOf(svc).length?' in-use':''}"><div class="acc-head"><div><h2>${name} <span class="tag">${needed?'NÉCESSAIRE':'FACULTATIF'}</span></h2><p class="hint">${role}</p></div><div class="acc-buttons">${add}${verify}</div></div>
+${usageBanner(svc,rows)}<ul class="acc-list">${rows.map(line).join('')||`<li class="acc-empty">Aucun compte. Clique « + Ajouter un compte », connecte-toi dans l’onglet qui s’ouvre, reviens ici et clique « Vérifier ».</li>`}</ul>${rows.some(r=>r.del)&&rows.length>1?`<div class="acc-foot"><button class="link-btn danger" data-acc-del-all="${svc}" data-acc-name="${name}">Tout supprimer</button></div>`:''}</section>`;};
  return `<div class="intro"><div><h1>Mes comptes</h1><p>Ajoute tes comptes une fois, ici. Le studio les vérifie avant chaque vidéo, sans rien dépenser. Aucun mot de passe gardé.</p></div><button class="primary big" data-ready-prepare="1">${ico('refresh')} Préparer mes comptes</button></div>
-<p class="hint acc-checked">${running?'Vérification en cours dans la fenêtre FruchtDrama…':checked?'Dernière vérification : '+checked+'.':'Pas encore vérifié.'}</p>`+accountsWelcome()+engineOrderBlock()+ACC_SERVICES.map(block).join('');}
+<p class="hint acc-checked">${running?'Vérification en cours dans la fenêtre FruchtDrama…':checked?'Dernière vérification : '+checked+'.':'Pas encore vérifié.'}</p>`+usageSummary()+accountsWelcome()+engineOrderBlock()+ACC_SERVICES.map(block).join('');}
 document.addEventListener('click',async e=>{const b=e.target.closest?.('[data-engine-up],[data-ready-prepare],[data-ready-fix],[data-ready-recheck],[data-acc-verify],[data-acc-del],[data-acc-del-all],[data-acc-dismiss],[data-wall-wait]');if(!b)return;e.stopImmediatePropagation();
  try{
   if(b.dataset.engineUp){const o=engineOrder().slice(),i=o.indexOf(b.dataset.engineUp);if(i>0){[o[i-1],o[i]]=[o[i],o[i-1]];await api('/api/settings',{engine_chain:o});await refresh(true);toast('Ordre des moteurs : '+o.map(e=>ENGINE_NAMES[e]).join(' › '));}return}

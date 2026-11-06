@@ -15,6 +15,7 @@ import montage, source_video
 import story_backup
 import board_check
 import engine_accounts
+import account_usage
 import identities, flow_refill
 import ideas
 import thumbs
@@ -26,7 +27,7 @@ import maintenance
 import series
 import licence
 import readiness
-VERSION='0.1.94'
+VERSION='0.1.95'
 OFFICIAL_ORIGIN='chrome-extension://bhdmibhibonmaamgcbpmbhedhohfongj'  # extension/manifest.json "key"
 import sys
 import traceback
@@ -349,6 +350,7 @@ def task_stall(j,task,moment,ago,shared):
     return None
 
 def public_state():
+    account_usage.number_flow(STATE)  # « Compte 1, 2, 3… » stable, before the copy
     s=copy.deepcopy(STATE); s.pop('token',None)
     for t in s['tasks']:
         t.pop('result',None)
@@ -358,6 +360,7 @@ def public_state():
         public['uncertain_clips']=sorted({int(t['slot'].split(':')[1]) for t in uncertain_clip_tasks(j)})
         public['stall']=stall_info(j)
     s['quota_status']=quotas.summary(STATE,time.time());s['version']=VERSION
+    s['usage']=account_usage.view(STATE)  # which account works now, on which AI, for what (0.1.95)
     s['accounts']=identities.view(STATE,time.time(),int(STATE['settings'].get('flow_cost',12)));s.pop('extension_origin',None)
     s['setup']=readiness.setup_missing(STATE);s.setdefault('readiness',{'sites':{},'pending':[]})
     s['key_saved']=bool(STATE['clients'])  # an extension holds the key once it has paired, manually or automatically
@@ -1357,7 +1360,7 @@ def schedule_flow_clip(j,i,early=False,parallel=False):
         return True
     if p['id']!=j.get('flow_profile') and not parallel:
         previous=profile_by(j.get('flow_profile'))
-        j['flow_profile']=p['id'];event(j,'Passage automatique au compte Flow '+(p.get('flow_email') or p.get('label') or '')+f" ({p['balance']} crédits)"+(' : '+(previous.get('flow_email') or previous.get('label') or '')+(' sans accès à Flow' if previous.get('blocked')=='unavailable' else ' vide') if previous else '')+' ; clips reçus conservés.')
+        j['flow_profile']=p['id'];account_usage.number_flow(STATE);event(j,account_usage.switch_line(previous,p))
     payload={'prompt':clip_prompt(j,i,'flow'),'attachments':[asset_url(j,flow_reference(j,s['image']))],'cost':cost,'balance':p['balance'],'seconds':8,**({'model':j['config']['flow_model'],'resolution':j['config'].get('flow_resolution','720p')} if j['config'].get('flow_model') else {})}
     if j['config'].get('dry_run'):payload['dry_run']=True
     target=flow_accounts.route(p) if STATE.get('settings',{}).get('flow_auto') else None
@@ -1366,7 +1369,7 @@ def schedule_flow_clip(j,i,early=False,parallel=False):
         if existing:target['url']=existing
         else:target['new_project']=True
         payload['flow_route']=target
-    if parallel:event(j,'Clip '+str(i+1)+' en parallèle sur le compte Flow '+readiness.mask(p.get('flow_email') or p.get('label'))+f" ({p['balance']} crédits).")
+    if parallel:account_usage.number_flow(STATE);event(j,'Clip '+str(i+1)+' en parallèle : '+account_usage.flow_name(p,word='compte Flow')+'.')
     add_task(j,'flow_video',payload,f'clip:{i}',profile=p['id']);return True
 
 def clip_failed(j,t,result,kind):
@@ -1901,6 +1904,10 @@ def accept_task_result(t,result):
             sc=j['scenes'][int(slot.split(':')[1])];sc['clip']=file
             # The engine that made it (montage length, quality range) ; the next clip starts again from the first engine.
             if t.get('kind') in ('flow_video','engine_video'):sc['engine']='flow' if t['kind']=='flow_video' else t['payload'].get('engine')
+            # And the account that made it (0.1.95): « Flow · compte 2 » under the clip.
+            made_by=account_usage.clip_account(t,STATE['profiles']) if t.get('kind') in ('flow_video','engine_video') else None
+            if made_by:sc['account']=made_by
+            else:sc.pop('account',None)
             engine_chain.reset(sc)
             # The board the clip was animated from: a later board change shows « la planche a changé après le clip ».
             sc['clip_from']=sc.get('image');sc.pop('text_after_clip',None)
@@ -2194,9 +2201,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                 t['status']='cancelled';j['status']='running';schedule(j);continue
                             if t['payload'].get('dry_run'):
                                 # A dry run never sends: nothing to reserve (P1-4).
-                                t['status']='claimed'; t['client']=client; t['claimed']=now(); event(j,'Essai à blanc : préparation de '+t['slot']+' dans Flow, sans envoi.'); save(); return self.send_json(t)
+                                t['status']='claimed'; t['client']=client; t['claimed']=now(); account_usage.touch(STATE,t,time.time()); event(j,'Essai à blanc : préparation de '+t['slot']+' dans Flow, sans envoi.'); save(); return self.send_json(t)
                             p['balance']-=cost;flow_refill.spent(p,time.time());t['reservation']={'profile':p['id'],'amount':cost,'refunded':False}; event(j,f"Réservation prudente de {cost} crédits sur {p['label']}. En cas d’échec, vérifier le solde réel avant de le réajuster.")
-                        t['status']='claimed'; t['client']=client; t['claimed']=now(); event(j,('Essai à blanc : préparation de '+t['slot']+' dans '+engines.ENGINES[t['payload']['engine']]['label']+', sans envoi.') if t['kind']=='engine_video' and t['payload'].get('dry_run') else 'Connecteur en cours : '+t['slot']); save(); return self.send_json(t)
+                        t['status']='claimed'; t['client']=client; t['claimed']=now(); account_usage.touch(STATE,t,time.time()); event(j,('Essai à blanc : préparation de '+t['slot']+' dans '+engines.ENGINES[t['payload']['engine']]['label']+', sans envoi.') if t['kind']=='engine_video' and t['payload'].get('dry_run') else account_usage.claim_line(STATE,t)); save(); return self.send_json(t)
                     save(); return self.send_json(None)
                 if path=='/api/bridge/status':
                     if not self.auth_bridge():return self.send_json({'error':'Appairage requis'},401)

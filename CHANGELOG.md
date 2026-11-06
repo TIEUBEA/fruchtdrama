@@ -8,6 +8,15 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 
 
+## 0.1.95 (06/11/2026)
+**Ajouté**
+- Mes comptes : on voit quel compte travaille, sur quelle IA, pour quoi et à quel moment. Encadré « En ce moment » en haut de la page, bandeau « Utilisé maintenant » dans chaque service (ChatGPT, Google Flow, Arena, Vidogrid, Grok, Claude) avec la tâche (« Clip 3 de BANANITO », « Planche 7 », « Scénario ») et l'heure de début, badge « En cours » sur la ligne du compte utilisé. Sinon « Dernier utilisé il y a 3 min » (heure gardée par compte à chaque tâche prise par la fenêtre FruchtDrama).
+- Page de l'épisode : dans les cartes Planches et Clips, une ligne par tâche en cours, par exemple « Clip 4 · IA : Flow · compte 2 (ar•••5@example.com, 38 crédits) » ou « Planche 7 · IA : ChatGPT ». Sous chaque clip reçu, le moteur et le compte qui l'ont fait (« Flow · compte 2 », adresse masquée dans la fiche de la scène).
+
+**Amélioré**
+- Comptes Flow numérotés « Compte 1, 2, 3… » et triés par crédits restants, du plus grand au plus petit ; les comptes vides puis ceux à régler en bas, avec l'heure de recharge des vides. Le numéro d'un compte ne change jamais (premiers numéros donnés dans l'ordre des crédits, un nouveau compte prend le plus petit numéro libre) : « compte 2 » désigne toujours le même compte, dans la page comme dans le journal.
+- Journal : chaque bascule de compte Flow s'écrit « Compte Flow 2 (ar•••5@example.com, 0 crédit, vide) → compte 3 (…, 38 crédits) » ; chaque tâche prise s'écrit « En cours : Clip 4 · IA : Flow · compte 3 (…) » au lieu de « Connecteur en cours : clip:3 ». Le choix du compte Flow de l'épisode affiche aussi son numéro.
+
 ## 0.1.94 (06/11/2026)
 **Corrigé**
 - Planche refusée par Flow « en raison des intérêts des fournisseurs de contenu tiers » (trop proche de la vidéo d'origine) : quand aucun moteur ne l'a acceptée, ChatGPT la redessine clairement différente (cadrage, pose, fond, couleurs ; mêmes personnages, même sens) et le clip repart du premier moteur. Deux fois au plus par scène.
