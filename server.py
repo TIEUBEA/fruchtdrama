@@ -315,7 +315,7 @@ def wake_waiting(moment=None):
     with LOCK:
         for j in STATE['jobs']:
             if j.get('status')=='waiting_quota' and (j.get('wait_until') or 0)<=moment:
-                j['status']='running';j.pop('wait_until',None);event(j,'Limite renouvelée : reprise automatique.');schedule(j);woken.append(j['id'])
+                j['status']='running';j.pop('wait_until',None);j.pop('quota_lane',None);event(j,'Limite renouvelée : reprise automatique.');schedule(j);woken.append(j['id'])
         if woken:save()
     return woken
 
@@ -810,7 +810,7 @@ def add_task(j, kind, payload, slot):
         moment=time.time();q=quotas.status(STATE,name,moment)
         if q['blocked']:
             # P2-07: nothing is sent while the service is at its limit; the production resumes by itself.
-            j['status']='waiting_quota';j['wait_until']=q['retry_at']
+            j['status']='waiting_quota';j['wait_until']=q['retry_at'];j['quota_lane']=lane_of({'kind':kind,'slot':slot})
             event(j,q['label']+' à sa limite : reprise automatique vers '+quotas.stamp(q['retry_at'])[11:16]+' UTC.');return
     if kind=='chat_text' and payload.get('provider')=='claude':
         # The extension selects this model and effort in claude.ai before sending (older episodes: defaults).
@@ -929,6 +929,9 @@ def approve_sheet(j,sheet,title_index,hook_index,message,call_index=0):
 def schedule(j):
     # Consultation only (access ended, revoked, unchecked for 3 days): nothing advances, nothing is sent or paid.
     if not LICENCE.allowed(): return
+    if j['status']=='waiting_quota' and j.get('quota_lane')=='chat' and j['stage']=='images':
+        # ChatGPT at its image limit: the boards wait, the clips of the boards already drawn keep going (Flow, Grok).
+        early_clip(j);return
     if j['status'] in ('paused','attention','done','rendering','waiting_research','waiting_script','waiting_credit','waiting_review','waiting_quota','waiting_account','waiting_night','waiting_source'): return
     step=j['stage']
     # The boards stage works on two lanes (see VIDEO_KINDS); every other stage waits for the episode's single task.
@@ -1781,7 +1784,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         schedule(j)
                     for t in STATE['tasks']:
                         j=job_by(t['job'])
-                        if t['status']!='queued' or j['status']!='running': continue
+                        if t['status']!='queued' or not (j['status']=='running' or (j['status']=='waiting_quota' and j.get('quota_lane')=='chat' and lane_of(t)=='video')): continue
                         if not client_accepts(c,t) or (lane and lane_of(t)!=lane): continue
                         if t['kind']=='flow_video':
                             if any(other['kind'] in ('flow_video','flow_collect') and other['status']=='claimed' for other in STATE['tasks']):continue

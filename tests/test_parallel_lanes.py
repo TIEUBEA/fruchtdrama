@@ -262,3 +262,23 @@ class LaneHttp(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ChatQuotaKeepsClips(unittest.TestCase):
+    def setUp(self):
+        s.STATE = s.fresh()
+
+    def test_clips_go_on_while_chatgpt_images_are_at_their_limit(self):
+        j = job(drawn=2)
+        j['status'] = 'waiting_quota'; j['quota_lane'] = 'chat'; j['wait_until'] = 9e12
+        s.schedule(j)
+        self.assertEqual([t['slot'] for t in active(j)], ['clip:0'], 'boards wait, the clip of board 1 leaves')
+        deliver(active(j)[0])
+        # The clip received re-runs the schedule: the boards ask ChatGPT again (its limit is checked in add_task).
+        self.assertIn('clip:1', [t['slot'] for t in active(j)])
+
+    def test_a_video_limit_does_not_send_clips(self):
+        j = job(drawn=2)
+        j['status'] = 'waiting_quota'; j['quota_lane'] = 'video'; j['wait_until'] = 9e12
+        s.schedule(j)
+        self.assertEqual(active(j), [])
