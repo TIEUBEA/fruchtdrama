@@ -251,16 +251,23 @@ def guidance(mode: str, analysis: dict | None, captures_count: int = 0, scenes: 
     if mode == 'identical':
         # Like the Atelier « Recréer à l'identique »: same characters, outfits, marks and settings as the original;
         # only the lines are reworded in simple words, as close to the script as possible.
-        text += ('\nMODE RECRÉER À L’IDENTIQUE, choisi par le propriétaire. C’est LA MÊME HISTOIRE : mêmes personnages et mêmes rôles '
-                 '(même métier, même âge, même lien entre eux, même méchant, même victime), mêmes lieux, mêmes objets, mêmes événements dans le même ordre, '
-                 'même accroche, même retournement, même fin et même émotion. N’invente aucun autre conflit, aucun autre personnage principal, aucun secret, '
-                 'aucun objet que la vidéo ne montre pas. Les personnages deviennent des fruits anthropomorphes qui gardent les vêtements, signes distinctifs et '
-                 'attitudes de l’original. Seules les répliques sont reformulées en mots simples, au plus près du sens de l’original (jamais mot pour mot), '
-                 'et les prénoms changent.')
+        # 0.1.104 (owner 07/11/2026): the same story, slightly different so that TikTok does not see a copy (monetisation):
+        # same structure and beats, other names, amounts, place names, colours and small details; every line reworded.
+        text += ('\nMODE RECRÉER À L’IDENTIQUE, choisi par le propriétaire. C’est LA MÊME HISTOIRE, LÉGÈREMENT TRANSPOSÉE pour que TikTok la voie '
+                 'comme une création originale (monétisation) : mêmes rôles (même lien entre eux, même méchant, même victime), mêmes types de lieux, '
+                 'mêmes événements dans le même ordre, même accroche, même retournement, même fin et même émotion. Change en revanche les prénoms, les '
+                 'montants (ex. 12 → 9, 67 millions → 72 millions), les noms des lieux et enseignes, les couleurs des tenues et quelques détails de décor ; '
+                 'n’invente aucun autre conflit ni personnage principal. Les personnages deviennent des fruits anthropomorphes qui gardent l’allure et les '
+                 'signes distinctifs de l’original (ex. une étiquette d’argent au même endroit). TOUTES les répliques de l’original sont gardées, dans le même '
+                 'ordre et avec la même densité (environ 2,5 à 3 mots par seconde), mais chacune est réécrite avec d’autres mots (jamais mot pour mot, '
+                 'jamais une simple traduction littérale).'
+                 '\nRYTHME : comme l’original (un plan toutes les 3 secondes environ), chaque scène contient 2 ou 3 PLANS enchaînés dans le même clip : '
+                 'son video_prompt les décrit dans l’ordre (« Plan 1 : … Coupe. Plan 2 : … Coupe. Plan 3 : … »), avec un cadrage différent à chaque plan '
+                 '(large, moyen, gros plan), et chaque réplique tombe sur son plan. Jusqu’à 3 répliques par scène.')
         groups = beats(analysis.get('transcript', ''), analysis.get('duration'), scenes)
         if any(groups):
-            text += ('\nDÉCOUPAGE OBLIGATOIRE : chaque scène reprend les moments de l’original indiqués ci-dessous (condense en gardant chaque '
-                     'événement et chaque émotion ; si une scène n’a pas de réplique, montre l’action correspondante de la planche) :\n'
+            text += ('\nDÉCOUPAGE OBLIGATOIRE : chaque scène reprend les moments de l’original indiqués ci-dessous (garde chaque réplique, '
+                     'réécrite ; si une scène n’a pas de réplique, montre l’action correspondante de la planche) :\n'
                      + '\n'.join(f'Scène {k + 1} : ' + (' / '.join(g) if g else '(action visible sur la planche à ce moment)') for k, g in enumerate(groups)))
     else:
         text += ('\nINSPIRÉE de cette vidéo : garde sa mécanique émotionnelle (le même type de victime et d’antagoniste, la même injustice, '

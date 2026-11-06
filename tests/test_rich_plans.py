@@ -47,7 +47,7 @@ class RichPlanTests(unittest.TestCase):
         self.assertIn('immenses', str(e.exception))
         # 0.1.102: a scene too long is shortened by the studio, never refused.
         self.assertNotIn('réplique(s) et', str(e.exception))
-        self.assertLessEqual(len(bad['scenes'][0]['dialogue'][0]['text'].split()), 20)
+        self.assertLessEqual(len(bad['scenes'][0]['dialogue'][0]['text'].split()), 24)  # 3 words a second for 8 s
 
     def test_identical_remake_tolerates_one_word_over_the_prompt_limit(self):
         ok = script()
