@@ -6,6 +6,14 @@ correspondante (P0-xx, P1-x, P2-xx) détaillée dans `docs/sudf/`. Guide pour re
 version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, version par version).
 
 
+
+## 0.1.92 (06/11/2026)
+**Ajouté**
+- L'extension se met à jour toute seule : quand une nouvelle version est posée dans son dossier, elle se recharge d'elle-même entre deux tâches (plus de rechargement manuel dans chrome://extensions après chaque correctif).
+
+**Corrigé**
+- La barre de fabrication n'affiche plus le diagnostic technique « Diagnostic import Flow : {…} » mais « Import de la planche dans Flow… ».
+
 ## 0.1.91 (06/11/2026)
 Les comptes se règlent dans **Mes comptes, avant de commencer** (demande du propriétaire : « la connexion, les vérifications anti-robot, on devrait faire ça dans le menu Comptes et ajouter tous les comptes avant de commencer quoi que ce soit »). Cas réel : en pleine production, deux clips Flow ont échoué « Page du fournisseur indisponible ou vide après 90 secondes » et l'épisode est passé en « Action requise » ; il a fallu chercher l'onglet en arrière-plan.
 

@@ -25,7 +25,7 @@ import maintenance
 import series
 import licence
 import readiness
-VERSION='0.1.91'
+VERSION='0.1.92'
 OFFICIAL_ORIGIN='chrome-extension://bhdmibhibonmaamgcbpmbhedhohfongj'  # extension/manifest.json "key"
 import sys
 import traceback
@@ -232,6 +232,7 @@ def cover_check_pending(j):
 
 def readable_progress(text):
     # The extension reports the scenario reader's raw diagnostic; the owner sees a sentence instead.
+    if text.startswith('Diagnostic import Flow'):return 'Import de la planche dans Flow…'
     prefix='Lecture du scénario : '
     if not text.startswith(prefix+'{'):return text
     try:d=json.loads(text[len(prefix):])

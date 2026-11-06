@@ -649,10 +649,22 @@ async function registerFlow(owned=false){
  await call('/api/bridge/register-flow',{client:cfg.client,...account});
  return {ok:true,message:'Compte Flow mémorisé. Ouverture et passage automatiques activés.'};
 }
-function triggerPoll(){poll().catch(recordBackgroundError);}
+function triggerPoll(){selfUpdate().then(()=>poll()).catch(recordBackgroundError);}
 function createAlarm(){try{Promise.resolve(chrome.alarms.create('studio-poll',{periodInMinutes:.5})).catch(recordBackgroundError);}catch(e){recordBackgroundError(e);}}
 chrome.runtime.onInstalled.addListener(createAlarm);
 chrome.runtime.onStartup.addListener(createAlarm);
+// Self-update (owner 06/11/2026: every fix needed a manual reload in chrome://extensions). The unpacked files on disk
+// are read again; when their version differs from the one running and no task is followed, the extension reloads.
+async function selfUpdate(){
+ try{
+  const disk=await (await fetch(chrome.runtime.getURL('manifest.json'),{cache:'no-store'})).json();
+  if(!disk?.version||disk.version===chrome.runtime.getManifest().version)return;
+  const cfg=await chrome.storage.local.get(Object.values(LANE_KEY));
+  if(Object.values(LANE_KEY).some(k=>cfg[k])||busy.chat||busy.video)return;
+  await chrome.storage.local.set({status:'Nouvelle version '+disk.version+' : rechargement automatique.'});
+  chrome.runtime.reload();
+ }catch{}
+}
 chrome.runtime.onStartup.addListener(()=>FruchtStudio.ensure(chrome,fetch,{wait:false}).catch(recordBackgroundError));
 chrome.runtime.onStartup.addListener(()=>FruchtWorkspace.reset(chrome).catch(recordBackgroundError));
 // P5-1: the icon opens the FruchtDrama window; everything happens inside it.
