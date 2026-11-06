@@ -87,6 +87,12 @@ const img=[{name:'scene0.jpg',data:'abc',mime:'image/jpeg'}];
  assert.deepEqual(shown,['a','b'],'pending content revealed');let ran=0;assert.equal(win.requestAnimationFrame(()=>ran++),41);queue.splice(0).forEach(f=>f());assert.equal(ran,1,'frames run while hidden');
  win.document.hidden=false;assert.equal(win.requestAnimationFrame(()=>ran++),'raf','visible: real frames');
  assert.ok(!/^revealHidden\s*\(/.test(String(rctx.FruchtReadiness.revealHidden)),'serializable function');
+ // Arena battle (real page): one answer failing is not the end; both failing is.
+ const half=page({engine:'arena',after:' Assistant B Something went wrong with this response, please try again.'});
+ assert.equal((await half.E.run(task('arena'),img,half.h)).ok,true,'one failed answer: the other clip is taken');
+ const both=page({engine:'arena',videoAfter:1e9,after:' Assistant A Something went wrong with this response, please try again. Assistant B Something went wrong with this response, please try again.'});
+ const e10=await both.E.run(task('arena'),img,both.h).then(()=>null,e=>e);assert.equal(e10.kind,'other');assert.match(e10.message,/deux modèles/);
+ assert.equal(half.E.sites.arena.timeout,40*60000,'Arena waits 40 min (34 min observed)');
  const already=page({pressed:true});await already.E.run(task('grok'),img,already.h);assert.equal(already.mode.clicks,0,'video mode already on: untouched');
  const out=page({loggedOut:true});const e1=await out.E.run(task('grok'),img,out.h).then(()=>null,e=>e);
  assert.equal(e1.kind,'login');assert.equal(out.send.clicks,0);

@@ -27,7 +27,7 @@ import maintenance
 import series
 import licence
 import readiness
-VERSION='0.1.95'
+VERSION='0.1.96'
 OFFICIAL_ORIGIN='chrome-extension://bhdmibhibonmaamgcbpmbhedhohfongj'  # extension/manifest.json "key"
 import sys
 import traceback
@@ -308,7 +308,7 @@ def alert(j,level,text):
     # Shown as a banner at the top of the episode: 'action' = the owner must act, 'auto' = decided alone, to check.
     event(j,text);alerts=j.setdefault('alerts',[]);alerts.append({'at':now(),'level':level,'text':text});del alerts[:-6]
 STALL_ONLINE=180  # seconds without a heartbeat: the FruchtDrama window is considered gone
-STALL_QUIET={'chat_text':12,'chat_collect':6,'chat_image':10,'chat_image_collect':6,'research':12,'flow_video':20,'engine_video':20}  # minutes
+STALL_QUIET={'chat_text':12,'chat_collect':6,'chat_image':10,'chat_image_collect':6,'research':12,'flow_video':20,'engine_video':45}  # minutes (Arena: up to 40 min, real test 06/11/2026)
 SERVICE={'chatgpt':'ChatGPT','claude':'Claude'}
 
 def stall_info(j,moment=None):

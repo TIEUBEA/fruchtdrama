@@ -25,7 +25,12 @@ globalThis.FruchtEngines={
    send:/^(?:send(?: message)?|submit|generate|run|envoyer|générer|senden|generieren)$/i,
    quota:/rate limit|too many requests|daily limit|limit reached|try again (?:later|in)|you.ve reached|limite atteinte|réessayez plus tard|Limit erreicht/i,
    refusal:/content (?:policy|filter|moderation)|flagged|violat\w* (?:our|the) (?:policy|policies|terms)|unsafe|cannot generate|contenu (?:refusé|signalé)|Inhaltsrichtlinie/i,
-   timeout:7*60000},
+   // One battle answer may fail (« Something went wrong with this response, please try again. ») while the other
+   // delivers: only both failed is a failure.
+   failed:/Something went wrong with this response/gi,answers:2,
+   // Real test 06/11/2026: « Generating video... » for 34 min before Assistant A delivered its clip (B failed).
+   // 7 min always gave up first; the clip waits up to 40 min (free engine, nothing is paid twice).
+   timeout:40*60000},
   // vidogrid.ai, « Grok Imagine Video 1.5 Lite » (parcours réel : fruit-france/outils/vidogrid/vidogrid_clip.py, V57).
   // Signed in by the owner (« Continue with Google », never a password). One try: a failed generation goes to the next engine.
   vidogrid:{label:'Vidogrid',hosts:['vidogrid.ai','www.vidogrid.ai'],home:'https://vidogrid.ai/app/video-gen/grok',fresh:true,
@@ -206,7 +211,9 @@ globalThis.FruchtEngines={
   while(h.now()-start<(site.timeout||600000)){
    h.blocked();
    const video=this.newVideo(doc,old);if(video){await h.sleep(1500);return await h.videoPayload(video);}
-   const kind=this.problem(this.fresh(doc.body?.innerText||'',before),engine);
+   const fresh=this.fresh(doc.body?.innerText||'',before);
+   if(site.answers&&(fresh.match(site.failed)||[]).length>=site.answers)throw h.fail('other',site.label+' : les deux modèles ont échoué (« Something went wrong »). Le clip passe au moteur suivant.');
+   const kind=this.problem(fresh,engine);
    if(kind==='quota')throw h.fail('quota',site.label+' : limite du compte atteinte. Changez de compte ou attendez le renouvellement.',{retryAfter:h.retryAfter(doc.body?.innerText||'')||this.resetIn(doc.body?.innerText||'')});
    if(kind==='refusal')throw h.fail('refusal',site.label+' : génération refusée par la modération.');
    await h.sleep(2000);
