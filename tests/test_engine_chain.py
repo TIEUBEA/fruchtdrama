@@ -222,3 +222,21 @@ class MixedMontageTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ThirdPartyRedraw(unittest.TestCase):
+    def test_board_refused_as_third_party_content_is_drawn_again(self):
+        j = {'id': 'tp', 'events': [], 'stage': 'clips', 'status': 'running', 'config': {}, 'scenes': [
+            {'image': 'board.png', 'engine_tries': [{'engine': 'flow', 'kind': 'refusal', 'reason': 'Impossible de générer la vidéo demandée pour le moment en raison des intérêts des fournisseurs de contenu tiers.'}]}]}
+        self.assertTrue(s.redraw_refused_board(j, 0))
+        self.assertNotIn('image', j['scenes'][0]); self.assertEqual(j['stage'], 'images')
+        self.assertIn('third-party', j['corrections']['image:0'])
+        self.assertNotIn('engine_tries', j['scenes'][0])
+        j['scenes'][0]['image'] = 'b2.png'; j['scenes'][0]['engine_tries'] = [{'reason': 'contenu tiers'}]
+        self.assertTrue(s.redraw_refused_board(j, 0))
+        j['scenes'][0]['image'] = 'b3.png'; j['scenes'][0]['engine_tries'] = [{'reason': 'contenu tiers'}]
+        self.assertFalse(s.redraw_refused_board(j, 0), 'twice at most')
+
+    def test_other_refusals_do_not_redraw(self):
+        j = {'id': 'tq', 'events': [], 'config': {}, 'scenes': [{'image': 'b.png', 'engine_tries': [{'reason': 'Page vide'}]}]}
+        self.assertFalse(s.redraw_refused_board(j, 0))

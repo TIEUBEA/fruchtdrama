@@ -1265,6 +1265,7 @@ def clip_engine_for(j,i,early=False):
     if nxt:
         if engine_chain.round_of(s)>before:event(j,f'Clip {i+1} : prompt adouci, nouvel essai sur {engine_chain.LABELS[nxt]}.')
         return nxt
+    if redraw_refused_board(j,i):return None
     s['engine_exhausted']=True;alert(j,'action','Clip '+str(i+1)+' : '+held_message(j))
     return None
 
@@ -1403,10 +1404,30 @@ def clip_failed(j,t,result,kind):
     before=engine_chain.round_of(scene);nxt=engine_chain.advance(scene,chain,ready)
     t['status']='failed';j['status']='running'
     event(j,engine_chain.line(i,engine,kind,reason,nxt,engine_chain.round_of(scene)>before))
+    if not nxt and redraw_refused_board(j,i):schedule(j);return True
     if not nxt:
         scene['engine_exhausted']=True
         alert(j,'action',f'Clip {i+1} : aucun moteur ne l’a fait, même avec le prompt adouci — {engine_chain.summary(scene)}. Modifie la scène (« Refaire » avec une consigne) ou importe un clip, puis Reprendre. Les autres clips continuent.')
     schedule(j);return True
+
+THIRD_PARTY=re.compile(r'contenu(?:s)? tiers|fournisseurs de contenu|third[- ]party|Drittanbieter',re.I)
+THIRD_PARTY_NOTE=('Video engine refusal: this board looks too close to existing third-party content. Draw the SAME moment again but '
+    'clearly different: another camera angle and framing, another pose and gesture for each character, another background '
+    'layout and lighting, different colours for clothes details and props. Keep the characters recognisable (species, hair, '
+    'outfit type) and keep the meaning of the scene.')
+
+def redraw_refused_board(j,i):
+    """Real case 06/11/2026: Flow refused a board « en raison des intérêts des fournisseurs de contenu tiers » whatever the
+    prompt (a faithful remake draws too close to the original video). Once every engine has failed, the board is drawn
+    again, clearly different, and the clip starts over from the first engine. Twice at most per scene."""
+    sc=j['scenes'][i]
+    if not any(THIRD_PARTY.search(str(x.get('reason',''))) for x in sc.get('engine_tries') or []) or sc.get('third_party_redraws',0)>=2:return False
+    sc['third_party_redraws']=sc.get('third_party_redraws',0)+1
+    if sc.get('image'):j.setdefault('redo_history',[]).append({'slot':f'image:{i}','file':sc.pop('image'),'note':'refus contenu tiers','at':now()})
+    j.setdefault('corrections',{})[f'image:{i}']=THIRD_PARTY_NOTE;engine_chain.reset(sc);j.pop('early_clips_off',None)
+    j['stage']='images';j['status']='running'
+    event(j,f'Clip {i+1} : la planche ressemble trop à un contenu existant pour Flow → planche redessinée (autre cadrage, autre pose, autre fond), puis nouvel essai du clip.')
+    return True
 
 def uncertain_clip_tasks(j):
     """Flow submissions that may have been charged but whose clip was never received."""
