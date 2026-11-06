@@ -213,6 +213,10 @@ globalThis.FruchtFlow={
     selectedSource=this.sourceKey(asset.querySelector?.('img'));asset.click();selected=true;await pause(250);
    }
    if(expectedName&&!this.control(doc,pattern,true)&&this.frameMatches(doc,selectedSource))return;
+   // Flow shows the frame from a signed CDN address, never the picker's: the addresses cannot match (06/11/2026,
+   // clips stuck 5 min with the board already placed). An empty Début that now holds an image, picker closed and no
+   // « Ajouter au prompt » left, is the board just chosen.
+   if(selection.existingReference&&selection.startWasEmpty&&!this.control(doc,pattern,true)&&this.startThumbnail(doc)?.querySelector('img')&&this.startThumbnail(doc).getAttribute('aria-busy')!=='true'&&![...doc.querySelectorAll('[role="option"]')].some(el=>this.visible(doc,el)))return;
    if(expectedName&&!this.previewMatches(doc,expectedName)){await pause(500);continue;}
    const button=this.control(doc,pattern);
    if(button){
@@ -246,7 +250,8 @@ globalThis.FruchtFlow={
    const key=this.sourceKey(gallery?.querySelector?.('img'));
    if(this.frameMatches(doc,key))return {alreadyAttached:true};
   }
-  const selectExisting=()=>{const asset=this.existingReference(doc,name);if(!asset)return null;const referenceSource=this.sourceKey(asset.querySelector?.('img'));asset.click();return {existingReference:true,referenceSource};};
+  let startWasEmpty=null;
+  const selectExisting=()=>{const asset=this.existingReference(doc,name);if(!asset)return null;const referenceSource=this.sourceKey(asset.querySelector?.('img'));asset.click();return {existingReference:true,referenceSource,startWasEmpty};};
   let reuse=selectExisting();if(reuse)return reuse;
   let input=this.fileInput(doc);if(input&&!name)return input;
   const uploadPattern=/^(?:\+\s*)?(?:Hochladen|Datei(?:en)? hochladen|Bild(?:er)? hochladen|Medien hochladen|Medien hoch(?:\.{3}|…)|Upload|Upload image|Upload file|Importer|Importer une image|Importer l[’']élément multimédia|Téléverser)$/i;
@@ -254,6 +259,7 @@ globalThis.FruchtFlow={
   let upload=this.control(doc,uploadPattern);
   const start=upload?null:(this.control(doc,/^(?:\+\s*)?(?:Start|Startframe(?: hinzufügen)?|Start frame|Add start frame|Début|Ajouter une image de début)$/i)||this.startThumbnail(doc));
   const hadThumbnail=!!start?.querySelector?.('img');
+  startWasEmpty=!!start&&!hadThumbnail;
   if(start)this.activate(doc,start);
   let uploadClicked=false,emptyStartClicked=false;
   for(let n=0;n<160;n++){
