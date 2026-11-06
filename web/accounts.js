@@ -25,11 +25,13 @@ function accountRows(svc){const R=accReady(),pending=new Set(R.pending||[]),now=
  for(const a of engine)if(!emails.includes(a.email))emails.push(a.email);
  if(live&&!emails.includes(live))emails.push(live);
  const rows=emails.map(email=>({email}));
- if(!rows.length&&(session||seen.connected))rows.push({email:null});
+ // The open session first; when its address is unknown, one line for it and the saved addresses wait in reserve
+ // (06/11/2026: 4 ChatGPT lines all « Connecté » while one Chrome holds one ChatGPT session).
+ if((session||seen.connected)&&(!live||!rows.length)&&!(rows.length===1&&!engine.length))rows.unshift({email:null});
  const wall=(state.quota_status||[]).filter(q=>q.blocked&&q.service.startsWith(svc)).sort((a,b)=>a.retry_at-b.retry_at)[0];
- return rows.map(row=>{const acc=engine.find(a=>a.email===row.email),mine=!row.email||!live||row.email===live||rows.length===1;let tone,text,reason='';
+ return rows.map(row=>{const acc=engine.find(a=>a.email===row.email),mine=!row.email||row.email===live||rows.length===1;let tone,text,reason='';
   if(acc?.wall&&acc.wall.until>now){tone='warn';text='Bloqué (quota) jusqu’à '+accHH(acc.wall.until);}
-  else if(!mine){tone='idle';text='En attente · autre compte ouvert';}
+  else if(!mine){tone='idle';text=engine.length?'En réserve':'En réserve · changement manuel';}
   else if(pending.has(key)){tone='idle';text='Vérification…';}
   else if(wall){tone='warn';text='Bloqué (quota) jusqu’à '+accHH(wall.retry_at);}
   else if(session?.state==='fix'){tone='bad';text='À régler';reason=session.reason||'';}
