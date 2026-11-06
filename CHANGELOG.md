@@ -5,6 +5,14 @@ correspondante (P0-xx, P1-x, P2-xx) détaillée dans `docs/sudf/`. Guide pour re
 `docs/sudf/REPRISE.md`. **Mode d'emploi détaillé** (installer, lancer, utiliser), mis à jour à chaque
 version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, version par version).
 
+## 0.1.101 (06/11/2026)
+
+**Retiré**
+- Vérification des paroles (« Les paroles reconnues correspondent à 20 % du scénario… ») : annulée à ta demande. La transcription sert seulement à placer les sous-titres. Les anciens avertissements et bandeaux « Paroles acceptées » disparaissent.
+
+**Corrigé**
+- « Tâche préparée : image:0 » affiché pendant 30 min comme si ça tournait, alors que l'extension était bloquée. Après 6 min sans aucune tâche prise, l'épisode affiche en gros que l'extension est bloquée, et comment la relancer.
+
 ## 0.1.100 (06/11/2026)
 
 **Corrigé**

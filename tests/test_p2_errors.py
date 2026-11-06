@@ -1,5 +1,5 @@
 """P2-01/P2-02: typed task failures. Unit tests of errors.py and HTTP integration through the bridge."""
-import importlib.util, json, os, pathlib, sys, tempfile, threading, unittest, urllib.error, urllib.request
+import time, importlib.util, json, os, pathlib, sys, tempfile, threading, unittest, urllib.error, urllib.request
 
 ROOT = pathlib.Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT))
@@ -127,6 +127,15 @@ class BridgeTests(unittest.TestCase):
         j2 = job(); j2['status'] = 'running'; s.schedule(j2); t = self.claim()
         self.report(t, {'ok': False, 'error': 'Vérification anti-robot', 'error_kind': 'challenge'})
         self.assertEqual(j2['status'], 'attention', 'a challenge is never retried')
+
+
+    def test_untaken_task_says_the_extension_is_stuck(self):
+        j = job(); j['status'] = 'running'; s.schedule(j); self.claim()['status'] = 'done'
+        t = next(x for x in s.STATE['tasks'] if x['job'] == j['id']); t['claimed'] = s.dt.datetime.fromtimestamp(time.time() - 900, s.dt.timezone.utc).isoformat()
+        q = {'id': 'q1', 'job': j['id'], 'kind': 'chat_image', 'slot': 'image:0', 'status': 'queued', 'payload': {}, 'created': s.dt.datetime.fromtimestamp(time.time() - 600, s.dt.timezone.utc).isoformat()}
+        s.STATE['tasks'].append(q)
+        info = s.stall_info(j)
+        self.assertIn('ne prend plus aucune tâche', info['reason']); self.assertIn('chrome://extensions', info['hint'])
 
 
 if __name__ == '__main__':

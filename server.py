@@ -27,7 +27,7 @@ import maintenance
 import series
 import licence
 import readiness
-VERSION='0.1.100'
+VERSION='0.1.101'
 OFFICIAL_ORIGIN='chrome-extension://bhdmibhibonmaamgcbpmbhedhohfongj'  # extension/manifest.json "key"
 import sys
 import traceback
@@ -79,6 +79,9 @@ def read_state():
     for j in state.get('jobs',[]):
         r=j.get('quality_report') or {}
         if any('Durée incompatible' in x for x in r.get('hard_errors',[])):j['quality_report']={}
+        # 0.1.101: no dialogue check any more; its old warnings and banners go away.
+        if r.get('warnings'):r['warnings']=[x for x in r['warnings'] if 'paroles reconnues' not in x and 'Transcription locale' not in x and 'Reconnaissance vocale' not in x and 'Langue détectée' not in x and 'Aucune parole' not in x]
+        if j.get('alerts'):j['alerts']=[a for a in j['alerts'] if not str(a.get('text','')).startswith(('Paroles acceptées','Paroles à vérifier'))]
         # …and the episode stopped by it starts again by itself, without its old banner.
         if j.get('status')=='attention' and any('Durée incompatible' in (a.get('text') or '') for a in (j.get('alerts') or [])[-1:]):
             j['quality_report']={};j['alerts']=[a for a in j['alerts'] if 'Durée incompatible' not in (a.get('text') or '')];j['status']='running'
@@ -315,6 +318,7 @@ def alert(j,level,text):
     # Shown as a banner at the top of the episode: 'action' = the owner must act, 'auto' = decided alone, to check.
     event(j,text);alerts=j.setdefault('alerts',[]);alerts.append({'at':now(),'level':level,'text':text});del alerts[:-6]
 CHAT_RETRIES=2  # automatic new tries of a failed text or board before the episode stops
+STALL_UNTAKEN=6  # minutes: a queued task nobody takes while the window answers = extension stuck
 STALL_ONLINE=180  # seconds without a heartbeat: the FruchtDrama window is considered gone
 STALL_QUIET={'chat_text':10,'chat_collect':5,'chat_image':5,'chat_image_collect':4,'research':8,'flow_video':10,'engine_video':8}  # minutes : past this, « Bloqué » in bold (owner 06/11/2026: never let a stalled step look like it runs)
 SERVICE={'chatgpt':'ChatGPT','claude':'Claude'}
@@ -378,6 +382,14 @@ def task_stall(j,task,moment,ago,shared):
     if task['status']=='queued':
         if not online:
             return {'reason':'Aucune fenêtre FruchtDrama n’est ouverte : l’étape attend qu’une fenêtre se connecte.','hint':'Ouvre la fenêtre FruchtDrama (icône épinglée), l’étape repart toute seule.','retry':False,'since':task.get('created')}
+        # 0.1.101: the window answers but takes nothing (06/11/2026: extension stuck on a frozen tab, « Tâche préparée »
+        # shown for 30 min as if it ran). Said in the banner once no task of this lane was taken for STALL_UNTAKEN min.
+        waited=ago(task.get('created'));lane=lane_of(task)
+        taken=[ago(t.get('claimed')) for t in STATE['tasks'] if t.get('claimed') and lane_of(t)==lane]
+        last_take=min([x for x in taken if x is not None],default=None)
+        if waited is not None and waited>=STALL_UNTAKEN*60 and (last_take is None or last_take>=STALL_UNTAKEN*60):
+            return {'reason':f'L’extension FruchtDrama ne prend plus aucune tâche depuis {int(min(waited,last_take or waited)//60)} min : elle est bloquée.',
+                    'hint':'Ouvre chrome://extensions et clique sur ⟳ sous FruchtDrama : la production repart toute seule, rien n’est perdu.','retry':False,'paid':False,'since':task.get('created')}
         return None
     client=STATE['clients'].get(task.get('client')) or {}
     gone=ago(client.get('seen'))
