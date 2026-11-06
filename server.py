@@ -26,7 +26,7 @@ import maintenance
 import series
 import licence
 import readiness
-VERSION='0.1.93'
+VERSION='0.1.94'
 OFFICIAL_ORIGIN='chrome-extension://bhdmibhibonmaamgcbpmbhedhohfongj'  # extension/manifest.json "key"
 import sys
 import traceback
@@ -2120,6 +2120,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     # P4-1: copiable failure report, without token, pairing code or e-mail addresses.
                     if self.headers.get('Sec-Fetch-Site')=='cross-site': return self.send_json({'error':'Accès local requis'},403)
                     return self.send_bytes(maintenance.report(STATE,DATA,VERSION,now()).encode(),'text/plain; charset=utf-8')
+                if path=='/api/version':
+                    # The extension compares its running version with the copy installed next to the studio and
+                    # reloads itself between two tasks (fetching its own manifest returns the loaded one, not the disk).
+                    try:ext=json.loads((ROOT/'extension'/'manifest.json').read_text('utf-8')).get('version')
+                    except (OSError,ValueError):ext=None
+                    return self.send_json({'server':VERSION,'extension':ext})
                 if path=='/api/state':
                     # Cross-origin fetches cannot read the pairing code.
                     if self.headers.get('Sec-Fetch-Site')=='cross-site': return self.send_json({'error':'Accès local requis'},403)
@@ -2137,7 +2143,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     # lane=chat|video: the extension runs one task per lane at once; without lane (0.1.88 and older) any task, one at a time.
                     lane=q.get('lane',[''])[0]
                     if lane not in ('','chat','video'):return self.send_json({'error':'Voie inconnue'},400)
-                    c['seen']=now()
+                    c['seen']=now();c['version']=q.get('v',[c.get('version')])[0]
                     if c.get('disabled') and c.get('auto') and take_over(c):event_all('Fenêtre FruchtDrama rechargée : elle reprend le travail de l’ancienne, hors ligne.')
                     # A gateway switched off by the owner never receives work (several browsers paired).
                     if c.get('disabled') or not LICENCE.allowed():save();return self.send_json(None)

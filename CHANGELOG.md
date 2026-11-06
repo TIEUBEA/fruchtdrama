@@ -7,6 +7,12 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 
 
+
+## 0.1.94 (06/11/2026)
+**Corrigé**
+- Mise à jour automatique de l'extension : elle relisait sa propre version (celle chargée en mémoire) et ne voyait jamais la nouvelle. Elle demande maintenant au studio la version posée dans son dossier (`/api/version`) et se recharge entre deux tâches. La version de chaque fenêtre est enregistrée.
+- Refus Flow réel identifié (essai du 06/11) : « Impossible de générer la vidéo demandée pour le moment en raison des intérêts des fournisseurs de contenu tiers… Cette génération vous sera remboursée. » Il vient de l'image (planche trop proche de la vidéo d'origine en recréation à l'identique), pas du texte : lu en 15 s, le clip passe au moteur suivant.
+
 ## 0.1.93 (06/11/2026)
 Demande du propriétaire, après une heure perdue sur un clip Flow qui échouait en boucle : « Un essai par cas. Flow en priorité ; ça ne marche pas → un essai sur Arena ; ça ne marche pas → un essai sur Vidogrid ; en dernier recours → Grok lui-même. Si rien ne marche, modifier un peu la scène pour que le moteur l'accepte. »
 

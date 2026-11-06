@@ -515,7 +515,7 @@ async function runLane(lane){
     if(await recoverExistingMedia(cfg))return;
    }
   }
-  claimed=await call('/api/bridge/task?client='+encodeURIComponent(cfg.client)+'&lane='+(lane==='chat'?'chat':'video'));if(!claimed)return;
+  claimed=await call('/api/bridge/task?client='+encodeURIComponent(cfg.client)+'&lane='+(lane==='chat'?'chat':'video')+'&v='+encodeURIComponent(chrome.runtime.getManifest?.()?.version||''));if(!claimed)return;
   // The task is followed under this lane's key, whatever its kind (an older studio may ignore lane).
   // A tab closed under the task before anything was sent (real case 06/11/2026 13:10 « No tab with id ») : open a
   // fresh one and try once more, instead of stopping the episode. Never after a submission.
@@ -656,10 +656,12 @@ chrome.runtime.onInstalled.addListener(createAlarm);
 chrome.runtime.onStartup.addListener(createAlarm);
 // Self-update (owner 06/11/2026: every fix needed a manual reload in chrome://extensions). The unpacked files on disk
 // are read again; when their version differs from the one running and no task is followed, the extension reloads.
+function newer(a,b){const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){if((x[i]||0)!==(y[i]||0))return (x[i]||0)>(y[i]||0);}return false;}
 async function selfUpdate(){
  try{
-  const disk=await (await fetch(chrome.runtime.getURL('manifest.json'),{cache:'no-store'})).json();
-  if(!disk?.version||disk.version===chrome.runtime.getManifest().version)return;
+  // The studio tells which version sits in the extension folder (a fetch of our own manifest returns the loaded copy).
+  const disk={version:(await (await fetch(BASE+'/api/version',{cache:'no-store'})).json()).extension};
+  if(!disk.version||!chrome.runtime.getManifest||!newer(disk.version,chrome.runtime.getManifest().version))return;
   const cfg=await chrome.storage.local.get(Object.values(LANE_KEY));
   if(Object.values(LANE_KEY).some(k=>cfg[k])||busy.chat||busy.video)return;
   await chrome.storage.local.set({status:'Nouvelle version '+disk.version+' : rechargement automatique.'});
