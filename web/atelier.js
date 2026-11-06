@@ -278,7 +278,7 @@ document.addEventListener('click',e=>{const o=e.target.closest?.('[data-scene-op
 function alertsNotice(j){const st=j.stall?`<div class="notice human stall"><b>Bloqué : la vidéo ne progresse plus</b><p class="hint">${esc(j.stall.reason)}</p><p class="hint">${esc(j.stall.hint)}</p>${j.stall.retry?`<button class="primary" data-retry-step="${j.stall.paid?1:0}">Relancer cette étape</button>`:''}</div>`:'';return st+alertsNotice0(j)}
 function alertsNotice0(j){const al=j.alerts||[],act=al.filter(a=>a.level==='action'),auto=al.filter(a=>a.level==='auto');const last=[...(j.events||[])].reverse()[0];
  const fallback=j.status==='attention'&&!act.length&&!['login','challenge'].includes(j.last_error?.kind)&&last?[{text:last.text,at:last.at}]:[];
- const box=(cls,title,list)=>list.length?`<div class="notice ${cls}"><b>${title}</b>${list.map(a=>`<p class="hint">${esc(a.text)}</p>`).join('')}</div>`:'';
+ const box=(cls,title,list)=>list.length?`<div class="notice ${cls}"><b>${title}</b>${list.map(a=>`<p class="hint">${esc(a.text)}</p>${a.command?`<button class="primary" data-command="${esc(a.command)}">${esc(a.label||'Valider')}</button>`:''}`).join('')}</div>`:'';
  return (j.status==='attention'?box('human','⚠ Action requise',[...act.slice(-2),...fallback]):'')+box('uncertain','Décidé automatiquement — à vérifier avant de publier',auto.slice(-3))}
 function detail(){const j=state.jobs.find(j=>j.id===selected);if(!j)return '';const task=state.tasks.find(t=>t.job===j.id&&['queued','claimed'].includes(t.status));
  const n=(j.scenes||[]).length||j.config.scene_count,secs=n*(j.config.clip_seconds||8);

@@ -288,7 +288,7 @@ class FailedEarlyClip(unittest.TestCase):
         s.STATE = s.fresh()
 
     def test_boards_go_on_when_an_early_clip_fails(self):
-        j = job(n=3, drawn=1); s.schedule(j)
+        s.STATE["settings"]["grok_auto"] = True; j = job(n=3, drawn=1); s.schedule(j)
         clip = next(t for t in active(j) if t['slot'] == 'clip:0'); clip['status'] = 'claimed'
         s.accept_task_result(clip, {'ok': False, 'error': 'Génération trop longue ou média non détecté.'})
         self.assertEqual(j['status'], 'running')

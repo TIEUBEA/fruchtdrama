@@ -1240,6 +1240,8 @@ def engine_ready(j,engine,moment=None):
     moment=moment or time.time()
     if engine not in engines.AVAILABLE:return False
     if engine=='flow':return flow_can_pay(j)
+    # Owner 06/11/2026: Grok is costly, never used without their go-ahead (« Utiliser Grok » on the episode).
+    if engine=='grok' and not (j.get('grok_ok') or STATE.get('settings',{}).get('grok_auto')):return False
     own=engine==engines.of(j)
     if j['config'].get('dry_run') and not own:return False  # a dry run checks the episode's engine only
     if (STATE.get('engine_walls') or {}).get(engine,0)>moment:return False
@@ -1269,6 +1271,7 @@ def clip_engine_for(j,i,early=False):
         if engine_chain.round_of(s)>before:event(j,f'Clip {i+1} : prompt adouci, nouvel essai sur {engine_chain.LABELS[nxt]}.')
         return nxt
     if redraw_refused_board(j,i):return None
+    ask_grok(j,i)
     s['engine_exhausted']=True;alert(j,'action','Clip '+str(i+1)+' : '+held_message(j))
     return None
 
@@ -1408,6 +1411,7 @@ def clip_failed(j,t,result,kind):
     t['status']='failed';j['status']='running'
     event(j,engine_chain.line(i,engine,kind,reason,nxt,engine_chain.round_of(scene)>before))
     if not nxt and redraw_refused_board(j,i):schedule(j);return True
+    if not nxt:ask_grok(j,i)
     if not nxt:
         scene['engine_exhausted']=True
         alert(j,'action',f'Clip {i+1} : aucun moteur ne l’a fait, même avec le prompt adouci — {engine_chain.summary(scene)}. Modifie la scène (« Refaire » avec une consigne) ou importe un clip, puis Reprendre. Les autres clips continuent.')
@@ -1418,6 +1422,13 @@ THIRD_PARTY_NOTE=('Video engine refusal: this board looks too close to existing 
     'clearly different: another camera angle and framing, another pose and gesture for each character, another background '
     'layout and lighting, different colours for clothes details and props. Keep the characters recognisable (species, hair, '
     'outfit type) and keep the meaning of the scene.')
+
+def ask_grok(j,i):
+    """Every free engine failed: offer Grok, once per episode, never used before the owner says yes."""
+    if j.get('grok_ok') or 'grok' not in engine_chain.order(STATE.get('settings'),j['config']) or j.get('grok_asked'):return
+    j['grok_asked']=True
+    alert(j,'action',f'Clip {i+1} : Flow, Arena et Vidogrid n’y arrivent pas. Grok peut essayer, mais il consomme beaucoup : valide pour l’utiliser sur cet épisode.')
+    j['alerts'][-1]['command']='allow_grok';j['alerts'][-1]['label']='Utiliser Grok pour cet épisode'
 
 def redraw_refused_board(j,i):
     """Real case 06/11/2026: Flow refused a board « en raison des intérêts des fournisseurs de contenu tiers » whatever the
@@ -2723,6 +2734,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         if b.get('flow_profile'): j['flow_profile']=b['flow_profile']
                         j.pop('last_error',None);j.pop('editorial_attempts',None);j.pop('accounts_check',None);j['status']='running'; event(j,'Reprise demandée ; passage automatique limité aux comptes Flow enregistrés.' if STATE.get('settings',{}).get('flow_auto') else 'Reprise demandée ; compte Flow sélectionné conservé.')
                         if start_check(j):schedule(j)
+                    elif action=='allow_grok':
+                        j['grok_ok']=True;j['alerts']=[a for a in j.get('alerts',[]) if a.get('command')!='allow_grok']
+                        for sc in j['scenes']:
+                            if sc.get('engine_exhausted') and not sc.get('clip'):engine_chain.reset(sc)
+                        j['status']='running';event(j,'Grok autorisé par le propriétaire pour cet épisode.');schedule(j)
                     elif action=='retry_step':
                         # « Relancer cette étape » from the blocked banner: the stuck task is dropped and the step asked again.
                         info=stall_info(j)

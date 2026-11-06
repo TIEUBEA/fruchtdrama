@@ -8,6 +8,11 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 
 
+
+## 0.1.95.1 (06/11/2026)
+- Grok n'est jamais utilisé sans l'accord du propriétaire (gros consommateur) : quand Flow, Arena et Vidogrid échouent, l'épisode propose « Utiliser Grok pour cet épisode ». Ordre : Flow → Arena → Vidogrid → (Grok sur validation).
+- Téléchargements Flow un par un : deux clips finis à la même seconde ne pouvaient pas être distingués (clips 6 et 9 générés mais non rangés, importés à la main).
+
 ## 0.1.95 (06/11/2026)
 **Ajouté**
 - Mes comptes : on voit quel compte travaille, sur quelle IA, pour quoi et à quel moment. Encadré « En ce moment » en haut de la page, bandeau « Utilisé maintenant » dans chaque service (ChatGPT, Google Flow, Arena, Vidogrid, Grok, Claude) avec la tâche (« Clip 3 de BANANITO », « Planche 7 », « Scénario ») et l'heure de début, badge « En cours » sur la ligne du compte utilisé. Sinon « Dernier utilisé il y a 3 min » (heure gardée par compte à chaque tâche prise par la fenêtre FruchtDrama).
