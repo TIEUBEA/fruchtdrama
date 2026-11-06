@@ -15,6 +15,9 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 - Transcription locale lancée seulement quand les sous-titres sont activés.
 - Clip que ni Flow ni Grok n'ont pu faire : la planche, avec un zoom lent, le remplace, et la vidéo va jusqu'au montage. Un bandeau le signale, et « Refaire » reste possible. Exception : un envoi Flow incertain (clip peut-être déjà facturé) garde la vérification.
 - Planches : une à la fois par fenêtre ; les scénarios restent en parallèle. Deux planches envoyées en même temps échouaient toutes les deux (« champ de pièce jointe indisponible »). Les épisodes arrêtés ainsi repartent seuls.
+- Montage : un seul à la fois, encodage `veryfast`. Trois montages en parallèle saturaient la mémoire et étaient coupés après 240 s. Le délai passe à 20 min, et une erreur de montage tient en une ligne, au lieu de la commande ffmpeg entière.
+- Avancement du montage visible : « scène 3 sur 16 préparée », « assemblage final », « en attente d'un autre montage ».
+- Clips : une liaison perdue avec l'onglet (extension rechargée, « Could not establish connection ») n'est plus comptée comme un essai, et le même moteur est relancé jusqu'à 3 fois. Une vidéo n'est jamais faite de planches pour plus de la moitié de ses scènes : on a alors un message d'erreur clair. Les 3 épisodes transformés en planches ce soir refont leurs clips.
 - Bloc « Contrôle qualité des clips » affiché seulement s'il y a quelque chose à faire. Les lignes « correspondance avec le scénario » sont retirées.
 
 ## 0.1.101 (06/11/2026)

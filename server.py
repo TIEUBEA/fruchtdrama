@@ -79,6 +79,21 @@ def read_state():
         # 0.1.102, owner 06/11/2026 « retire les actions pas très importantes »: fast defaults, once.
         state['settings']['clip_look']='ear';state['settings']['cover_controls']='none';state['settings']['board_controls']='none'
         state['fast_0102']=True
+    for j in state.get('jobs',[]):
+        sc=j.get('scenes') or []
+        if sc and 2*sum(1 for x in sc if x.get('still'))>len(sc) and j.get('status')!='done':
+            # 0.1.102: clips lost to an extension reload were turned into boards; they are made again.
+            for x in sc:
+                if x.get('still'):
+                    for k in ('clip','still','engine_tries','engine_round','engine_exhausted','transient'):x.pop(k,None)
+            j['stage']='clips';j['status']='running';j['quality_report']={};j.pop('final',None)
+            j['alerts']=[a for a in j.get('alerts') or [] if 'planche animée' not in str(a.get('text',''))]
+            j.setdefault('events',[]).append({'at':dt.datetime.now(dt.timezone.utc).isoformat(),'text':'Clips refaits : ils avaient été perdus pendant la mise à jour de l’extension (planches animées retirées).'})
+    for j in state.get('jobs',[]):
+        ev=(j.get('events') or [{}])[-1].get('text','')
+        if j.get('status')=='attention' and j.get('stage')=='edit' and ev.startswith(('Montage : Command','Montage en échec')):
+            # 0.1.102: a montage killed by lack of memory (3 at once) starts again, one at a time now.
+            j['status']='running';j['events'].append({'at':dt.datetime.now(dt.timezone.utc).isoformat(),'text':'Montage relancé (un seul à la fois désormais).'})
     # 0.1.99: a length outside the engine's range no longer blocks; old reports holding that block are run again.
     for j in state.get('jobs',[]):
         r=j.get('quality_report') or {}
@@ -321,6 +336,7 @@ def event_all(text):
 def alert(j,level,text):
     # Shown as a banner at the top of the episode: 'action' = the owner must act, 'auto' = decided alone, to check.
     event(j,text);alerts=j.setdefault('alerts',[]);alerts.append({'at':now(),'level':level,'text':text});del alerts[:-6]
+TRANSIENT_CLIP=r'Could not establish connection|Receiving end does not exist|Suivi interrompu|Extension context invalidated|No tab with id'
 CHAT_RETRIES=2  # automatic new tries of a failed text or board before the episode stops
 STALL_UNTAKEN=6  # minutes: a queued task nobody takes while the window answers = extension stuck
 STALL_ONLINE=180  # seconds without a heartbeat: the FruchtDrama window is considered gone
@@ -1293,6 +1309,14 @@ def schedule_clips(j):
             # replaced by its board, slowly zoomed, and the montage goes on. Said in the banner; « Refaire » still works.
             # A Flow clip maybe already generated and charged keeps the owner's check (recovery or « il n'existe pas »).
             doubt={int(t['slot'].split(':')[1]) for t in uncertain_clip_tasks(j)}
+            if 2*len(held)>len(j['scenes']):
+                # More than half the clips failed: a general problem (site changed, accounts out), never a video of
+                # boards only. Said plainly; Reprendre makes them again from Flow.
+                last=engine_chain.failure(min(held),j['scenes'][min(held)])
+                for k in held:engine_chain.reset(j['scenes'][k])
+                if j['status']=='running':
+                    j['status']='attention';alert(j,'action',f'{len(held)} clips sur {len(j["scenes"])} en échec sur Flow et Grok : problème général, pas de vidéo faite de planches. Dernier : {last}. Regarde les onglets Flow et Grok, puis « Reprendre » refait ces clips.')
+                return True
             stills=[i for i in sorted(held) if i not in doubt and still_clip(j,i)]
             if stills:
                 alert(j,'auto','Clip(s) '+', '.join(str(i+1) for i in stills)+' : Flow et Grok ont échoué, la planche animée les remplace pour finir la vidéo. Refais-les ou importe un clip si tu veux mieux.')
@@ -1494,6 +1518,11 @@ def clip_failed(j,t,result,kind):
     if i>=len(j.get('scenes') or []) or j['scenes'][i].get('clip'):return False
     scene=j['scenes'][i];engine='flow' if t['kind']=='flow_video' else (t.get('payload') or {}).get('engine')
     reason=result.get('error','')
+    # 0.1.102: a tab cut off by an extension reload is not a try (06/11/2026 23:13: 15 clips « failed » in 2 min while the
+    # extension updated itself). Same engine again, up to 3 times; a Flow clip maybe sent keeps the uncertain path below.
+    if re.search(TRANSIENT_CLIP,reason) and (t['kind']=='engine_video' or result.get('generation_submitted') is False) and scene.get('transient',0)<3:
+        scene['transient']=scene.get('transient',0)+1;t['status']='failed';j['status']='running'
+        event(j,f'Clip {i+1} : liaison avec l’onglet perdue ({engine_chain.short(reason)}) ; nouvel essai sur le même moteur, non compté.');return True
     if t['kind']=='flow_video':
         # Flow's own failure message after the submission (flow_failed): nothing more to wait for, nothing charged.
         if result.get('generation_submitted') is not False and result.get('flow_failed') is not True:
@@ -2093,8 +2122,10 @@ def note_not_ready(t,result):
     key=('flow:'+str(t.get('profile'))) if kind=='flow_video' else ('site:'+str(payload.get('engine'))) if kind=='engine_video' else ('site:'+str(payload.get('provider') or 'chatgpt')) if kind in ('chat_text','chat_image','chat_collect','chat_image_collect') else None
     return bool(key) and readiness.mark(STATE,key,info['state'],str(info.get('reason') or 'page du fournisseur indisponible'),now())
 
-def run_command(args,cwd=None):
-    r=subprocess.run(args,capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=240,cwd=cwd)
+def run_command(args,cwd=None,timeout=1200):
+    # 0.1.102: 240 s cut a 16-scene montage (« timed out after 240 seconds »); said in one short line, never the command.
+    try:r=subprocess.run(args,capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=timeout,cwd=cwd)
+    except subprocess.TimeoutExpired:raise RuntimeError(f'ffmpeg n’a pas fini en {timeout//60} min (ordinateur trop chargé ?)') from None
     if r.returncode: raise RuntimeError(r.stderr[-1800:])
 
 def clip_duration(probe,src):
@@ -2137,7 +2168,26 @@ def make_variant(j,kind,language=''):
         event(nxt,'Version '+cfg['language']+' de « '+j['title']+' » : mêmes planches, répliques et voix refaites.')
     schedule(nxt);return nxt
 
+def montage_step(id,text):
+    """Montage progress on one journal line, updated in place (owner 06/11/2026: « on doit voir l'évolution du montage »)."""
+    with LOCK:
+        j=job_by(id)
+        if not j:return
+        ev=j.setdefault('events',[])
+        if ev and ev[-1].get('montage'):ev[-1].update(text=text,at=now())
+        else:ev.append({'at':now(),'text':text,'montage':True})
+        j['updated']=now()
+
+RENDER_SLOT=threading.Semaphore(1)  # 0.1.102: one montage at a time (3 at once took the machine to a load of 54 on 14 cores)
+
 def render_job(id):
+    if not RENDER_SLOT.acquire(blocking=False):
+        montage_step(id,'Montage en attente : un autre montage tourne (un seul à la fois pour ne pas saturer l’ordinateur).')
+        RENDER_SLOT.acquire()
+    try:return render_job_now(id)
+    finally:RENDER_SLOT.release()
+
+def render_job_now(id):
     try:
         with LOCK: j=copy.deepcopy(job_by(id)); d=job_dir(j)
         ff=shutil.which('ffmpeg')
@@ -2176,8 +2226,9 @@ def render_job(id):
         for i,s in enumerate(j['scenes']):
             src,audio,_,speech,(cut,length)=plan[i]; out=d/f'normalized_{i:02}.mp4'
             speech=montage.shift(speech,cut)
-            args=[ff,'-y',*(['-ss',f'{cut:g}'] if cut else []),'-i',str(src),'-f','lavfi','-i','anullsrc=r=48000:cl=stereo','-map','0:v:0','-map','0:a:0' if audio else '1:a:0','-vf',f'scale={frame_size(j)[0]}:{frame_size(j)[1]}:force_original_aspect_ratio=increase:flags=lanczos,crop={frame_size(j)[0]}:{frame_size(j)[1]},fps=30,'+(f"zoompan=z='{montage.zoom(i,length,mset['fast_cuts'])}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={frame_size(j)[0]}x{frame_size(j)[1]}:fps=30," if j['config'].get('dynamic',True) else '')+'unsharp=5:5:0.5:5:5:0,setsar=1,tpad=stop_mode=clone:stop_duration='+f'{length:g}','-af','apad','-t',f'{length:g}','-c:v','libx264','-preset','medium','-crf','17','-pix_fmt','yuv420p','-c:a','aac','-ar','48000','-ac','2',str(out)]
+            args=[ff,'-y',*(['-ss',f'{cut:g}'] if cut else []),'-i',str(src),'-f','lavfi','-i','anullsrc=r=48000:cl=stereo','-map','0:v:0','-map','0:a:0' if audio else '1:a:0','-vf',f'scale={frame_size(j)[0]}:{frame_size(j)[1]}:force_original_aspect_ratio=increase:flags=lanczos,crop={frame_size(j)[0]}:{frame_size(j)[1]},fps=30,'+(f"zoompan=z='{montage.zoom(i,length,mset['fast_cuts'])}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={frame_size(j)[0]}x{frame_size(j)[1]}:fps=30," if j['config'].get('dynamic',True) else '')+'unsharp=5:5:0.5:5:5:0,setsar=1,tpad=stop_mode=clone:stop_duration='+f'{length:g}','-af','apad','-t',f'{length:g}','-c:v','libx264','-preset','veryfast','-crf','17','-pix_fmt','yuv420p','-c:a','aac','-ar','48000','-ac','2',str(out)]
             run_command(args)
+            montage_step(id,f'Montage : scène {i+1} sur {len(j["scenes"])} préparée.')
             # With a fade, the next clip starts while this one ends: captions move with it.
             offset=start;start+=length-(fade if i<len(j['scenes'])-1 else 0);lengths.append(length)
             karaoke=bool(j['config'].get('karaoke'))
@@ -2202,7 +2253,8 @@ def render_job(id):
                 cursor+=duration
         (d/'subtitles.ass').write_text('\n'.join(ass),'utf-8-sig')
         (d/'concat.txt').write_text('\n'.join(f"file 'normalized_{i:02}.mp4'" for i in range(len(j['scenes']))),'utf-8')
-        encode=['-c:v','libx264','-preset','slow','-crf','17','-profile:v','high','-pix_fmt','yuv420p','-c:a','aac','-b:a','192k','-movflags','+faststart','final.mp4']
+        encode=['-c:v','libx264','-preset','veryfast','-crf','18','-profile:v','high','-pix_fmt','yuv420p','-c:a','aac','-b:a','192k','-movflags','+faststart','final.mp4']
+        montage_step(id,'Montage : assemblage final et sous-titres (environ 1 à 3 min)…')
         graph=montage.crossfade(lengths,fade)
         if graph:
             # "Fondu léger / long": each clip melts into the next, sound included.
@@ -2235,7 +2287,11 @@ def render_job(id):
             except Exception as e:log_error('Kit de publication',e)
     except Exception as e:
         with LOCK:
-            j=job_by(id); j['status']='attention'; event(j,'Montage : '+str(e)); save()
+            # 0.1.102: one readable line (the full ffmpeg command filled the screen); the details go to the error log.
+            text=str(e);short=text if len(text)<200 and 'ffmpeg' not in text[:20] else text.strip().splitlines()[-1][:200]
+            if 'timed out' in text:short='ffmpeg n’a pas fini à temps (ordinateur trop chargé ?)'
+            log_error('Montage',e)
+            j=job_by(id); j['status']='attention'; event(j,'Montage en échec : '+short+' « Reprendre » le relance, sans rien regénérer.'); save()
     finally: BUSY.discard(id)
 
 def start_render(id):
