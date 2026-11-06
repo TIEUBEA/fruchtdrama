@@ -6,6 +6,17 @@ correspondante (P0-xx, P1-x, P2-xx) détaillée dans `docs/sudf/`. Guide pour re
 version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, version par version).
 
 
+## 0.1.89 (06/11/2026)
+**Amélioré**
+- **Clips en parallèle des planches**, comme l'Atelier Gourmand (« les clips partent chez Grok pendant que ChatGPT dessine les planches ») : l'épisode travaille sur deux voies, la voie texte et images (ChatGPT, Claude) et la voie vidéo (Flow, Grok, Arena), avec au plus une tâche active par voie. Dès que la planche 1 est reçue, son clip part pendant que la planche 2 est dessinée ; le temps de création baisse d'autant.
+- Un clip ne part que pour une planche dessinée et validée : avec le contrôle des planches (contrôle groupé), aucun clip avant son verdict ; une planche refusée est redessinée d'abord, puis animée. « Refaire » une planche retire toujours son clip avant qu'il reparte.
+- Toutes les règles des clips restent : réservation des crédits Flow au départ du clip seulement, changement de compte Flow/Grok, envois incertains jamais renvoyés au hasard. Si un compte, des crédits ou une confirmation manquent pendant les planches, rien n'attend : les planches continuent et l'étape Clips attend ensuite et dit pourquoi, comme avant. Essai à blanc : clips toujours après les planches.
+- Extension : deux exécutions indépendantes, chacune dans ses propres onglets (ChatGPT d'un côté, Flow ou Grok de l'autre), chacune avec son suivi sauvegardé et sa reprise après redémarrage du navigateur ; jamais deux tâches dans le même onglet. **Recharger l'extension FruchtDrama.**
+- Bandeau « Bloqué » : il nomme la voie qui ne bouge plus, et « Relancer cette étape » ne relance qu'elle (un clip en cours continue). Un échec de clip n'est plus effacé par l'arrivée d'une planche.
+
+**Ajouté**
+- `/api/bridge/task?lane=chat|video` : la passerelle demande une tâche par voie ; sans `lane`, comportement inchangé (extension 0.1.88 et plus ancienne : une tâche à la fois). Réglage `parallel_clips` (actif par défaut) pour revenir au fonctionnement séquentiel.
+
 ## 0.1.88 (06/11/2026)
 **Corrigé**
 - Recréation à l'identique : un scénario refusé listait un seul défaut à la fois ; chaque réécriture (5 à 7 min) en révélait un autre et l'épisode tombait en « Action requise » au 3ᵉ refus. Tous les défauts (mots de taille, scènes trop parlées) sont maintenant listés dans un seul refus, comme l'Atelier.

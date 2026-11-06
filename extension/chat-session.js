@@ -57,7 +57,7 @@ globalThis.FruchtChats={
  async tidy(cfg,tasks,chrome){
   const completed=tasks.filter(t=>t.client===cfg.client&&t.status==='done'&&['chat_text','chat_image'].includes(t.kind));
   const protectedTabs=new Set(Object.values(cfg.scenarioTabs||{}).filter(x=>x.pending).map(x=>x.tabId));
-  if(cfg.activeTask)protectedTabs.add(cfg.activeTask.tabId);
+  for(const a of [cfg.activeTask,cfg.activeVideoTask])if(a)protectedTabs.add(a.tabId);
   const tabs=await chrome.tabs.query({url:['https://chatgpt.com/*','https://claude.ai/*']});
   const verified=[];
   for(const tab of tabs){

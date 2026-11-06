@@ -24,7 +24,7 @@ import power
 import maintenance
 import series
 import licence
-VERSION='0.1.88'
+VERSION='0.1.89'
 OFFICIAL_ORIGIN='chrome-extension://bhdmibhibonmaamgcbpmbhedhohfongj'  # extension/manifest.json "key"
 import sys
 import traceback
@@ -118,6 +118,11 @@ def client_accepts(client,task):
         provider=task.get('payload',{}).get('provider','chatgpt')
         return client.get('ai_provider','both') in ('both',provider)
     return task['kind']=='tiktok_search'
+# Two lanes per episode (0.1.89, like the Atelier: « les clips partent pendant que ChatGPT dessine les planches »):
+# 'chat' (ChatGPT/Claude texts and images, TikTok research) and 'video' (Flow, Grok, Arena). At most one active task per lane and per episode.
+VIDEO_KINDS=('flow_video','flow_collect','engine_video')
+def lane_of(task): return 'video' if task.get('kind') in VIDEO_KINDS or (not task.get('kind') and str(task.get('slot','')).startswith('clip:')) else 'chat'  # no kind: manual import
+def lane_busy(j,lane): return any(t['job']==j['id'] and t['status'] in ('queued','claimed') and lane_of(t)==lane for t in STATE['tasks'])
 def event(j, text): j['events'].append({'at':now(),'text':text}); j['updated']=now()
 
 COVER_REVIEW_PROMPT=('Review the attached TikTok COVER image. Do not generate an image. Check: the title text is fully visible, '
@@ -170,8 +175,14 @@ def stall_info(j,moment=None):
     def ago(at):
         try:return moment-dt.datetime.fromisoformat(at).timestamp()
         except (TypeError,ValueError):return None
-    task=next((t for t in STATE['tasks'] if t['job']==j['id'] and t['status']=='claimed'),None) or next((t for t in STATE['tasks'] if t['job']==j['id'] and t['status']=='queued'),None)
-    if not task:return None
+    claimed=[t for t in STATE['tasks'] if t['job']==j['id'] and t['status']=='claimed']
+    # Two lanes may work at once: each active task is looked at; the first one that does not move is said.
+    for task in claimed+[t for t in STATE['tasks'] if t['job']==j['id'] and t['status']=='queued']:
+        info=task_stall(j,task,moment,ago,len(claimed)>1)
+        if info:return {**info,'task':task['id']}
+    return None
+
+def task_stall(j,task,moment,ago,shared):
     kind=task.get('kind','');service=SERVICE.get((task.get('payload') or {}).get('provider'),'Google Flow' if kind=='flow_video' else 'Grok ou Arena' if kind=='engine_video' else 'le site')
     online=[c for c in STATE['clients'].values() if not c.get('disabled') and (ago(c.get('seen')) or 1e9)<STALL_ONLINE]
     paid=kind in ('flow_video','engine_video')
@@ -186,7 +197,9 @@ def stall_info(j,moment=None):
         when=dt.datetime.fromisoformat(client['seen']).astimezone().strftime('%H:%M') if client.get('seen') else '?'
         return {'reason':f'La fenêtre FruchtDrama qui faisait cette étape ne répond plus depuis {when} (fermée, rechargée ou extension mise à jour) : sa réponse ne viendra pas.',
                 'hint':retry_note,'retry':True,'paid':paid,'since':client.get('seen')}
-    last=min([x for x in (ago(task.get('claimed')),ago((j.get('events') or [{}])[-1].get('at'))) if x is not None],default=None)
+    # With both lanes active, the other lane's news must not hide this one's silence: its own progress only.
+    news=ago(task.get('progress_at')) if shared else ago((j.get('events') or [{}])[-1].get('at'))
+    last=min([x for x in (ago(task.get('claimed')),news) if x is not None],default=None)
     if last is not None and last>=STALL_QUIET.get(kind,12)*60:
         return {'reason':f'Aucune nouvelle de {service} depuis {int(last//60)} min : l’onglet attend peut-être une connexion, une vérification anti-robot, ou la réponse s’est arrêtée.',
                 'hint':'Regarde l’onglet '+service+' dans la fenêtre FruchtDrama. '+retry_note,'retry':True,'paid':paid,'since':task.get('claimed')}
@@ -917,8 +930,10 @@ def schedule(j):
     # Consultation only (access ended, revoked, unchecked for 3 days): nothing advances, nothing is sent or paid.
     if not LICENCE.allowed(): return
     if j['status'] in ('paused','attention','done','rendering','waiting_research','waiting_script','waiting_credit','waiting_review','waiting_quota','waiting_account','waiting_night','waiting_source'): return
-    if any(t['job']==j['id'] and t['status'] in ('queued','claimed') for t in STATE['tasks']): return
     step=j['stage']
+    # The boards stage works on two lanes (see VIDEO_KINDS); every other stage waits for the episode's single task.
+    if step=='images':return schedule_images(j)
+    if any(t['job']==j['id'] and t['status'] in ('queued','claimed') for t in STATE['tasks']): return
     if step=='ideas':
         if j.get('ideas'):
             j['status']='waiting_review';event(j,'Dix histoires proposées : choisissez celle qui deviendra votre épisode.');return
@@ -955,59 +970,9 @@ def schedule(j):
                 # « Au fil de l'histoire »: the same sheet with the change applied, attached to later boards.
                 add_task(j,'chat_image',{'provider':'chatgpt','prompt':state_sheet_prompt(j,change)+correction(j.get('corrections',{}).get(f'state:{k}')),'attachments':[asset_url(j,state_base(j,change))]},f'state:{k}');return
         j['stage']='images'; schedule(j)
-    elif step=='images':
-        for i,s in enumerate(j['scenes']):
-            if not s.get('image'):
-                attachments,states=scene_references(j,i)
-                add_task(j,'chat_image',{'provider':'chatgpt','prompt':s['image_prompt']+plan_image_block(j,s)+' Use attached character references. Same identity and outfit, no text, 9:16. Dynamic cinematic composition with a camera angle different from the other scenes, characters caught in action, detailed living background. Highest resolution available (at least 1024×1536), ultra sharp, no blur.'+state_note(j,states)+correction(j.get('corrections',{}).get(f'image:{i}')),'attachments':attachments},f'image:{i}'); return
-        if board_gate(j):return
-        j['stage']='clips'; schedule(j)
     elif step=='clips':
         for i,s in enumerate(j['scenes']):
-            if not s.get('clip') and engines.of(j)!='flow':
-                # P5-06: Grok / Arena. No credit balance to reserve; quotas are handled per account.
-                cast='\n'.join(c['id']+': '+c['appearance']+' Voice: '+c['voice'] for c in j['characters'])
-                dialog=dialogue_lines(j,s)
-                seconds=engines.spec(j)['seconds'];language=j['config'].get('language','Deutsch (de-DE)')
-                prompt=f"One continuous shot, {seconds} seconds, portrait 9:16. Animate the attached image with real motion: the camera moves (dolly, pan or push-in), characters walk, turn and use their hands, the background is alive (extras, objects, light). No text, no music. Spoken language ONLY: {language}. Natural native voices, no translation or extra narration. Preserve identity.\n{cast}\n{s['video_prompt']}{plan_video_block(j,s)}\nExact dialogue in this order; only the named speaker moves their lips, all others stay silent:\n{dialog}"+correction(j.get('corrections',{}).get(f'clip:{i}'))
-                payload={'engine':engines.of(j),'prompt':prompt,'attachments':[asset_url(j,flow_reference(j,s['image']))],'seconds':seconds}
-                engine=engines.of(j)
-                if engine_accounts.accounts(STATE,engine) and not j['config'].get('dry_run'):
-                    moment=time.time();account=engine_accounts.choose(STATE,engine,j.get('engine_account'),moment)
-                    if not account:
-                        # P5-08: every registered account is at its limit: wait for the first renewal.
-                        j['status']='waiting_quota';j['wait_until']=engine_accounts.next_free(STATE,engine,moment)
-                        event(j,'Tous les comptes '+engines.ENGINES[engine]['label']+' sont à leur limite. Reprise automatique vers '+engine_accounts.stamp(j['wait_until'])[11:16]+' UTC, ou ajoutez un compte.');return
-                    if j.get('engine_account') and account['id']!=j['engine_account']:
-                        previous=engine_accounts.by_id(STATE,j['engine_account'])
-                        j['engine_account']=account['id'];j['status']='waiting_account'
-                        j['account_switch']={'engine':engine,'from':(previous or {}).get('email'),'to':account['email'],'label':account['label']}
-                        event(j,'Compte '+engines.ENGINES[engine]['label']+' suivant : connectez-vous vous-même à '+account['email']+' dans l’onglet de la fenêtre FruchtDrama, puis cliquez « J’ai changé de compte ». Clips reçus conservés.');return
-                    j['engine_account']=account['id'];payload['account']={'email':account['email'],'label':account['label']}
-                if j['config'].get('dry_run'):payload['dry_run']=True
-                add_task(j,'engine_video',payload,f'clip:{i}');return
-            if not s.get('clip'):
-                if any(t['slot']==f'clip:{i}' for t in uncertain_clip_tasks(j)):
-                    j['status']='attention';event(j,uncertain_message(j));return
-                flow_accounts.follow_active_browser(STATE)
-                cost=j['config']['flow_cost'];p=flow_accounts.choose(STATE,j.get('flow_profile'),cost)
-                if not p or p['balance']<cost:
-                    j['status']='waiting_credit'; event(j,'Solde insuffisant ou profil Flow absent. Choisis un profil et vérifie son solde.'); return
-                if p['id']!=j.get('flow_profile'):
-                    j['flow_profile']=p['id'];event(j,'Passage automatique au prochain compte Flow enregistré ; clips reçus conservés.')
-                cast='\n'.join(c['id']+': '+c['appearance']+' Voice: '+c['voice'] for c in j['characters'])
-                dialog=dialogue_lines(j,s)
-                language=j['config'].get('language','Deutsch (de-DE)')
-                prompt=f"One continuous shot, 8 seconds, portrait 9:16. No text, no music. Spoken language ONLY: {language}. Natural native voices in the requested language, no translation or extra narration. Preserve identity.\n{cast}\n{s['video_prompt']}{plan_video_block(j,s)}\nExact dialogue in this order; only the named speaker moves their lips, all others stay silent:\n{dialog}"+correction(j.get('corrections',{}).get(f'clip:{i}'))
-                payload={'prompt':prompt,'attachments':[asset_url(j,flow_reference(j,s['image']))],'cost':cost,'balance':p['balance'],'seconds':8,**({'model':j['config']['flow_model'],'resolution':j['config'].get('flow_resolution','720p')} if j['config'].get('flow_model') else {})}
-                if j['config'].get('dry_run'):payload['dry_run']=True
-                target=flow_accounts.route(p) if STATE.get('settings',{}).get('flow_auto') else None
-                if target:
-                    existing=j.get('flow_projects',{}).get(p['id'])
-                    if existing:target['url']=existing
-                    else:target['new_project']=True
-                    payload['flow_route']=target
-                add_task(j,'flow_video',payload,f'clip:{i}'); return
+            if not s.get('clip'):schedule_clip(j,i);return
         if j.get('quality_version')==1:
             j['stage']='quality';schedule(j);return
         if j.get('cover_style') in ('dramatic_v2','family_poster_v3'):
@@ -1034,6 +999,86 @@ def schedule(j):
         # A failed or interrupted montage is retried locally; no media is regenerated.
         if not j.get('final'):
             j['status']='rendering';event(j,'Montage local relancé avec les médias existants.');start_render(j['id'])
+
+def schedule_images(j):
+    """Boards stage on two lanes: the chat lane draws the boards one by one (then the board check), while the video
+    lane already animates each validated board, one clip at a time. The clips stage then makes only what is missing."""
+    if not lane_busy(j,'chat'):
+        for i,s in enumerate(j['scenes']):
+            if not s.get('image'):
+                attachments,states=scene_references(j,i)
+                add_task(j,'chat_image',{'provider':'chatgpt','prompt':s['image_prompt']+plan_image_block(j,s)+' Use attached character references. Same identity and outfit, no text, 9:16. Dynamic cinematic composition with a camera angle different from the other scenes, characters caught in action, detailed living background. Highest resolution available (at least 1024×1536), ultra sharp, no blur.'+state_note(j,states)+correction(j.get('corrections',{}).get(f'image:{i}')),'attachments':attachments},f'image:{i}');break
+        else:
+            if not board_gate(j):
+                # Every board drawn and validated: the clips stage waits for a clip still in progress, then goes on.
+                j['stage']='clips';j.pop('early_clips_off',None);schedule(j);return
+    if j['stage']=='images' and j['status']=='running':early_clip(j)
+
+def board_ready(j,i):
+    """Board i may be animated: it is drawn and, when the board check is on, the check has given its verdict.
+    The check looks at all boards together, so before its verdict no board counts as validated."""
+    if not j['scenes'][i].get('image'):return False
+    return j['config'].get('board_controls','none')=='none' or bool(j.get('board_checked'))
+
+def early_clip(j):
+    """Atelier-like: a clip leaves for Flow/Grok while ChatGPT still draws the next boards. Only when everything is
+    ready; otherwise nothing is changed and the clips stage, after the boards, waits and says why as before."""
+    if not STATE.get('settings',{}).get('parallel_clips',True) or j['config'].get('dry_run') or j.get('early_clips_off'):return False
+    if lane_busy(j,'video') or uncertain_clip_tasks(j):return False
+    i=next((i for i,s in enumerate(j['scenes']) if not s.get('clip') and board_ready(j,i)),None)
+    return i is not None and schedule_clip(j,i,early=True)
+
+def schedule_clip(j,i,early=False):
+    """Queue clip i (Flow, or Grok/Arena). early=True (during the boards): returns False without touching the
+    episode when an account, credits or a check is missing. Returns True when a task was queued or the episode waits."""
+    s=j['scenes'][i]
+    if engines.of(j)!='flow':
+        # P5-06: Grok / Arena. No credit balance to reserve; quotas are handled per account.
+        cast='\n'.join(c['id']+': '+c['appearance']+' Voice: '+c['voice'] for c in j['characters'])
+        dialog=dialogue_lines(j,s)
+        seconds=engines.spec(j)['seconds'];language=j['config'].get('language','Deutsch (de-DE)')
+        prompt=f"One continuous shot, {seconds} seconds, portrait 9:16. Animate the attached image with real motion: the camera moves (dolly, pan or push-in), characters walk, turn and use their hands, the background is alive (extras, objects, light). No text, no music. Spoken language ONLY: {language}. Natural native voices, no translation or extra narration. Preserve identity.\n{cast}\n{s['video_prompt']}{plan_video_block(j,s)}\nExact dialogue in this order; only the named speaker moves their lips, all others stay silent:\n{dialog}"+correction(j.get('corrections',{}).get(f'clip:{i}'))
+        payload={'engine':engines.of(j),'prompt':prompt,'attachments':[asset_url(j,flow_reference(j,s['image']))],'seconds':seconds}
+        engine=engines.of(j)
+        if engine_accounts.accounts(STATE,engine) and not j['config'].get('dry_run'):
+            moment=time.time();account=engine_accounts.choose(STATE,engine,j.get('engine_account'),moment)
+            if not account:
+                if early:return False
+                # P5-08: every registered account is at its limit: wait for the first renewal.
+                j['status']='waiting_quota';j['wait_until']=engine_accounts.next_free(STATE,engine,moment)
+                event(j,'Tous les comptes '+engines.ENGINES[engine]['label']+' sont à leur limite. Reprise automatique vers '+engine_accounts.stamp(j['wait_until'])[11:16]+' UTC, ou ajoutez un compte.');return True
+            if j.get('engine_account') and account['id']!=j['engine_account']:
+                if early:return False
+                previous=engine_accounts.by_id(STATE,j['engine_account'])
+                j['engine_account']=account['id'];j['status']='waiting_account'
+                j['account_switch']={'engine':engine,'from':(previous or {}).get('email'),'to':account['email'],'label':account['label']}
+                event(j,'Compte '+engines.ENGINES[engine]['label']+' suivant : connectez-vous vous-même à '+account['email']+' dans l’onglet de la fenêtre FruchtDrama, puis cliquez « J’ai changé de compte ». Clips reçus conservés.');return True
+            j['engine_account']=account['id'];payload['account']={'email':account['email'],'label':account['label']}
+        if j['config'].get('dry_run'):payload['dry_run']=True
+        add_task(j,'engine_video',payload,f'clip:{i}');return True
+    if any(t['slot']==f'clip:{i}' for t in uncertain_clip_tasks(j)):
+        if early:return False
+        j['status']='attention';event(j,uncertain_message(j));return True
+    flow_accounts.follow_active_browser(STATE)
+    cost=j['config']['flow_cost'];p=flow_accounts.choose(STATE,j.get('flow_profile'),cost)
+    if not p or p['balance']<cost:
+        if early:return False
+        j['status']='waiting_credit'; event(j,'Solde insuffisant ou profil Flow absent. Choisis un profil et vérifie son solde.'); return True
+    if p['id']!=j.get('flow_profile'):
+        j['flow_profile']=p['id'];event(j,'Passage automatique au prochain compte Flow enregistré ; clips reçus conservés.')
+    cast='\n'.join(c['id']+': '+c['appearance']+' Voice: '+c['voice'] for c in j['characters'])
+    dialog=dialogue_lines(j,s)
+    language=j['config'].get('language','Deutsch (de-DE)')
+    prompt=f"One continuous shot, 8 seconds, portrait 9:16. No text, no music. Spoken language ONLY: {language}. Natural native voices in the requested language, no translation or extra narration. Preserve identity.\n{cast}\n{s['video_prompt']}{plan_video_block(j,s)}\nExact dialogue in this order; only the named speaker moves their lips, all others stay silent:\n{dialog}"+correction(j.get('corrections',{}).get(f'clip:{i}'))
+    payload={'prompt':prompt,'attachments':[asset_url(j,flow_reference(j,s['image']))],'cost':cost,'balance':p['balance'],'seconds':8,**({'model':j['config']['flow_model'],'resolution':j['config'].get('flow_resolution','720p')} if j['config'].get('flow_model') else {})}
+    if j['config'].get('dry_run'):payload['dry_run']=True
+    target=flow_accounts.route(p) if STATE.get('settings',{}).get('flow_auto') else None
+    if target:
+        existing=j.get('flow_projects',{}).get(p['id'])
+        if existing:target['url']=existing
+        else:target['new_project']=True
+        payload['flow_route']=target
+    add_task(j,'flow_video',payload,f'clip:{i}');return True
 
 def uncertain_clip_tasks(j):
     """Flow submissions that may have been charged but whose clip was never received."""
@@ -1403,6 +1448,10 @@ def accept_task_result(t,result):
             moment=time.time();account=engine_accounts.by_id(STATE,j.get('engine_account'))
             if account:engine_accounts.wall(account,moment,errors.retry_after(result),result.get('error',''))
             if account or engine_accounts.accounts(STATE,t['payload']['engine']):j['status']='running';schedule(j)
+            elif j.get('stage')=='images':
+                # A clip sent ahead hit the limit: the boards go on, the clips wait for the clips stage (and its quota wait).
+                j['early_clips_off']=True;j['status']='running'
+                event(j,'Limite atteinte sur ce compte pendant les planches : les planches continuent, les clips attendront la fin des planches.');schedule(j)
             else:
                 j['status']='waiting_quota';j['wait_until']=moment+(errors.retry_after(result) or engine_accounts.DEFAULT_WALL)
                 event(j,'Limite atteinte sur ce compte. Reprise automatique vers '+engine_accounts.stamp(j['wait_until'])[11:16]+' UTC. Enregistrez d’autres comptes dans Connexions pour changer de compte.')
@@ -1490,7 +1539,10 @@ def accept_task_result(t,result):
             if duplicate_scene_source(j,file,-1) or ((job_dir(j)/'cover-style-reference.png').is_file() and image_fingerprint(j,file)==image_fingerprint(j,'cover-style-reference.png')):raise ValueError('Couverture rejetée : copie exacte d’une référence. Attente de la couverture composée.')
             j['cover_file']=file;j['cover']=asset_url(j,file)
         event(j,'Média reçu : '+file)
-    t['status']='done'; t['result']=result;t['done_at']=now();j.pop('last_error',None)  # done_at: Studio counts per 6 h
+    t['status']='done'; t['result']=result;t['done_at']=now()  # done_at: Studio counts per 6 h
+    # A success clears the episode's last error only on its own lane: a board received does not erase a failed clip.
+    failed=next((x for x in STATE['tasks'] if x.get('id')==(j.get('last_error') or {}).get('task')),None)
+    if not failed or lane_of(failed)==lane_of(t):j.pop('last_error',None)
     if quotas.service(t) and t.get('kind') in ('chat_image','chat_text'):quotas.note_pass(STATE,quotas.service(t),time.time())
     j.get('refusal_levels',{}).pop(slot,None)
     if was_paused: j['status']='paused'
@@ -1719,6 +1771,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     if not self.auth_bridge(): return self.send_json({'error':'Appairage requis'},401)
                     q=urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query); client=q.get('client',[''])[0]; c=STATE['clients'].get(client)
                     if not c: return self.send_json({'error':'Client inconnu'},400)
+                    # lane=chat|video: the extension runs one task per lane at once; without lane (0.1.88 and older) any task, one at a time.
+                    lane=q.get('lane',[''])[0]
+                    if lane not in ('','chat','video'):return self.send_json({'error':'Voie inconnue'},400)
                     c['seen']=now()
                     # A gateway switched off by the owner never receives work (several browsers paired).
                     if c.get('disabled') or not LICENCE.allowed():save();return self.send_json(None)
@@ -1727,10 +1782,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     for t in STATE['tasks']:
                         j=job_by(t['job'])
                         if t['status']!='queued' or j['status']!='running': continue
-                        if not client_accepts(c,t): continue
+                        if not client_accepts(c,t) or (lane and lane_of(t)!=lane): continue
                         if t['kind']=='flow_video':
                             if any(other['kind'] in ('flow_video','flow_collect') and other['status']=='claimed' for other in STATE['tasks']):continue
                             p=profile_by(t['profile']); cost=t['payload']['cost']
+                            if (not p or p['balance']<cost) and j['stage']=='images':
+                                # Clip sent ahead during the boards: no wait now, the boards go on; the clips stage waits for credits.
+                                t['status']='cancelled';j['early_clips_off']=True;event(j,'Clip anticipé annulé avant envoi : solde Flow insuffisant. Les planches continuent ; les clips attendront la fin des planches.');continue
                             if not p or p['balance']<cost: t['status']='cancelled'; j['status']='waiting_credit'; continue
                             if t['payload'].get('dry_run'):
                                 # A dry run never sends: nothing to reserve (P1-4).
@@ -1753,7 +1811,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         if t.get('client')!=client or t['status']!='failed' or t['kind']!='chat_image':continue
                         j=job_by(t['job']);key=(j['id'],t['slot'])
                         if key in seen or j['status']!='attention' or j['stage'] not in ('characters','images','cover') or not client_accepts(c,t):continue
-                        if any(x['job']==j['id'] and x['status'] in ('queued','claimed') for x in STATE['tasks']):continue
+                        if lane_busy(j,'chat'):continue
                         if t['slot']=='characters':missing=not any(x.get('file') for x in j['characters'])
                         elif t['slot'].startswith('character:'):
                             item=next((x for x in j['characters'] if x['id']==t['slot'].split(':')[1]),None);missing=item and not item.get('file')
@@ -1771,8 +1829,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     for t in reversed(STATE['tasks']):
                         if t.get('client')!=client or t['status']!='failed' or t['kind']!='flow_video':continue
                         j=job_by(t['job']);key=(j['id'],t['slot'])
-                        if key in seen or j['status']!='attention' or j['stage']!='clips' or not client_accepts(c,t):continue
-                        if any(x['job']==j['id'] and x['status'] in ('queued','claimed') for x in STATE['tasks']):continue
+                        # A clip sent ahead during the boards is recovered the same way.
+                        if key in seen or j['status']!='attention' or j['stage'] not in ('images','clips') or not client_accepts(c,t):continue
+                        if lane_busy(j,'video'):continue
                         if not j['scenes'][int(t['slot'].split(':')[1])].get('clip'):rows.append(t);seen.add(key)
                     return self.send_json(rows[:3])
             m=re.fullmatch(r'/api/job/([a-f0-9]{16})/images\.zip',path)
@@ -1888,7 +1947,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     if not t:raise ValueError('Tâche non associée à ce navigateur')
                     j=job_by(t['job']);message=readable_progress(str(b.get('message','')))[:240]
                     if j['status']!='paused' and message and message!=t.get('progress'):
-                        t['progress']=message;event(j,message);save()
+                        t['progress']=message;t['progress_at']=now();event(j,message);save()
                     return self.send_json({'ok':True})
                 if path=='/api/bridge/retry-research':
                     client=b.get('client');c=STATE['clients'].get(client)
@@ -1925,14 +1984,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     client=b.get('client');old=next((t for t in STATE['tasks'] if t['id']==b.get('previous_task') and t.get('client')==client and t['kind']=='flow_video' and t['status']=='failed'),None)
                     if not old or client not in STATE['clients'] or not client_accepts(STATE['clients'][client],old):raise ValueError('Clip non associé à ce navigateur Flow')
                     j=job_by(old['job'])
-                    if j['status']!='attention' or j['stage']!='clips' or j['scenes'][int(old['slot'].split(':')[1])].get('clip') or any(t['job']==j['id'] and t['status'] in ('queued','claimed') for t in STATE['tasks']):raise ValueError('Production déjà reprise ou en pause')
+                    if j['status']!='attention' or j['stage'] not in ('images','clips') or j['scenes'][int(old['slot'].split(':')[1])].get('clip') or lane_busy(j,'video'):raise ValueError('Production déjà reprise ou en pause')
                     t={'id':uid(),'job':j['id'],'kind':'flow_collect','profile':old['profile'],'slot':old['slot'],'status':'claimed','client':client,'created':now(),'claimed':now(),'payload':old['payload']}
                     STATE['tasks'].append(t);j['status']='running';event(j,'Récupération du clip Flow existant après correspondance exacte du prompt ; aucune génération ni réservation supplémentaire.');save();return self.send_json(t)
                 if path=='/api/bridge/recover-media':
                     client=b.get('client');old=next((t for t in STATE['tasks'] if t['id']==b.get('previous_task') and t.get('client')==client and t['kind']=='chat_image' and t['status']=='failed'),None)
                     if not old or client not in STATE['clients'] or not client_accepts(STATE['clients'][client],old):raise ValueError('Image non associée à ce navigateur IA')
                     j=job_by(old['job'])
-                    if j['status']!='attention' or j['stage'] not in ('characters','images','cover') or any(t['job']==j['id'] and t['status'] in ('queued','claimed') for t in STATE['tasks']):raise ValueError('Production déjà reprise ou en pause')
+                    if j['status']!='attention' or j['stage'] not in ('characters','images','cover') or lane_busy(j,'chat'):raise ValueError('Production déjà reprise ou en pause')
                     t={'id':uid(),'job':j['id'],'kind':'chat_image_collect','slot':old['slot'],'status':'claimed','client':client,'created':now(),'claimed':now(),'payload':old['payload']}
                     STATE['tasks'].append(t);j['status']='running';event(j,'Récupération automatique de l’image existante après correspondance exacte du prompt ; aucune nouvelle génération.');save();return self.send_json(t)
                 if path=='/api/bridge/result':
@@ -2183,7 +2242,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         # « Relancer cette étape » from the blocked banner: the stuck task is dropped and the step asked again.
                         info=stall_info(j)
                         if not info or not info.get('retry'):raise ValueError('Cette étape avance encore : rien à relancer.')
-                        stuck=[t for t in STATE['tasks'] if t['job']==id and t['status'] in ('queued','claimed')]
+                        # Only the lane that does not move: a clip generating beside a stuck board keeps going.
+                        blocked=next((t for t in STATE['tasks'] if t['id']==info.get('task')),None)
+                        stuck=[t for t in STATE['tasks'] if t['job']==id and t['status'] in ('queued','claimed') and (not blocked or lane_of(t)==lane_of(blocked))]
                         if any(t['kind'] in ('flow_video','engine_video') for t in stuck) and not b.get('confirm_paid'):
                             raise ValueError('Un clip est peut-être déjà en cours chez le fournisseur : vérifie dans Flow, puis confirme la relance.')
                         for t in stuck:t['status']='failed';t['error']='Relancée par le propriétaire : étape bloquée ('+info['reason'][:120]+')'

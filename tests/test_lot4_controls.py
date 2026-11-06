@@ -50,7 +50,8 @@ class BoardCheck(unittest.TestCase):
         self.assertEqual([i for i, x in enumerate(j['scenes']) if not x.get('image')], [1, 3])
         self.assertIn('personnage en trop', j['corrections']['image:1'])
         queued = [t for t in s.STATE['tasks'] if t['job'] == j['id'] and t['status'] == 'queued']
-        self.assertEqual([t['slot'] for t in queued], ['image:1'], 'boards redrawn one after the other')
+        # 0.1.89: boards redrawn one after the other on the chat lane; the validated board 1 is already animated.
+        self.assertEqual([t['slot'] for t in queued], ['image:1', 'clip:0'], 'boards redrawn one after the other, validated board animated meanwhile')
         self.assertIn('personnage en trop', queued[0]['payload']['prompt'], 'reason sent with the new attempt')
         self.assertEqual(sum(1 for h in j['redo_history'] if h['note'] == 'contrôle des planches'), 2)
         for i in (1, 3):
