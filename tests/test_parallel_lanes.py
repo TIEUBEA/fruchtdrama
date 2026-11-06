@@ -296,3 +296,24 @@ class FailedEarlyClip(unittest.TestCase):
         self.assertIn('image:1', [t['slot'] for t in active(j)])
         self.assertEqual(active(j, 'video'), [])
         self.assertEqual(j['alerts'][-1]['level'], 'action')
+
+
+class TakeOver(unittest.TestCase):
+    def setUp(self):
+        s.STATE = s.fresh()
+
+    def test_reloaded_window_takes_over_when_the_old_one_is_gone(self):
+        import datetime as dt
+        old = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=20)).isoformat()
+        s.STATE['clients'] = {'a': {'id': 'a', 'auto': True, 'role': 'all', 'seen': old},
+                              'b': {'id': 'b', 'auto': True, 'role': 'all', 'seen': s.now(), 'disabled': True}}
+        s.STATE['profiles'] = [{'id': 'p', 'flow_client': 'a'}]
+        self.assertTrue(s.take_over(s.STATE['clients']['b']))
+        self.assertFalse(s.STATE['clients']['b']['disabled']); self.assertTrue(s.STATE['clients']['a']['disabled'])
+        self.assertEqual(s.STATE['profiles'][0]['flow_client'], 'b')
+
+    def test_no_take_over_while_the_old_one_is_online(self):
+        s.STATE['clients'] = {'a': {'id': 'a', 'auto': True, 'role': 'all', 'seen': s.now()},
+                              'b': {'id': 'b', 'auto': True, 'role': 'all', 'seen': s.now(), 'disabled': True}}
+        self.assertFalse(s.take_over(s.STATE['clients']['b']))
+        self.assertTrue(s.STATE['clients']['b']['disabled'])

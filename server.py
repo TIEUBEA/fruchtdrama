@@ -160,6 +160,19 @@ def readable_progress(text):
     if d.get('hasJob') or d.get('hasTask'):return 'L’IA écrit le scénario ; réponse pas encore complète.'
     return 'En attente de la réponse de l’IA.'
 
+def take_over(c):
+    """An automatic gateway left switched off at pairing (the old one was running a task, then disappeared:
+    extension reloaded, real case 06/11/2026) takes over once no other automatic gateway is online."""
+    alive=[x for x in STATE['clients'].values() if x is not c and x.get('auto') and not x.get('disabled') and time.time()-flow_credits.seconds(x.get('seen'))<STALL_ONLINE]
+    if alive:return False
+    for x in STATE['clients'].values():
+        if x is not c and x.get('auto'):x['disabled']=True
+    c['disabled']=False;flow_accounts.follow_active_browser(STATE);return True
+
+def event_all(text):
+    for j in STATE['jobs']:
+        if j.get('status') not in ('done',) and not j.get('filon_only') and any(t['job']==j['id'] and t['status'] in ('queued','claimed') for t in STATE['tasks']):event(j,text)
+
 def alert(j,level,text):
     # Shown as a banner at the top of the episode: 'action' = the owner must act, 'auto' = decided alone, to check.
     event(j,text);alerts=j.setdefault('alerts',[]);alerts.append({'at':now(),'level':level,'text':text});del alerts[:-6]
@@ -1784,6 +1797,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     lane=q.get('lane',[''])[0]
                     if lane not in ('','chat','video'):return self.send_json({'error':'Voie inconnue'},400)
                     c['seen']=now()
+                    if c.get('disabled') and c.get('auto') and take_over(c):event_all('Fenêtre FruchtDrama rechargée : elle reprend le travail de l’ancienne, hors ligne.')
                     # A gateway switched off by the owner never receives work (several browsers paired).
                     if c.get('disabled') or not LICENCE.allowed():save();return self.send_json(None)
                     for j in STATE['jobs']:

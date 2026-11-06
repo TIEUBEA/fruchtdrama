@@ -7,6 +7,10 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 
 ## 0.1.89 (06/11/2026)
+**Corrigé**
+- Extension rechargée pendant une tâche : la nouvelle fenêtre restait désactivée et plus rien n'avançait (cas réel 06/11, 25 min perdues). Dès que l'ancienne fenêtre est hors ligne depuis 3 min, la nouvelle reprend le travail et ses comptes Flow.
+- Un clip envoyé en avance qui échoue n'arrête plus les planches : elles continuent, un bandeau demande de vérifier le projet Flow.
+
 **Amélioré**
 - La fenêtre FruchtDrama, quand l'extension doit la recréer pour une tâche, s'ouvre sans passer au premier plan : on reste sur l'onglet où l'on est, comme dans l'Atelier. Seul un clic sur l'icône la met devant.
 - Quand ChatGPT atteint sa limite d'images, les planches attendent mais les clips des planches déjà dessinées continuent chez Flow ou Grok.
