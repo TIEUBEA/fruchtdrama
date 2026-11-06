@@ -678,9 +678,10 @@ async function selfUpdate(){
   if(Object.values(LANE_KEY).some(k=>cfg[k])||busy.chat||busy.video)return;
   // Never twice for the same version: when the folder the browser loads is not updated yet, reloading again and again
   // stopped all work (06/11/2026 17:44, « Connecteur à configurer » for an hour).
-  const tried=(await chrome.storage.local.get('reloadedFor')).reloadedFor;
-  if(tried===disk.version)return;
-  await chrome.storage.local.set({reloadedFor:disk.version,status:'Nouvelle version '+disk.version+' : rechargement automatique.'});
+  // 0.1.99: one more try every 10 min (the folder copied a few seconds after the studio restarted left 0.1.98 running).
+  const got=await chrome.storage.local.get(['reloadedFor','reloadedAt']);
+  if(got.reloadedFor===disk.version&&Date.now()-(got.reloadedAt||0)<10*60*1000)return;
+  await chrome.storage.local.set({reloadedFor:disk.version,reloadedAt:Date.now(),status:'Nouvelle version '+disk.version+' : rechargement automatique.'});
   chrome.runtime.reload();
  }catch{}
 }
