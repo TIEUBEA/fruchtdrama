@@ -24,7 +24,7 @@ import power
 import maintenance
 import series
 import licence
-VERSION='0.1.87'
+VERSION='0.1.88'
 OFFICIAL_ORIGIN='chrome-extension://bhdmibhibonmaamgcbpmbhedhohfongj'  # extension/manifest.json "key"
 import sys
 import traceback
@@ -649,7 +649,14 @@ def dialogue_lines(j,s):
 
 SIZE_WORDS={'énorme','énormes','gros','grosse','grosses','géant','géante','géants','immense','immenses','obèse','huge','big','fat','giant','enormous','riesig','enorme','gordo','gorda','gigante'}
 
-def validate_script(s, n):
+def size_problems(chars):
+    out=[]
+    for c in chars:
+        found=sorted({w for w in re.findall(r"[\w’']+",' '.join(str(c.get(k,'')) for k in ('detail','tenue')).lower()) if w in SIZE_WORDS})
+        if found:out.append(f"Le détail de {c.get('name','un personnage')} : « {', '.join(found)} » fait grossir le personnage dans la vidéo. Décris le détail sans parler de sa taille.")
+    return out
+
+def validate_script(s, n, check_size=True):
     if not isinstance(s,dict): raise ValueError('Objet JSON attendu')
     chars=s.get('characters',[]); scenes=s.get('scenes',[])
     # Name the count actually received: the rewrite request and the journal must say what to fix.
@@ -665,14 +672,14 @@ def validate_script(s, n):
         if not lines or any(x.get('speaker') not in ids or not isinstance(x.get('text'),str) or not x['text'].strip() for x in lines): raise ValueError('Dialogue ou locuteur invalide')
         if not set(scene.get('characters',[])).issubset(ids) or not scene.get('characters'): raise ValueError('Distribution de scène invalide')
         if any(x['speaker'] not in scene['characters'] for x in lines): raise ValueError('Locuteur absent de la scène')
-        if sum(len(x['text'].split()) for x in lines)>25: raise ValueError('Dialogue trop long pour un clip de huit secondes (25 mots maximum)')
+        if check_size and sum(len(x['text'].split()) for x in lines)>25: raise ValueError('Dialogue trop long pour un clip de huit secondes (25 mots maximum)')
     for k in ['title','cover_title','description']:
         if not isinstance(s.get(k),str) or not s[k].strip(): raise ValueError('Titre, couverture ou description manquant')
     # Seen in the Atelier's checks (06/11/2026): size words in a character's distinctive mark make the video engine
     # inflate the whole character. Refused with the exact words, so the rewrite fixes only that.
-    for c in chars:
-        found=sorted({w for w in re.findall(r"[\w’']+",' '.join(str(c.get(k,'')) for k in ('detail','tenue')).lower()) if w in SIZE_WORDS})
-        if found:raise ValueError(f"Le détail de {c.get('name','un personnage')} : « {', '.join(found)} » fait grossir le personnage dans la vidéo. Décris le détail sans parler de sa taille.")
+    if check_size:
+        problems=size_problems(chars)
+        if problems:raise ValueError(' ; '.join(problems))
     # Optional extra: a wrong entry is dropped, it never refuses the script.
     changes=clean_state_changes(s.get('state_changes'),ids,n)
     if changes:s['state_changes']=changes
@@ -718,6 +725,7 @@ PLANS (règles de mise en scène) :
 - Chaque réplique va au personnage qui parle vraiment à l’image ; les autres personnages présents sont dans muets. Chaque réplique a son jeu (comment elle est dite).
 - Chaque personnage garde sa tenue, son détail reconnaissable et sa place dans le cadre (champ place) du début à la fin ; image_prompt et video_prompt les reprennent.
 - Respiration : au moins 2 secondes par réplique, au plus 3 mots par seconde ; si un plan est trop chargé, enlève une réplique.
+- detail et tenue ne parlent JAMAIS de taille (interdits : énorme, gros, géant, immense, obèse, big, huge, giant…) : le moteur vidéo grossirait tout le personnage. Décris la forme, la couleur, la matière.
 '''
 
 def is_identical(j):
@@ -1284,12 +1292,18 @@ def edit_script(j,changes):
 
 def store_script(j,s):
     if s.get('production_id') and s['production_id']!=j['id']:raise ValueError('Ce scénario appartient à une autre production')
-    validate_script(s,j['config']['scene_count'])
-    if is_identical(j):
+    identical=is_identical(j)
+    validate_script(s,j['config']['scene_count'],check_size=not identical)
+    if identical:
         # Faithful remake: no concept comparison, no novelty check against the history; only what fits in the clips.
+        # Like the Atelier, every defect is listed in one refusal: one rewrite fixes them all (one per refusal cost 5 min each).
+        problems=size_problems(s['characters'])
+        limit=engines.word_limit(j)
         for i,scene in enumerate(s['scenes']):
-            if len(scene.get('dialogue',[]))>2 or sum(len(x['text'].split()) for x in scene.get('dialogue',[]))>engines.word_limit(j):
-                raise ValueError(f"Scène {i+1} : deux répliques et {engines.word_limit(j)} mots au plus pour tenir dans le clip de {engines.spec(j)['seconds']} secondes")
+            lines=scene.get('dialogue',[]);words=sum(len(x['text'].split()) for x in lines)
+            if len(lines)>2 or words>limit:
+                problems.append(f"Scène {i+1} : {len(lines)} réplique(s) et {words} mots, deux répliques et {limit} mots au plus pour tenir dans le clip de {engines.spec(j)['seconds']} secondes ; enlève des mots, n'allonge rien")
+        if problems:raise ValueError(' ; '.join(problems))
     else:editorial.validate(s,j,STATE['jobs'])
     j['script']=s; j['characters']=copy.deepcopy(s['characters']); j['scenes']=copy.deepcopy(s['scenes']); j['title']=s['title']; j['stage']='characters'; j['status']='running'
     v=j.get('variant') or {}
@@ -2143,7 +2157,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         for t in STATE['tasks']:
                             if t['job']==id and t['status'] in ('queued','claimed'): t['status']='cancelled'
                         if b.get('flow_profile'): j['flow_profile']=b['flow_profile']
-                        j.pop('last_error',None);j['status']='running'; event(j,'Reprise demandée ; passage automatique limité aux comptes Flow enregistrés.' if STATE.get('settings',{}).get('flow_auto') else 'Reprise demandée ; compte Flow sélectionné conservé.'); schedule(j)
+                        j.pop('last_error',None);j.pop('editorial_attempts',None);j['status']='running'; event(j,'Reprise demandée ; passage automatique limité aux comptes Flow enregistrés.' if STATE.get('settings',{}).get('flow_auto') else 'Reprise demandée ; compte Flow sélectionné conservé.'); schedule(j)
                     elif action=='retry_step':
                         # « Relancer cette étape » from the blocked banner: the stuck task is dropped and the step asked again.
                         info=stall_info(j)

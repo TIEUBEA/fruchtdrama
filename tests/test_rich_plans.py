@@ -38,6 +38,15 @@ class RichPlanTests(unittest.TestCase):
             s.validate_script(script('une énorme cicatrice'), 1)
         s.validate_script(script(), 1)
 
+    def test_identical_remake_lists_every_defect_in_one_refusal(self):
+        bad = script('des yeux immenses')
+        bad['scenes'][0]['dialogue'] = [{'speaker': 'a', 'text': 'mot ' * 30}]
+        j = {'id': 'x', 'selected': {'source': 'owner_link'}, 'config': {'recreate': 'identical', 'scene_count': 1}}
+        with self.assertRaises(ValueError) as e:
+            s.store_script(j, bad)
+        self.assertIn('immenses', str(e.exception))
+        self.assertIn('Scène 1 : 1 réplique(s) et 30 mots', str(e.exception))
+
     def test_rich_fields_reach_image_and_clip_prompts(self):
         j = {'characters': [{'id': 'a', 'name': 'Pomette', 'tenue': 'robe jaune', 'detail': 'mèche blanche', 'place': 'À GAUCHE'}, {'id': 'b', 'name': 'Bananito'}],
              'script': {'lieu': 'Ville la nuit', 'lieux': {'RESTO': 'Façade chic'}}}

@@ -5,6 +5,15 @@ correspondante (P0-xx, P1-x, P2-xx) détaillée dans `docs/sudf/`. Guide pour re
 `docs/sudf/REPRISE.md`. **Mode d'emploi détaillé** (installer, lancer, utiliser), mis à jour à chaque
 version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, version par version).
 
+
+## 0.1.88 (06/11/2026)
+**Corrigé**
+- Recréation à l'identique : un scénario refusé listait un seul défaut à la fois ; chaque réécriture (5 à 7 min) en révélait un autre et l'épisode tombait en « Action requise » au 3ᵉ refus. Tous les défauts (mots de taille, scènes trop parlées) sont maintenant listés dans un seul refus, comme l'Atelier.
+- La consigne d'écriture interdit d'avance les mots de taille dans le détail et la tenue des personnages (avant, seul le contrôle les refusait).
+
+**Ajouté**
+- `tools/temps_etapes.py` : temps de chaque étape d'un épisode comparé à l'Atelier (`docs/sudf/TEMPS-ATELIER.md`).
+
 ## 0.1.87 — 06/11/2026
 Repris de l'essai réel de l'Atelier Gourmand 1.0.22 (vidéo virale refaite en entier, demandes à Claude et ChatGPT observées).
 - Amélioré : **l'IA voit vraiment la vidéo à refaire** : la toute première image, une image toutes les 6 secondes avec le temps écrit dessus, et une image à chaque changement de plan (au lieu d'une seule planche). Transcription au dixième de seconde. Consigne : regarder image par image qui parle (sa bouche s'ouvre), qui a peur, pleure, transpire, crie.
