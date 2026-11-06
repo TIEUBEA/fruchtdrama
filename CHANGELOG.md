@@ -9,6 +9,12 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 
 
+
+## 0.1.98 (06/11/2026)
+- Grok aussi en clips de 10 s : le connecteur choisit « Video duration › 10s » (Grok s'ouvre sur 6 s ; 6/10/15 s vus sur la vraie page). Flow et Grok font donc des plans de 10 s, vidéo d'au moins 1 min.
+- Choix du moteur dans Créer : seulement Google Flow et Grok, « 10 s par clip ».
+- Une page FruchtDrama restée ouverte pendant une mise à jour se recharge seule (elle montrait encore Arena et Vidogrid).
+
 ## 0.1.97 (06/11/2026)
 Demande du propriétaire, 06/11 au soir : « On va faire beaucoup plus simple. On n'a plus que Flow et Grok. Tu ne dois bloquer sur aucune étape. » Cas réel du soir : « Envoi Flow incertain pour la scène 1, 3, 4, 7, 16 », épisode en Action requise, tout arrêté.
 
