@@ -2,7 +2,7 @@
 // The chat lane (ChatGPT) and the video lane (Grok/Flow) each follow one task, in their own tab, with their own
 // saved state, and each resumes alone after a service-worker restart.
 const assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs'),path=require('node:path');
-const URLS={10:'https://chatgpt.com/',11:'https://chatgpt.com/',20:'https://grok.com/imagine',21:'https://grok.com/imagine'};
+const URLS={10:'https://chatgpt.com/',11:'https://chatgpt.com/',12:'https://chatgpt.com/',20:'https://grok.com/imagine',21:'https://grok.com/imagine'};
 const IMAGE={id:'img1',job:'job1',kind:'chat_image',slot:'image:1',payload:{provider:'chatgpt',prompt:'board 2',attachments:[]}};
 const IMAGE2={id:'img2',job:'job1',kind:'chat_image',slot:'image:2',payload:{provider:'chatgpt',prompt:'board 3',attachments:[]}};
 const CLIP={id:'clip0',job:'job1',kind:'engine_video',slot:'clip:0',payload:{engine:'grok',prompt:'clip 1',attachments:[]}};
@@ -42,7 +42,7 @@ function harness(store,queues){
 const base=()=>({client:'c1',token:'t',enabled:true,lastResearchReadingRecovery:Date.now(),lastMediaRecovery:Date.now(),lastVideoRecovery:Date.now()});
 (async()=>{
  // 1. One pass: the board goes to ChatGPT and the clip to Grok at the same time, each in its own tab and lane.
- const h=harness(base(),{chat:[IMAGE,IMAGE2],video:[CLIP]});
+ const q={chat:[IMAGE],video:[CLIP]};const h=harness(base(),q);
  await h.run('poll()');
  assert.ok(h.calls.some(u=>u.includes('/bridge/task?')&&u.includes('lane=chat')));
  assert.ok(h.calls.some(u=>u.includes('/bridge/task?')&&u.includes('lane=video')));
@@ -54,9 +54,13 @@ const base=()=>({client:'c1',token:'t',enabled:true,lastResearchReadingRecovery:
  await h.run('poll()');
  // 0.1.91: while the first video lane works, the second one asks the studio for a clip of another Flow account (none here).
  const asked=h.calls.filter(u=>u.includes('/bridge/task?')).slice(claims);
- assert.equal(asked.length,3,'one task per lane: only the extra clip lanes (2 to 4) ask while both work');assert.ok(asked[0].includes('lane=video'));
+ // 0.1.99: the extra chat lanes (2 and 3) ask too, for another episode's text or board.
+ assert.equal(asked.length,5,'one task per lane: only the extra lanes ask while both work');
+ assert.equal(asked.filter(u=>u.includes('lane=chat')).length,2);assert.equal(asked.filter(u=>u.includes('lane=video')).length,3);
+ assert.equal(h.store.activeChatTask2,undefined);
  assert.equal(h.store.activeVideoTask2,undefined);
  assert.equal(h.calls.filter(u=>u.includes('/bridge/status')).length,2,'each lane checks its own task');
+ q.chat.push(IMAGE2);
  // 3. The board finishes first: the chat lane delivers it and takes the next board, the clip keeps going.
  h.tabState[10]={task:'img1',state:'completed',result:{ok:true,file:'board2.png'}};
  await h.run('poll()');
@@ -103,5 +107,14 @@ const base=()=>({client:'c1',token:'t',enabled:true,lastResearchReadingRecovery:
  v.tabState[21]={task:'clip1',state:'completed',result:{ok:true,file:'c1.mp4'}};
  await v.run('poll()');
  assert.ok(v.calls.includes('result:clip1'));assert.equal(v.store.activeVideoTask2,undefined);assert.equal(v.store.activeVideoTask.task.id,'clip0','first clip untouched');
- console.log('8 scénarios des voies réussis : planche et clip en parallèle, une tâche par voie et par onglet, reprise des deux voies, compatibilité 0.1.88, boutons du studio.');
+ // 9. 0.1.99 parallel episodes: three videos launched at once each get their ChatGPT tab, none waits for the others.
+ const e=harness(base(),{chat:[IMAGE,{...IMAGE,id:'s2',job:'job2'},{...IMAGE,id:'s3',job:'job3'}]});
+ await e.run('poll()');
+ assert.equal(e.store.activeTask.task.id,'img1');assert.equal(e.store.activeChatTask2.task.id,'s2');assert.equal(e.store.activeChatTask3.task.id,'s3');
+ assert.equal(e.store.activeChatTask3.key,'activeChatTask3');
+ assert.equal(new Set(e.runs.map(r=>r.tab)).size,3,'three tabs');
+ e.tabState[e.store.activeChatTask2.tabId]={task:'s2',state:'completed',result:{ok:true,file:'b.png'}};
+ await e.run('poll()');
+ assert.ok(e.calls.includes('result:s2'));assert.equal(e.store.activeChatTask2,undefined);assert.equal(e.store.activeChatTask3.task.id,'s3');
+ console.log('9 scénarios des voies réussis : planche et clip en parallèle, une tâche par voie et par onglet, reprise des deux voies, compatibilité 0.1.88, boutons du studio.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

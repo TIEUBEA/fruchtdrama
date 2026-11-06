@@ -27,7 +27,7 @@ import maintenance
 import series
 import licence
 import readiness
-VERSION='0.1.98'
+VERSION='0.1.99'
 OFFICIAL_ORIGIN='chrome-extension://bhdmibhibonmaamgcbpmbhedhohfongj'  # extension/manifest.json "key"
 import sys
 import traceback
@@ -75,6 +75,10 @@ def read_state():
     state=json.loads(p.read_text('utf-8')) if p.exists() else fresh()
     if 'flow_model' not in state['settings']:
         state['settings'].update(flow_model='gemini_omni_flash',flow_resolution='720p',flow_cost=12)
+    # 0.1.99: a length outside the engine's range no longer blocks; old reports holding that block are run again.
+    for j in state.get('jobs',[]):
+        r=j.get('quality_report') or {}
+        if any('Durée incompatible' in x for x in r.get('hard_errors',[])):j['quality_report']={}
     return state
 STATE=read_state()
 if not os.environ.get('FRUCHT_NO_THUMBS'):
@@ -1684,6 +1688,8 @@ def schedule_quality(j):
     report['auto']=quality.decision(report,[x for x in [*report.get('visual',{}).get('scenes',[]),report.get('visual',{}).get('continuity',{})] if x and x.get('status')!='pass'])
     if report.get('hard_errors'):
         j['status']='attention';alert(j,'action','Contrôle qualité bloquant : '+report['hard_errors'][0]+' Les clips sont conservés ; remplace le média en cause puis relance la boucle complète.');return
+    if report.get('notes') and not report.get('notes_told'):
+        report['notes_told']=True;event(j,'Durées hors norme gardées telles quelles : '+' ; '.join(report['notes'][:3]))
     if report.get('warnings') and j.get('quality_speech_approval')!=key and j.get('quality_approval')!=key:
         if j['config'].get('controls')=='redo' and auto_redo(j,report):return
         low=[f"{i+1} ({round(c['speech']['match']*100)} %)" for i,c in enumerate(report.get('clips',[])) if (c.get('speech') or {}).get('match') is not None and c['speech']['match']<quality.MIN_MATCH]

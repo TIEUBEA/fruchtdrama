@@ -75,7 +75,11 @@ def clip_length(j, actual, scene=None):
     """Montage length of one clip: Flow stays exactly its length (8 or 10 s); other engines keep their real duration, bounded."""
     engine = clip_engine(j, scene)
     if engine not in LEGACY_RANGES and (engine == 'flow' or engine not in ENGINES):
-        return float(flow_seconds(j))
+        s = float(flow_seconds(j))
+        # A longer clip replaced by hand (10 s instead of 8 s) keeps its real duration (0.1.99); shorter ones are padded.
+        if actual and float(actual) > s + 0.5:
+            return round(min(max(float(actual), 2.0), 16.0), 3)
+        return s
     low, high = clip_range(j, scene)
     return round(min(max(float(actual or 0), low), high), 3)
 
