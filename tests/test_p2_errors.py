@@ -116,6 +116,19 @@ class BridgeTests(unittest.TestCase):
         s.recover_after_restart(); self.assertEqual(j3['status'], 'running'); self.assertFalse(j3['last_error'])
 
 
+    def test_failed_board_is_asked_again_twice_then_stops(self):
+        # 0.1.99: a frozen ChatGPT tab never stops the episode at the first failure.
+        j = job(); j['status'] = 'running'; s.schedule(j)
+        for n in (1, 2):
+            t = self.claim(); self.report(t, {'ok': False, 'error': 'Onglet ChatGPT figé depuis 4 min : étape redemandée.'})
+            self.assertEqual(j['status'], 'running'); self.assertIn('Nouvel essai automatique ' + str(n), j['events'][-2]['text'] + j['events'][-1]['text'])
+        t = self.claim(); self.report(t, {'ok': False, 'error': 'Onglet ChatGPT figé depuis 4 min : étape redemandée.'})
+        self.assertEqual(j['status'], 'attention')
+        j2 = job(); j2['status'] = 'running'; s.schedule(j2); t = self.claim()
+        self.report(t, {'ok': False, 'error': 'Vérification anti-robot', 'error_kind': 'challenge'})
+        self.assertEqual(j2['status'], 'attention', 'a challenge is never retried')
+
+
 if __name__ == '__main__':
     unittest.main()
 

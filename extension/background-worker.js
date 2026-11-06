@@ -486,9 +486,15 @@ async function tabForTask(task,cfg,key){
  return tab;
 }
 // One lane: follow its saved task, otherwise claim the next task of this lane only (lane=chat|video).
+// 0.1.99: a ChatGPT tab that never answers (06/11/2026 21:04: chrome.scripting waited forever on a frozen tab) kept the
+// chat lane busy for good and no episode moved any more. Past CHAT_STUCK the chat lane gives the task back to the studio
+// as failed (no Flow credit at stake) and takes the next one. Clip lanes are never cut this way.
+const CHAT_STUCK=4*60*1000,busySince={},laneRun={};
+function stuckTimer(lane){return new Promise((_,reject)=>{if(!lane.startsWith('chat'))return;const t=setTimeout(()=>reject(Error('Onglet ChatGPT figé depuis 4 min : étape redemandée.')),CHAT_STUCK);t?.unref?.();});}
 async function runLane(lane){
- if(busy[lane])return;busy[lane]=true;const key=LANE_KEY[lane];let claimed=null;let cfg;
- try{
+ if(busy[lane]&&!(lane.startsWith('chat')&&Date.now()-(busySince[lane]||0)>CHAT_STUCK))return;
+ const run=laneRun[lane]=(laneRun[lane]||0)+1;busy[lane]=true;busySince[lane]=Date.now();const key=LANE_KEY[lane];let claimed=null;let cfg;
+ try{await Promise.race([stuckTimer(lane),(async()=>{
   cfg=await chrome.storage.local.get(null);
   if(!cfg.client||!cfg.token)return;
   if(/^chat[23]$/.test(lane)){
@@ -539,6 +545,7 @@ async function runLane(lane){
     await chrome.storage.local.remove(['flowTab']);
    }
   }
+ })()]);
  }catch(e){
   const active=cfg?.[key]||(await chrome.storage.local.get(key))[key];
   const task=claimed||active?.task;
@@ -549,7 +556,7 @@ async function runLane(lane){
   if(active){const data=await chrome.storage.local.get('scenarioTabs');const tabs=data.scenarioTabs||{};if(tabs[active.task.job])tabs[active.task.job].pending=false;await chrome.storage.local.set({scenarioTabs:tabs});}
   await chrome.storage.local.remove(key);
   await chrome.storage.local.set({status:'À vérifier : '+e.message});
- }finally{busy[lane]=false;}
+ }finally{if(laneRun[lane]===run)busy[lane]=false;}
 }
 async function recoverExistingMedia(cfg){
  const candidates=await call('/api/bridge/recoverable-media?client='+encodeURIComponent(cfg.client));
