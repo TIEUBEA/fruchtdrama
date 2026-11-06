@@ -54,7 +54,7 @@ const base=()=>({client:'c1',token:'t',enabled:true,lastResearchReadingRecovery:
  await h.run('poll()');
  // 0.1.91: while the first video lane works, the second one asks the studio for a clip of another Flow account (none here).
  const asked=h.calls.filter(u=>u.includes('/bridge/task?')).slice(claims);
- assert.equal(asked.length,1,'one task per lane: only the second clip lane asks while both work');assert.ok(asked[0].includes('lane=video'));
+ assert.equal(asked.length,3,'one task per lane: only the extra clip lanes (2 to 4) ask while both work');assert.ok(asked[0].includes('lane=video'));
  assert.equal(h.store.activeVideoTask2,undefined);
  assert.equal(h.calls.filter(u=>u.includes('/bridge/status')).length,2,'each lane checks its own task');
  // 3. The board finishes first: the chat lane delivers it and takes the next board, the clip keeps going.
