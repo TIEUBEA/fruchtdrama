@@ -5,6 +5,11 @@ correspondante (P0-xx, P1-x, P2-xx) détaillée dans `docs/sudf/`. Guide pour re
 `docs/sudf/REPRISE.md`. **Mode d'emploi détaillé** (installer, lancer, utiliser), mis à jour à chaque
 version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, version par version).
 
+## 0.1.103 (07/11/2026)
+
+**Corrigé**
+- Flow : « réglage resolution non reconnu » faisait échouer chaque clip, qui partait alors sur Grok. Une option de résolution ou de durée introuvable ne bloque plus. Le coût affiché reste vérifié avant tout envoi, donc aucun crédit ne peut partir sur un mauvais réglage. Avec des options en double (panneau resté ouvert), la plus récente est prise.
+
 ## 0.1.102 (06/11/2026)
 
 **Allégé** (pour viser une vidéo en 30 à 40 min)
