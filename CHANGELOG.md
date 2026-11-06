@@ -5,6 +5,17 @@ correspondante (P0-xx, P1-x, P2-xx) détaillée dans `docs/sudf/`. Guide pour re
 `docs/sudf/REPRISE.md`. **Mode d'emploi détaillé** (installer, lancer, utiliser), mis à jour à chaque
 version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, version par version).
 
+## 0.1.102 (06/11/2026)
+
+**Allégé** (pour viser une vidéo en 30 à 40 min)
+- Revue visuelle des clips par ChatGPT désactivée par défaut, ce qui fait gagner environ 40 min. Elle se remet dans Mes comptes › Regard sur les clips.
+- Contrôle de la miniature par ChatGPT désactivé par défaut.
+- Feuilles d'état « Au fil de l'histoire » retirées : 3 images ChatGPT en moins.
+- Scénario : une réplique trop longue, une troisième réplique, une accroche trop longue, un détail d'accroche absent des prompts ou une fiche de concepts mal remplie sont maintenant corrigés par le studio, sans réécriture. Seul un vrai défaut provoque encore un refus : histoire déjà faite, scènes manquantes, mauvaise langue.
+- Transcription locale lancée seulement quand les sous-titres sont activés.
+- Clip que ni Flow ni Grok n'ont pu faire : la planche, avec un zoom lent, le remplace, et la vidéo va jusqu'au montage. Un bandeau le signale, et « Refaire » reste possible. Exception : un envoi Flow incertain (clip peut-être déjà facturé) garde la vérification.
+- Bloc « Contrôle qualité des clips » affiché seulement s'il y a quelque chose à faire. Les lignes « correspondance avec le scénario » sont retirées.
+
 ## 0.1.101 (06/11/2026)
 
 **Retiré**

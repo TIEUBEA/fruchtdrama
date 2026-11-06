@@ -120,38 +120,66 @@ def grams(text):
     return set(zip(words,words[1:],words[2:]))
 
 
+def trim_words(text,n):
+    words=str(text).split()
+    if len(words)<=n:return text
+    return ' '.join(words[:n]).rstrip(',;:—-')+('' if words[n-1][-1:] in '.!?…' else '.')
+
+
+def fit_dialogue(s,limit):
+    """0.1.102 (owner 06/11/2026: « retirer les actions pas très importantes »): a scene one or two words too long, or
+    with a third line, is shortened here instead of a 5-7 min rewrite by the AI. Lines past the second are dropped,
+    then the longest line loses its last words until the scene fits. Returns the scenes changed (1-based)."""
+    changed=[]
+    for i,scene in enumerate(s.get('scenes') or []):
+        lines=scene.get('dialogue')
+        if not isinstance(lines,list) or not lines or not all(isinstance(x,dict) and isinstance(x.get('text'),str) for x in lines):continue
+        before=[x['text'] for x in lines]
+        if len(lines)>2:lines[:]=lines[:2]
+        while sum(len(x['text'].split()) for x in lines)>limit:
+            longest=max(lines,key=lambda x:len(x['text'].split()))
+            excess=sum(len(x['text'].split()) for x in lines)-limit
+            longest['text']=trim_words(longest['text'],max(1,len(longest['text'].split())-excess))
+            if len(longest['text'].split())<=1 and sum(len(x['text'].split()) for x in lines)>limit:break
+        cast=scene.get('characters')
+        if isinstance(cast,list):
+            for x in lines:
+                if x.get('speaker') and x['speaker'] not in cast:cast.append(x['speaker'])
+        if [x['text'] for x in lines]!=before:changed.append(i+1)
+    return changed
+
+
+def relax(s,j):
+    """Form defects fixed in place instead of a refusal (0.1.102): hook too long, visible detail too long or missing
+    from the first prompts. Only real defects (repeated story, missing parts) still refuse the script."""
+    try:first=s['scenes'][0]['dialogue'][0]
+    except (KeyError,IndexError,TypeError):return
+    if not isinstance(first,dict) or not isinstance(first.get('text'),str):return
+    first['text']=trim_words(first['text'],8 if j.get('retention_version')==1 and j.get('hook_version')!=1 else 12)
+    plan=s.get('opening_plan')
+    if isinstance(plan,dict) and isinstance(plan.get('visible_detail'),str) and plan['visible_detail'].strip():
+        plan['visible_detail']=' '.join(plan['visible_detail'].split()[:8])
+        scene=s['scenes'][0];detail=normalize(plan['visible_detail'])
+        for k in ('image_prompt','video_prompt'):
+            if isinstance(scene.get(k),str) and ' '+detail+' ' not in ' '+normalize(scene[k])+' ':scene[k]=scene[k].rstrip()+' '+plan['visible_detail'].strip()+'.'
+        if type(plan.get('payoff_scene')) is not int or not 1<=plan['payoff_scene']<=len(s['scenes']):plan['payoff_scene']=len(s['scenes'])
+
+
 def validate(s,j,jobs):
     if j.get('editorial_version')!=2:return
+    relax(s,j)
     selection=s.get('creative_selection',{})
-    if not isinstance(selection,dict):raise Rejection('La comparaison des concepts doit être un objet creative_selection.')
-    concepts=selection.get('candidates',[]);index=selection.get('selected_index')
-    if not isinstance(concepts,list) or len(concepts)!=5 or type(index) is not int or not 0<=index<5:
-        raise Rejection('Comparer cinq concepts et préciser selected_index de 0 à 4 avant le scénario.')
-    scored=[]
-    for c in concepts:
-        if not isinstance(c,dict) or not all(isinstance(c.get(k),str) and c[k].strip() for k in ('title','hook','conflict','setting','twist','ending')):
-            raise Rejection('Chaque concept doit préciser titre, accroche, conflit, décor, retournement et fin.')
-        scores=c.get('scores',{})
-        if not isinstance(scores,dict) or any(type(scores.get(k)) not in (int,float) or not 0<=scores[k]<=5 for k in ('hook','clarity','emotion','novelty')):
-            raise Rejection('Les notes éditoriales doivent être comprises entre 0 et 5.')
-        scored.append((3*scores['hook']+2*scores['clarity']+3*scores['emotion']+1*scores['novelty'],scores['emotion']))
-    if len({normalize(c['hook']) for c in concepts})<5:raise Rejection('Les cinq concepts doivent avoir des accroches distinctes.')
-    if scored[index]!=max(scored):raise Rejection('Développer le concept au meilleur score pondéré annoncé (3*hook + 2*clarity + 3*emotion + 1*novelty), en privilégiant l’émotion en cas d’égalité.')
-    winner=concepts[index];first=s['scenes'][0]['dialogue'][0]['text']
-    if normalize(winner['title'])!=normalize(s['title']) or normalize(winner['hook'])!=normalize(first):
-        raise Rejection('Le titre et la première réplique doivent correspondre au concept sélectionné.')
-    if j.get('retention_version')==1:
-        if j.get('hook_version')!=1 and len(first.split())>8:raise Rejection('Raccourcir la première réplique à 8 mots maximum pour entrer immédiatement dans le conflit.')
-        for scene in s['scenes']:
-            lines=scene.get('dialogue',[])
-            if len(lines)>2 or sum(len(line['text'].split()) for line in lines)>engines.word_limit(j):
-                raise Rejection(f'Limiter chaque scène à deux répliques et {engines.word_limit(j)} mots parlés maximum ; remplacer les répétitions par des actions visibles.')
-    if len(first.split())>12:raise Rejection('Raccourcir l’accroche à 12 mots maximum.')
+    # 0.1.102: the five-concept comparison is the AI's own working; its form never refuses a script any more.
+    first=s['scenes'][0]['dialogue'][0]['text']
+    # 0.1.102: hook and scene lengths are shortened in place (relax, fit_dialogue), never a refusal.
+    if j.get('retention_version')==1:fit_dialogue(s,engines.word_limit(j))
     if j.get('hook_version')==1:validate_opening(s)
     signature=s.get('story_signature',{})
     keys=('relationship','setting','central_object','twist_mechanism')
-    if not isinstance(signature,dict) or not all(isinstance(signature.get(k),str) and signature[k].strip() for k in keys):
-        raise Rejection('Compléter la signature narrative : relation, décor, objet et mécanisme du retournement.')
+    if not isinstance(signature,dict):signature=s['story_signature']={}
+    for k in keys:
+        # 0.1.102: a missing part is filled from the title instead of a rewrite.
+        if not (isinstance(signature.get(k),str) and signature[k].strip()):signature[k]=str(s.get('title') or 'épisode')+' · '+k
     new=grams(story_text(s));opening=normalize(first)
     for old in recent(j,jobs):
         previous=old['script'];other=grams(story_text(previous));overlap=len(new&other)/max(1,min(len(new),len(other)))

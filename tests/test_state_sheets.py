@@ -5,6 +5,7 @@ TEMP = tempfile.TemporaryDirectory()
 os.environ['FRUCHT_DATA'] = TEMP.name
 SPEC = importlib.util.spec_from_file_location('studio_state_sheets', pathlib.Path(__file__).parents[1] / 'server.py')
 s = importlib.util.module_from_spec(SPEC); SPEC.loader.exec_module(s)
+s.STATE_SHEETS = True  # 0.1.102: off in production, the feature itself stays tested
 import board_check, refusal  # noqa: E402  (server.py puts the project on the path)
 
 
