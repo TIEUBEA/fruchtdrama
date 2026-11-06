@@ -85,6 +85,88 @@ def board(video: pathlib.Path, out: pathlib.Path, duration: float, frames: int =
     return run.returncode == 0 and out.is_file()
 
 
+EVERY = 6          # seconds between two regular frames, like the Atelier
+PER_SHEET = 4      # frames per contact sheet
+MAX_SHOT_SHEETS = 3
+
+
+def _frame(ff: str, video: pathlib.Path, at: float, out: pathlib.Path, height: int = 640) -> bool:
+    run = subprocess.run([ff, '-v', 'error', '-y', '-ss', f'{max(at, 0):.2f}', '-i', str(video), '-frames:v', '1',
+                          '-vf', f'scale=-2:{height}', '-q:v', '3', str(out)], capture_output=True, timeout=60)
+    return run.returncode == 0 and out.is_file()
+
+
+def _sheet(images: list[tuple[pathlib.Path, str]], out: pathlib.Path) -> None:
+    """Frames side by side, each with its label (« n · m:ss ») written on it."""
+    from PIL import Image, ImageDraw
+    tiles = []
+    for path, label in images:
+        with Image.open(path) as im:
+            tile = im.convert('RGB')
+        draw = ImageDraw.Draw(tile)
+        draw.rectangle((0, 0, 11 * len(label) + 16, 34), fill='black')
+        draw.text((8, 6), label, fill='yellow', font_size=24)
+        tiles.append(tile)
+    w, h = max(t.width for t in tiles), max(t.height for t in tiles)
+    sheet = Image.new('RGB', (w * len(tiles) + 8 * (len(tiles) - 1), h), 'white')
+    for k, t in enumerate(tiles):
+        sheet.paste(t, (k * (w + 8), 0))
+    sheet.save(out, quality=85)
+
+
+def shot_starts(video: pathlib.Path, threshold: float = 0.3) -> list[float]:
+    """Start time of every shot (scene change detected by ffmpeg)."""
+    ff = shutil.which('ffmpeg')
+    if not ff:
+        return []
+    run = subprocess.run([ff, '-v', 'info', '-i', str(video), '-vf', f"select='gt(scene,{threshold})',showinfo", '-an', '-f', 'null', '-'],
+                         capture_output=True, text=True, timeout=300)
+    starts = [0.0] + [float(m) for m in re.findall(r'pts_time:([0-9.]+)', run.stderr)]
+    kept = []
+    for t in starts:
+        if not kept or t - kept[-1] >= 1.0:
+            kept.append(t)
+    return kept
+
+
+def frame_sheets(video: pathlib.Path, folder: pathlib.Path, duration: float) -> list[dict]:
+    """What the writing AI sees of the video to redo (05/11/2026, idea seen in the Atelier): the very first image,
+    contact sheets of one frame every 6 s with its time written on it, then the detected shots with their start time.
+    Returns [{'file', 'about'}] in the order the images are attached."""
+    ff = shutil.which('ffmpeg')
+    if not ff or duration <= 0:
+        return []
+    work = folder / 'source_frames'
+    work.mkdir(exist_ok=True)
+    clock = lambda t: f'{int(t // 60)}:{int(t % 60):02d}'
+    out = []
+    first = folder / 'source_first.jpg'
+    if _frame(ff, video, 0.2, first, 960):
+        out.append({'file': first.name, 'about': 'la toute première image de la vidéo'})
+    regular = [t for t in range(0, int(duration), EVERY)]
+    frames = []
+    for n, t in enumerate(regular, 1):
+        path = work / f'r{n:03d}.jpg'
+        if _frame(ff, video, t + 0.5, path):
+            frames.append((path, f'{n} · {clock(t)}'))
+    for k in range(0, len(frames), PER_SHEET):
+        name = f'source_every6s_{k // PER_SHEET + 1}.jpg'
+        _sheet(frames[k:k + PER_SHEET], folder / name)
+        out.append({'file': name, 'about': f'{len(frames[k:k + PER_SHEET])} images prises toutes les {EVERY} secondes, numérotées, le temps écrit dessus (« n · m:ss »)'})
+    shots = shot_starts(video)
+    per = max(PER_SHEET, -(-len(shots) // MAX_SHOT_SHEETS))
+    shot_frames = []
+    for n, t in enumerate(shots, 1):
+        path = work / f's{n:03d}.jpg'
+        if _frame(ff, video, t + 0.3, path, 480):
+            shot_frames.append((path, f'plan {n} · {clock(t)}'))
+    for k in range(0, len(shot_frames), per):
+        name = f'source_shots_{k // per + 1}.jpg'
+        _sheet(shot_frames[k:k + per], folder / name)
+        out.append({'file': name, 'about': 'les plans détectés (une image à chaque changement de plan), numérotés avec leur temps de début'})
+    return out
+
+
 def transcribe(video: pathlib.Path, root: pathlib.Path) -> str:
     """Spoken lines with their time, if the local checks (faster-whisper) are installed; '' otherwise."""
     models = root / '.qc-models'
@@ -95,7 +177,8 @@ def transcribe(video: pathlib.Path, root: pathlib.Path) -> str:
         from faster_whisper import WhisperModel
         model = WhisperModel('base', download_root=str(models), device='cpu', compute_type='int8', cpu_threads=4, local_files_only=True)
         segments, _ = model.transcribe(str(video), beam_size=1, vad_filter=True)
-        lines = [f'[{int(s.start // 60):02d}:{int(s.start % 60):02d}] {s.text.strip()}' for s in segments]
+        # Tenth of a second, like the Atelier: the writer can match each line with the stamped frames.
+        lines = [f'[{int(s.start // 60):02d}:{s.start % 60:04.1f}] {s.text.strip()}' for s in segments]
     except Exception:
         return ''
     return '\n'.join(lines)[:TRANSCRIPT_CHARS]
@@ -136,9 +219,9 @@ def beats(transcript: str, duration: float | None, scenes: int) -> list[list[str
     Each transcript line looks like « [mm:ss] text »."""
     lines = []
     for raw in str(transcript or '').splitlines():
-        m = re.match(r'\[(\d+):(\d+)\]\s*(.+)', raw.strip())
+        m = re.match(r'\[(\d+):(\d+(?:\.\d+)?)\]\s*(.+)', raw.strip())
         if m:
-            lines.append((int(m.group(1)) * 60 + int(m.group(2)), m.group(3).strip()))
+            lines.append((int(m.group(1)) * 60 + int(float(m.group(2))), m.group(3).strip()))
     if not lines or scenes < 1:
         return []
     total = max(float(duration or 0), lines[-1][0] + 1.0)
@@ -152,7 +235,10 @@ def guidance(mode: str, analysis: dict | None, captures_count: int = 0, scenes: 
     """What the writing AI is told about the video to redo."""
     analysis = analysis or {}
     seen = []
-    if analysis.get('board'):
+    if analysis.get('sheets'):
+        seen.append('les images jointes, dans l’ordre : ' + ' ; '.join(f'{k + 1}. {x["about"]}' for k, x in enumerate(analysis['sheets']))
+                    + '. Regarde-les vraiment, image par image : qui est là, qui parle (sa bouche s’ouvre), qui a peur, pleure, transpire, crie, recule, et à quel moment')
+    elif analysis.get('board'):
         seen.append('la planche jointe montre ses moments clés dans l’ordre (de gauche à droite, puis ligne suivante)')
     if captures_count:
         seen.append(f'{captures_count} capture(s) jointe(s) envoyée(s) par le propriétaire')

@@ -605,6 +605,44 @@ def rank_candidates(rows,language='Deutsch (de-DE)'):
         if not previous or priority[r['metric_kind']]>=priority[previous['metric_kind']]:unique[r['url']]=r
     return sorted(unique.values(),key=lambda r:({'views':2,'likes':1,'unknown':0}[r['metric_kind']],r['score']),reverse=True)
 
+# Rich plans (06/11/2026, seen in the Atelier's real production): each scene says what the image shows, what the viewer
+# learns, the framing, the camera, three actions (the last one closes the shot), how each line is acted and who stays
+# silent; each character has a distinctive mark and a fixed place in the frame. The server turns them into the image
+# and clip prompts, so every planche and every clip carries the same direction.
+def _txt(v,limit=400):return ' '.join(str(v or '').split())[:limit]
+def cast_place(j,cid):
+    c=next((c for c in j.get('characters',[]) if c.get('id')==cid),{})
+    return _txt(c.get('place'),120)
+def plan_image_block(j,s):
+    script=j.get('script') or {}
+    parts=[]
+    if s.get('montre'):parts.append('WHAT THE IMAGE SHOWS: '+_txt(s['montre'],600))
+    if s.get('cadre'):parts.append('FRAMING: '+_txt(s['cadre'],300))
+    place=(script.get('lieux') or {}).get(s.get('lieu')) if isinstance(script.get('lieux'),dict) else None
+    if place:parts.append('PLACE: '+_txt(place,300))
+    if script.get('lieu'):parts.append('WORLD: '+_txt(script['lieu'],300)+' No names, no logos, no readable text.')
+    marks=[f"{c.get('name')}: {_txt(c.get('tenue'),120)}; {_txt(c.get('detail'),120)}; {_txt(c.get('place'),120)}" for c in j.get('characters',[]) if c.get('id') in s.get('characters',[]) and (c.get('detail') or c.get('place'))]
+    if marks:parts.append('EACH CHARACTER, ALWAYS THE SAME: '+' | '.join(marks))
+    if s.get('actions'):parts.append('Catch the moment of: '+_txt((s['actions'] or [''])[0],200)+' Faces show the emotion strongly (exaggerated, readable on a phone).')
+    return ('\n'+'\n'.join(parts)) if parts else ''
+def plan_video_block(j,s):
+    parts=[]
+    if s.get('camera'):parts.append('CAMERA: '+_txt(s['camera'],200))
+    acts=[_txt(a,200) for a in (s.get('actions') or []) if _txt(a)]
+    if acts:parts.append('ACTIONS IN ORDER (the last one closes the shot): '+' / '.join(acts))
+    mute=[c.get('name') for c in j.get('characters',[]) if c.get('id') in (s.get('muets') or [])]
+    if mute:parts.append('SILENT, MOUTH CLOSED: '+', '.join(mute))
+    parts.append('Reactions are big and readable: tears, sweat drops, trembling, shouting, stepping back when the story calls for it.')
+    return '\n'+'\n'.join(parts)
+def dialogue_lines(j,s):
+    out=[]
+    for x in s['dialogue']:
+        where=cast_place(j,x['speaker']);acting=_txt(x.get('jeu'),80)
+        out.append(x['speaker']+(f' ({where})' if where else '')+(f' [{acting}]' if acting else '')+': '+x['text'])
+    return '\n'.join(out)
+
+SIZE_WORDS={'énorme','énormes','gros','grosse','grosses','géant','géante','géants','immense','immenses','obèse','huge','big','fat','giant','enormous','riesig','enorme','gordo','gorda','gigante'}
+
 def validate_script(s, n):
     if not isinstance(s,dict): raise ValueError('Objet JSON attendu')
     chars=s.get('characters',[]); scenes=s.get('scenes',[])
@@ -624,6 +662,11 @@ def validate_script(s, n):
         if sum(len(x['text'].split()) for x in lines)>25: raise ValueError('Dialogue trop long pour un clip de huit secondes (25 mots maximum)')
     for k in ['title','cover_title','description']:
         if not isinstance(s.get(k),str) or not s[k].strip(): raise ValueError('Titre, couverture ou description manquant')
+    # Seen in the Atelier's checks (06/11/2026): size words in a character's distinctive mark make the video engine
+    # inflate the whole character. Refused with the exact words, so the rewrite fixes only that.
+    for c in chars:
+        found=sorted({w for w in re.findall(r"[\w’']+",' '.join(str(c.get(k,'')) for k in ('detail','tenue')).lower()) if w in SIZE_WORDS})
+        if found:raise ValueError(f"Le détail de {c.get('name','un personnage')} : « {', '.join(found)} » fait grossir le personnage dans la vidéo. Décris le détail sans parler de sa taille.")
     # Optional extra: a wrong entry is dropped, it never refuses the script.
     changes=clean_state_changes(s.get('state_changes'),ids,n)
     if changes:s['state_changes']=changes
@@ -661,6 +704,16 @@ def translation_prompt(j):
     source['production_id']=j['id']
     return f'''Traduis et adapte ce scénario de mini-fiction de fruits dans la langue : {language}. Garde exactement la même structure JSON, les mêmes identifiants de personnages, le même nombre de scènes, les mêmes locuteurs et le même sens. Adapte naturellement les répliques (pas de mot à mot), le titre, cover_title (3 à 5 mots) et la description (mentionne la création par IA). Les prénoms peuvent être adaptés à la langue. Les répliques restent courtes : au plus {engines.word_limit(j,25)} mots par scène. Les champs image_prompt et video_prompt restent tels quels, sauf la langue parlée indiquée dans video_prompt. Réponds UNIQUEMENT avec le JSON. JSON : {json.dumps(source,ensure_ascii=False)}'''
 
+PLAN_RULES='''
+PLANS (règles de mise en scène) :
+- Chaque plan apporte une information NEUVE (champ apporte) et sert l’histoire (champ sert) ; aucun plan de remplissage.
+- montre et actions décrivent des réactions EXAGÉRÉES et lisibles sur un téléphone : larmes, gouttes de sueur, tremblements, cris, recul, sourire triomphant.
+- La dernière action de chaque plan est un geste qui ferme le plan et appelle le suivant (porte qui s’ouvre, objet qui tombe, regard choqué vers…) : c’est la transition.
+- Chaque réplique va au personnage qui parle vraiment à l’image ; les autres personnages présents sont dans muets. Chaque réplique a son jeu (comment elle est dite).
+- Chaque personnage garde sa tenue, son détail reconnaissable et sa place dans le cadre (champ place) du début à la fin ; image_prompt et video_prompt les reprennent.
+- Respiration : au moins 2 secondes par réplique, au plus 3 mots par seconde ; si un plan est trop chargé, enlève une réplique.
+'''
+
 def is_identical(j):
     return ((j.get('selected') or {}).get('source')=='owner_link' and j['config'].get('recreate')=='identical')
 
@@ -668,7 +721,7 @@ def script_prompt(j):
     if (j.get('variant') or {}).get('kind')=='language':return translation_prompt(j)
     ref=j['selected']; n=j['config']['scene_count']
     language=j['config'].get('language','Deutsch (de-DE)')
-    schema={'production_id':j['id'],'title':'Titre dans la langue choisie','cover_title':'Question courte dans la langue choisie','hook_text':'Accroche écrite à l’écran pendant les 3 premières secondes : 4 à 7 mots, question ou promesse choc, sans révéler la fin','description':'Description TikTok dans la langue choisie, mentionnant la création par IA','characters':[{'id':'fruit_a','name':'Prénom dans la langue choisie','appearance':'Design de fruit et vêtements cohérents','voice':'Voix native de la langue choisie, âge, timbre','image_prompt':'Prompt de référence dans la langue choisie'}],'scenes':[{'title':'Titre court de la scène (2 à 4 mots, langue choisie)','characters':['fruit_a'],'meaning':'Action compréhensible sans le son','image_prompt':'Prompt d’image dans la langue choisie, 9:16','video_prompt':'Animation, caméra, action, position des locuteurs, lèvres et personnages silencieux','dialogue':[{'speaker':'fruit_a','text':'Réplique courte dans la langue choisie'}]}],'state_changes':[{'from_scene':2,'character':'fruit_a','change':'Changement d’apparence visible à partir de cette scène (blessure, vêtement déchiré, objet perdu, maquillage coulé…), langue choisie'}]}
+    schema={'production_id':j['id'],'title':'Titre dans la langue choisie','cover_title':'Question courte dans la langue choisie','hook_text':'Accroche écrite à l’écran pendant les 3 premières secondes : 4 à 7 mots, question ou promesse choc, sans révéler la fin','description':'Description TikTok dans la langue choisie, mentionnant la création par IA','lieu':'LE MONDE DE TOUT L’ÉPISODE, une fois : époque, lumière, matières ; aucun nom, aucun logo, aucun texte lisible','lieux':{'CUISINE':'la pièce décrite pour un dessinateur'},'su_du_public':'ce que le spectateur VOIT avant les personnages','cliffhanger':'la dernière réplique','characters':[{'id':'fruit_a','name':'Prénom dans la langue choisie','role':'protagoniste | antagoniste | témoin','appearance':'âge, TÊTE DE FRUIT décrite (couleur, matière, signe), vêtements précis, attitude','tenue':'la tenue en quelques mots, toujours la même','detail':'LE détail reconnaissable de loin (ex. une mèche blanche sur le front)','place':'sa place fixe dans le cadre vertical : « À DROITE — la prune violette en sweat gris »','voice':'Voix native de la langue choisie, âge, timbre, ton','veut':'ce qu’il veut','image_prompt':'Prompt de référence dans la langue choisie'}],'scenes':[{'title':'Titre court du plan (2 à 4 mots, MAJUSCULES, langue choisie)','sert':'moteur | obstacle | aggravation | twist | revanche | appel','apporte':'ce que le spectateur apprend de NEUF dans ce plan, une phrase','lieu':'CUISINE','characters':['fruit_a'],'muets':['personnages présents qui ne parlent pas'],'meaning':'Action compréhensible sans le son','montre':'CE QUE L’IMAGE MONTRE, en majuscules : qui, où, quel geste, quel objet, quelle émotion exagérée','cadre':'PLAN TAILLE / GROS PLAN… : qui est où dans le cadre vertical','camera':'ce que fait la caméra, quelques mots','actions':['ACTION 1.','ACTION 2.','LE GESTE QUI FERME LE PLAN et appelle le suivant.'],'image_prompt':'Prompt d’image dans la langue choisie, 9:16','video_prompt':'Animation, caméra, action, position des locuteurs, lèvres et personnages silencieux','dialogue':[{'speaker':'fruit_a','text':'Réplique courte dans la langue choisie, 10 mots au plus','jeu':'3 à 6 mots de jeu : « dans un souffle, les mains sur la bouche »'}]}],'state_changes':[{'from_scene':2,'character':'fruit_a','change':'Changement d’apparence visible à partir de cette scène (blessure, vêtement déchiré, objet perdu, maquillage coulé…), langue choisie'}]}
     guidance=''
     owner_link=(ref or {}).get('source')=='owner_link'
     identical=owner_link and j['config'].get('recreate')=='identical'
@@ -686,6 +739,7 @@ def script_prompt(j):
         guidance=editorial.instructions(j,STATE['jobs'])+'\nRéférences comparées : '+json.dumps(j.get('candidates',[])[:6],ensure_ascii=False)+'\nCorrections demandées : '+json.dumps(j.get('editorial_feedback',[]),ensure_ascii=False)
     else:guidance=editorial.STORY_CRAFT
     if identical and j.get('editorial_feedback'):guidance+='\nCorrections demandées : '+json.dumps(j['editorial_feedback'],ensure_ascii=False)
+    guidance+=PLAN_RULES
     reference=(source_video.guidance(j['config'].get('recreate','inspired'),j.get('source_analysis'),len(j.get('source_captures') or []),n)+(f"\nInstructions en plus du propriétaire (à respecter) : {j['brief']}" if j.get('brief','').strip() else '')) if owner_link else None
     return f'''Crée une mini-fiction de fruits {'qui refait fidèlement la vidéo indiquée' if identical else 'entièrement ORIGINALE'}. Langue demandée pour les dialogues, les voix, les textes de couverture, la description et les prompts (sauf les clés techniques et la signature narrative) : {language}. La langue demandée prime sur la langue française des instructions et des descriptions du schéma. Aucune traduction ni réplique dans une autre langue. Les personnages parlent avec des voix natives de la langue demandée. Réponds UNIQUEMENT avec du JSON valide, sans explication. Conserve les clés techniques du schéma en anglais. {reference if reference else 'Référence comme indice de tendance seulement, jamais copier les répliques ou les plans : '+json.dumps(ref,ensure_ascii=False)+'.'} Idée : {j['brief']}. Exactement {n} scènes de {engines.spec(j)['seconds']} secondes, {'les mêmes personnages que la vidéo d’origine (5 au plus : fusionne ou laisse en figurant muet les rôles secondaires)' if identical else '2 à 5 personnages (au moins 3 quand l’histoire le permet : héros, adversaire, témoin ou figurant)'}. Au plus {word_limit} mots parlés par scène pour les langues avec espaces ; pour les autres, une réplique assez courte pour être prononcée naturellement en moins de 7 secondes. Maximum 2 locuteurs par scène. {'HOOK : garde l’ouverture de la vidéo d’origine (elle a déjà prouvé qu’elle accroche) ; sa première réplique, reformulée, est dite dans les 2 premières secondes ; hook_text pose une question résolue seulement à la fin.' if identical else 'HOOK OBLIGATOIRE : la scène 1 s’ouvre sur l’instant le plus fort (danger, injustice, secret révélé), la première réplique est une phrase choc de moins de 10 mots dite dans les 2 premières secondes, et hook_text pose une question résolue seulement à la fin.'} Mouvement : chaque scène a un cadrage différent (gros plan, plan large, plongée), un mouvement de caméra (travelling, panoramique, zoom), des personnages qui se déplacent et agissent, un arrière-plan vivant (figurants, objets, lumière, météo) ; au moins deux lieux différents dans l’épisode. Retournement visible, conclusion satisfaisante. Pas de présentation comme fait réel. Animation 3D premium, fruits anthropomorphes avec peau de fruit aussi sur les mains, vêtements couvrants sans logos, grands visages expressifs, {'mêmes décors que la vidéo d’origine' if identical else 'décor cohérent avec l’intrigue choisie et différent des épisodes récents'}, vertical 9:16. Même identité et tenue partout, aucune voix de narrateur, personnages parlant à l'écran, caméra en mouvement continu dans chaque clip. Sous-titres ajoutés au montage. {guidance} Champ state_changes FACULTATIF : seulement si l’histoire change vraiment l’apparence visible d’un personnage (blessure, vêtement déchiré, objet perdu, maquillage coulé…), de 0 à 3 entrées, from_scene = numéro de la première scène (1 à {n}) où le changement se voit, character = identifiant du personnage, change = description courte ; sinon une liste vide []. Le champ cover_title doit être une accroche de couverture de 3 à 5 mots maximum dans la langue demandée, sans révéler la fin. Schéma : {json.dumps(schema,ensure_ascii=False)}'''
 
@@ -799,8 +853,10 @@ def prepare_source(id):
     try:
         info=source_video.download(url,d/'source.mp4');analysis.update(info)
         if source_video.board(d/'source.mp4',d/'source_board.jpg',info['duration']):analysis['board']='source_board.jpg'
+        try:analysis['sheets']=source_video.frame_sheets(d/'source.mp4',d,info['duration'])
+        except Exception as e:log_error('Images de la vidéo d’origine',e)
         analysis['transcript']=source_video.transcribe(d/'source.mp4',ROOT)
-        message='Vidéo d’origine analysée : '+('planche des moments clés' if analysis.get('board') else 'description')+(' et transcription' if analysis.get('transcript') else '')+' transmises à l’IA.'
+        message='Vidéo d’origine analysée : '+(f"{sum(1 for x in analysis['sheets'])} images (début, une toutes les 6 s, chaque changement de plan)" if analysis.get('sheets') else 'planche des moments clés' if analysis.get('board') else 'description')+(' et transcription' if analysis.get('transcript') else '')+' transmises à l’IA.'
     except Exception as e:
         analysis['error']=str(e)[:200];message='Vidéo d’origine non récupérée ('+str(e)[:160]+') : l’histoire s’appuie sur '+('tes captures et ' if j.get('source_captures') else '')+'son lien seulement.'
     with LOCK:
@@ -819,7 +875,9 @@ def capture_note(j):
 
 def source_attachments(j):
     """Board of the video to redo and the owner's captures, as files the chat can attach."""
-    files=([j['source_analysis']['board']] if (j.get('source_analysis') or {}).get('board') else [])+list(j.get('source_captures') or [])
+    a=j.get('source_analysis') or {}
+    # Atelier-like: first image, one frame every 6 s, then the detected shots; the single board for older analyses.
+    files=([x['file'] for x in a['sheets']] if a.get('sheets') else [a['board']] if a.get('board') else [])+list(j.get('source_captures') or [])
     return [asset_url(j,f) for f in files if (job_dir(j)/f).is_file()]
 
 def approve_sheet(j,sheet,title_index,hook_index,message,call_index=0):
@@ -873,7 +931,7 @@ def schedule(j):
         for i,s in enumerate(j['scenes']):
             if not s.get('image'):
                 attachments,states=scene_references(j,i)
-                add_task(j,'chat_image',{'provider':'chatgpt','prompt':s['image_prompt']+' Use attached character references. Same identity and outfit, no text, 9:16. Dynamic cinematic composition with a camera angle different from the other scenes, characters caught in action, detailed living background. Highest resolution available (at least 1024×1536), ultra sharp, no blur.'+state_note(j,states)+correction(j.get('corrections',{}).get(f'image:{i}')),'attachments':attachments},f'image:{i}'); return
+                add_task(j,'chat_image',{'provider':'chatgpt','prompt':s['image_prompt']+plan_image_block(j,s)+' Use attached character references. Same identity and outfit, no text, 9:16. Dynamic cinematic composition with a camera angle different from the other scenes, characters caught in action, detailed living background. Highest resolution available (at least 1024×1536), ultra sharp, no blur.'+state_note(j,states)+correction(j.get('corrections',{}).get(f'image:{i}')),'attachments':attachments},f'image:{i}'); return
         if board_gate(j):return
         j['stage']='clips'; schedule(j)
     elif step=='clips':
@@ -881,9 +939,9 @@ def schedule(j):
             if not s.get('clip') and engines.of(j)!='flow':
                 # P5-06: Grok / Arena. No credit balance to reserve; quotas are handled per account.
                 cast='\n'.join(c['id']+': '+c['appearance']+' Voice: '+c['voice'] for c in j['characters'])
-                dialog='\n'.join(x['speaker']+': '+x['text'] for x in s['dialogue'])
+                dialog=dialogue_lines(j,s)
                 seconds=engines.spec(j)['seconds'];language=j['config'].get('language','Deutsch (de-DE)')
-                prompt=f"One continuous shot, {seconds} seconds, portrait 9:16. Animate the attached image with real motion: the camera moves (dolly, pan or push-in), characters walk, turn and use their hands, the background is alive (extras, objects, light). No text, no music. Spoken language ONLY: {language}. Natural native voices, no translation or extra narration. Preserve identity.\n{cast}\n{s['video_prompt']}\nExact dialogue in this order; only the named speaker moves their lips, all others stay silent:\n{dialog}"+correction(j.get('corrections',{}).get(f'clip:{i}'))
+                prompt=f"One continuous shot, {seconds} seconds, portrait 9:16. Animate the attached image with real motion: the camera moves (dolly, pan or push-in), characters walk, turn and use their hands, the background is alive (extras, objects, light). No text, no music. Spoken language ONLY: {language}. Natural native voices, no translation or extra narration. Preserve identity.\n{cast}\n{s['video_prompt']}{plan_video_block(j,s)}\nExact dialogue in this order; only the named speaker moves their lips, all others stay silent:\n{dialog}"+correction(j.get('corrections',{}).get(f'clip:{i}'))
                 payload={'engine':engines.of(j),'prompt':prompt,'attachments':[asset_url(j,flow_reference(j,s['image']))],'seconds':seconds}
                 engine=engines.of(j)
                 if engine_accounts.accounts(STATE,engine) and not j['config'].get('dry_run'):
@@ -910,9 +968,9 @@ def schedule(j):
                 if p['id']!=j.get('flow_profile'):
                     j['flow_profile']=p['id'];event(j,'Passage automatique au prochain compte Flow enregistré ; clips reçus conservés.')
                 cast='\n'.join(c['id']+': '+c['appearance']+' Voice: '+c['voice'] for c in j['characters'])
-                dialog='\n'.join(x['speaker']+': '+x['text'] for x in s['dialogue'])
+                dialog=dialogue_lines(j,s)
                 language=j['config'].get('language','Deutsch (de-DE)')
-                prompt=f"One continuous shot, 8 seconds, portrait 9:16. No text, no music. Spoken language ONLY: {language}. Natural native voices in the requested language, no translation or extra narration. Preserve identity.\n{cast}\n{s['video_prompt']}\nExact dialogue in this order; only the named speaker moves their lips, all others stay silent:\n{dialog}"+correction(j.get('corrections',{}).get(f'clip:{i}'))
+                prompt=f"One continuous shot, 8 seconds, portrait 9:16. No text, no music. Spoken language ONLY: {language}. Natural native voices in the requested language, no translation or extra narration. Preserve identity.\n{cast}\n{s['video_prompt']}{plan_video_block(j,s)}\nExact dialogue in this order; only the named speaker moves their lips, all others stay silent:\n{dialog}"+correction(j.get('corrections',{}).get(f'clip:{i}'))
                 payload={'prompt':prompt,'attachments':[asset_url(j,flow_reference(j,s['image']))],'cost':cost,'balance':p['balance'],'seconds':8,**({'model':j['config']['flow_model'],'resolution':j['config'].get('flow_resolution','720p')} if j['config'].get('flow_model') else {})}
                 if j['config'].get('dry_run'):payload['dry_run']=True
                 target=flow_accounts.route(p) if STATE.get('settings',{}).get('flow_auto') else None
