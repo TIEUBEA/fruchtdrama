@@ -114,11 +114,13 @@ globalThis.FruchtFlow={
  },
  async configure(doc,pause,cost,model,resolution='720p',seconds=8,aspect='9:16'){
   const settings=this.settingsButton(doc);if(!settings)throw Error('Paramètres Flow indisponibles ; aucun envoi effectué.');
-  const radios=()=>[...doc.querySelectorAll('[role="radio"]')].filter(b=>this.visible(doc,b));
+  // A panel left open by an earlier try in this tab doubled every option (06/11/2026: « Réglage Flow vidéo / 9:16 / x1
+  // non reconnu » on every account): only the most recent settings panel counts.
+  const radios=()=>{const all=[...doc.querySelectorAll('[role="radio"]')].filter(b=>this.visible(doc,b));const panes=[...new Set(all.map(b=>b.closest?.('.cdk-overlay-pane,[role="dialog"],[role="menu"]')).filter(Boolean))];return panes.length>1?all.filter(b=>b.closest('.cdk-overlay-pane,[role="dialog"],[role="menu"]')===panes[panes.length-1]):all;};
   if(!radios().some(b=>this.labelMatches(b,/^(?:16:9|9:16)$/))){settings.click();await pause(500);}
   for(const pattern of [/^(?:Vidéo|Video|Vídeo)$/i,this.aspectPattern(aspect),/^(?:x\s*1|1\s*-\s*mal)$/i]){
    const options=radios().filter(b=>this.labelMatches(b,pattern));
-   if(options.length!==1)throw Error('Réglage Flow vidéo / 9:16 / x1 non reconnu ; aucun envoi effectué.');
+   if(options.length!==1)throw Error('Réglage Flow vidéo / 9:16 / x1 non reconnu ; aucun envoi effectué. Vu : '+options.length+' × '+pattern.source.slice(0,24)+' parmi '+radios().map(b=>(b.innerText||b.getAttribute('aria-label')||'').replace(/\s+/g,' ').trim().slice(0,14)).join(' | ').slice(0,300));
    if(options[0].getAttribute('aria-checked')!=='true'){this.activate(doc,options[0]);await pause(350);}
   }
   if(model){
