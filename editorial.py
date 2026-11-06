@@ -126,7 +126,7 @@ def trim_words(text,n):
     return ' '.join(words[:n]).rstrip(',;:—-')+('' if words[n-1][-1:] in '.!?…' else '.')
 
 
-def fit_dialogue(s,limit):
+def fit_dialogue(s,limit,max_lines=2):
     """0.1.102 (owner 06/11/2026: « retirer les actions pas très importantes »): a scene one or two words too long, or
     with a third line, is shortened here instead of a 5-7 min rewrite by the AI. Lines past the second are dropped,
     then the longest line loses its last words until the scene fits. Returns the scenes changed (1-based)."""
@@ -135,7 +135,7 @@ def fit_dialogue(s,limit):
         lines=scene.get('dialogue')
         if not isinstance(lines,list) or not lines or not all(isinstance(x,dict) and isinstance(x.get('text'),str) for x in lines):continue
         before=[x['text'] for x in lines]
-        if len(lines)>2:lines[:]=lines[:2]
+        if len(lines)>max_lines:lines[:]=lines[:max_lines]
         while sum(len(x['text'].split()) for x in lines)>limit:
             longest=max(lines,key=lambda x:len(x['text'].split()))
             excess=sum(len(x['text'].split()) for x in lines)-limit

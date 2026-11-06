@@ -5,6 +5,15 @@ correspondante (P0-xx, P1-x, P2-xx) détaillée dans `docs/sudf/`. Guide pour re
 `docs/sudf/REPRISE.md`. **Mode d'emploi détaillé** (installer, lancer, utiliser), mis à jour à chaque
 version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, version par version).
 
+## 0.1.104 (07/11/2026)
+
+**Amélioré** (Recréer à l'identique, d'après la comparaison avec l'original de BANANITO)
+- Rythme de l'original : chaque clip contient 2 ou 3 plans enchaînés (large, moyen, gros plan), soit environ un plan toutes les 3 s, sans clip de plus à payer.
+- Toutes les répliques de l'original sont gardées, dans le même ordre et avec la même densité, mais chacune est réécrite (jamais mot pour mot) pour que TikTok la voie comme une création originale. Jusqu'à 3 répliques par scène.
+- Durée de l'original : le nombre de scènes suit sa durée (117 s donnent 12 scènes de 10 s), au lieu de la durée du menu.
+- Histoire légèrement transposée pour la monétisation : mêmes rôles, mêmes événements et même fin, mais d'autres prénoms, d'autres montants, d'autres noms de lieux et d'enseignes, d'autres couleurs de tenues et d'autres détails de décor. Les signes distinctifs restent au même endroit, par exemple l'étiquette d'argent.
+- Sous-titres et titre d'accroche inchangés.
+
 ## 0.1.103 (07/11/2026)
 
 **Corrigé**

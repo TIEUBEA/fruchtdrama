@@ -384,8 +384,10 @@ class TenSecondPlans(unittest.TestCase):
              'config': {'scene_count': 7, 'language': 'Français (fr-FR)', 'recreate': 'identical', 'flow_seconds': 10, 'clip_seconds': 10, 'video_engine': 'flow'}}
         prompt = s.script_prompt(j)
         self.assertIn('Exactement 7 scènes de 10 secondes', prompt)
-        self.assertIn('7 plans de 10 secondes (environ 70 s', prompt)
-        self.assertIn('garde les temps forts', prompt); self.assertIn('fusionne', prompt)
+        # 0.1.104 (owner 07/11/2026): a remake keeps the original's length and every line, reworded, 2-3 shots per scene.
+        self.assertIn('rien n’est condensé', prompt); self.assertIn('LÉGÈREMENT TRANSPOSÉE', prompt); self.assertIn('2 ou 3 PLANS', prompt)
+        j['config']['recreate'] = 'inspired'
+        self.assertIn('7 plans de 10 secondes (environ 70 s', s.script_prompt(j))
         self.assertIn('Au plus 30 mots parlés par scène', prompt)
 
     def test_scenario_of_thirty_words_is_accepted_for_ten_seconds(self):

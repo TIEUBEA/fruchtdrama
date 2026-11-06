@@ -27,7 +27,7 @@ import maintenance
 import series
 import licence
 import readiness
-VERSION='0.1.103'
+VERSION='0.1.104'
 OFFICIAL_ORIGIN='chrome-extension://bhdmibhibonmaamgcbpmbhedhohfongj'  # extension/manifest.json "key"
 import sys
 import traceback
@@ -993,6 +993,12 @@ def correction_prompt(j):
             +json.dumps({k:v for k,v in j['rejected_script'].items() if k not in ('production_id','generation_task_id')},ensure_ascii=False)+'\n```')
 
 def condensed_note(j,n):
+    if is_identical(j):
+        # 0.1.104: a remake keeps the original's length (scene count set from it in prepare_source), nothing condensed.
+        return f'\nDURÉE : {n} scènes de {engines.spec(j)["seconds"]} secondes, la durée de la vidéo d’origine ; rien n’est condensé.'
+    return _condensed_note(j,n)
+
+def _condensed_note(j,n):
     """Refaire une virale (owner 06/11/2026): the story is condensed into about one minute for TikTok monetisation, even
     when the original is longer: the strong moments are kept, the rest is merged."""
     secs=engines.spec(j)['seconds']
@@ -1140,6 +1146,13 @@ def prepare_source(id):
         try:analysis['sheets']=source_video.frame_sheets(d/'source.mp4',d,info['duration'])
         except Exception as e:log_error('Images de la vidéo d’origine',e)
         analysis['transcript']=source_video.transcribe(d/'source.mp4',ROOT)
+        with LOCK:
+            j=job_by(id)
+            if j and is_identical(j) and info.get('duration'):
+                # 0.1.104 (owner 07/11/2026): a remake lasts as long as the original (117 s → 12 clips of 10 s).
+                secs=engines.spec(j)['seconds'];n=max(3,min(40,round(float(info['duration'])/secs)))
+                j['config']['scene_count']=n;j['config']['duration']=int(round(float(info['duration'])))
+                event(j,f'Durée de l’original reprise : {int(round(float(info["duration"])))} s, soit {n} scènes de {secs} s.')
         message='Vidéo d’origine analysée : '+(f"{sum(1 for x in analysis['sheets'])} images (début, une toutes les 6 s, chaque changement de plan)" if analysis.get('sheets') else 'planche des moments clés' if analysis.get('board') else 'description')+(' et transcription' if analysis.get('transcript') else '')+' transmises à l’IA.'
     except Exception as e:
         analysis['error']=str(e)[:200];message='Vidéo d’origine non récupérée ('+str(e)[:160]+') : l’histoire s’appuie sur '+('tes captures et ' if j.get('source_captures') else '')+'son lien seulement.'
@@ -1857,7 +1870,7 @@ def store_script(j,s):
     identical=is_identical(j)
     if isinstance(s,dict):
         # 0.1.102: scenes a little too long are shortened here, no rewrite asked to the AI (5 to 7 min each).
-        fixed=editorial.fit_dialogue(s,engines.word_limit(j))
+        fixed=editorial.fit_dialogue(s,max(engines.word_limit(j),int(3*engines.spec(j)['seconds'])) if is_identical(j) else engines.word_limit(j),3 if is_identical(j) else 2)
         if fixed:j.setdefault('events',[]);event(j,'Répliques raccourcies par le studio (scène(s) '+', '.join(map(str,fixed))+') pour tenir dans les clips, sans réécriture.')
     validate_script(s,j['config']['scene_count'],check_size=not identical,words=max(25,engines.word_limit(j)))
     if identical:
@@ -1869,7 +1882,7 @@ def store_script(j,s):
         limit=max(engines.word_limit(j),int(3*engines.spec(j)['seconds']))
         for i,scene in enumerate(s['scenes']):
             lines=scene.get('dialogue',[]);words=sum(len(x['text'].split()) for x in lines)
-            if len(lines)>2 or words>limit:
+            if len(lines)>3 or words>limit:  # 0.1.104: up to 3 lines (one per shot) in a remake
                 problems.append(f"Scène {i+1} : {len(lines)} réplique(s) et {words} mots, deux répliques et {limit} mots au plus pour tenir dans le clip de {engines.spec(j)['seconds']} secondes ; enlève des mots, n'allonge rien")
         if problems:raise ValueError(' ; '.join(problems))
     else:editorial.validate(s,j,STATE['jobs'])
