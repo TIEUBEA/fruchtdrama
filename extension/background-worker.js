@@ -26,6 +26,8 @@ async function ready(id,task,targetUrl){
   const tab=await chrome.tabs.get(id);let host;
   try{host=new URL(tab.url).hostname;}catch{}
   if(expected.includes(host)&&(!targetUrl||tab.url===targetUrl)){
+   // Arena (React 19) stays an empty skeleton in a background tab until its content is revealed (06/11/2026).
+   if(task.kind==='engine_video'&&globalThis.FruchtReadiness)await FruchtReadiness.reveal(chrome,id);
    // Sites may keep loading trackers after the editor is already usable.
    // This probe only reads the DOM; it never fills or submits anything.
    try{

@@ -3,20 +3,26 @@
 // no cookie export, no CAPTCHA handling, no credential entry.
 globalThis.FruchtEngines={
  sites:{
-  grok:{label:'Grok Imagine',hosts:['grok.com','www.grok.com'],home:'https://grok.com/imagine',
+  // Real pages 06/11/2026: a grok.com tab may sit on a chat or an old /imagine/post page (no composer file field):
+  // each clip starts from a freshly loaded /imagine, like Vidogrid.
+  grok:{label:'Grok Imagine',hosts:['grok.com','www.grok.com'],home:'https://grok.com/imagine',fresh:true,
    login:/\b(?:sign in|log in|sign up|create account)\b|se connecter|s.inscrire|anmelden|registrieren/i,
    loginSelector:'a[href*="sign-in"],a[href*="/login"],button[data-testid="login-button"]',
    videoMode:/^(?:video|vidéo|make video|créer une vidéo|video erstellen)$/i,
    send:/^(?:submit|send|generate|create|make video|envoyer|générer|créer|senden|generieren|erstellen)$/i,
-   quota:/rate limit|too many requests|limit reached|reached your (?:daily |video )?limit|upgrade to (?:supergrok|premium)|out of (?:free )?generations|limite atteinte|limite de (?:génération|vidéos)|Limit erreicht/i,
+   // « You've hit your weekly limit · Resets November 7 » (real toast, 06/11/2026); before sending, the composer
+   // already shows a button « 100% credits used » (data-credit-notice).
+   quota:/rate limit|too many requests|limit reached|(?:reached|hit) your (?:daily |weekly |monthly |video )?limit|100% credits used|upgrade to (?:supergrok|premium)|out of (?:free )?generations|limite atteinte|limite de (?:génération|vidéos)|Limit erreicht/i,
    refusal:/content moderated|moderated|violat\w* (?:our|the) (?:policy|policies|guidelines)|can.t generate (?:this|that)|unable to generate|contenu modéré|ne peut pas générer|Inhalt moderiert/i,
    timeout:4*60000},
   // Real check 02/11/2026: lmarena.ai now redirects to arena.ai/video.
-  arena:{label:'LMArena vidéo',hosts:['arena.ai','www.arena.ai','lmarena.ai','www.lmarena.ai'],home:'https://arena.ai/video',
+  // Real page 06/11/2026: battle mode (2 anonymous models), « Video » is a menu (not a toggle), « Send message »
+  // button, hidden <input type=file> for the image; a reused tab sits on /c/<conversation>: fresh page each clip.
+  arena:{label:'LMArena vidéo',hosts:['arena.ai','www.arena.ai','lmarena.ai','www.lmarena.ai'],home:'https://arena.ai/video',fresh:true,
    login:/\b(?:sign in|log in)\b to (?:continue|generate|use video)|login required|se connecter pour|anmelden, um/i,
    loginSelector:'',
    videoMode:/^(?:video|vidéo)$/i,
-   send:/^(?:send|submit|generate|run|envoyer|générer|senden|generieren)$/i,
+   send:/^(?:send(?: message)?|submit|generate|run|envoyer|générer|senden|generieren)$/i,
    quota:/rate limit|too many requests|daily limit|limit reached|try again (?:later|in)|you.ve reached|limite atteinte|réessayez plus tard|Limit erreicht/i,
    refusal:/content (?:policy|filter|moderation)|flagged|violat\w* (?:our|the) (?:policy|policies|terms)|unsafe|cannot generate|contenu (?:refusé|signalé)|Inhaltsrichtlinie/i,
    timeout:7*60000},
@@ -60,9 +66,16 @@ globalThis.FruchtEngines={
   for(const q of groups){const e=[...doc.querySelectorAll(q)].find(x=>this.visible(x));if(e)return e;}
   return null;
  },
- fileInput(doc){return [...doc.querySelectorAll('input[type="file"]')].find(i=>!i.disabled&&(!i.accept||/image|png|jpe?g|webp|\*/i.test(i.accept)))||null;},
+ // The composer's own field first: Grok /imagine has 3 hidden file fields, the first two belong to template cards
+ // (« Text Edit », « Precise Edit ») and start another tool (real page 06/11/2026).
+ fileInput(doc,editor){
+  const ok=[...doc.querySelectorAll('input[type="file"]')].filter(i=>!i.disabled&&(!i.accept||/image|png|jpe?g|webp|\*/i.test(i.accept)));
+  const form=editor?.closest?.('form');
+  return (form&&ok.find(i=>form.contains(i)))||ok.find(i=>i.name==='files')||ok[ok.length-1]||null;
+ },
  videoModeButton(doc,engine){
-  const b=this.buttons(doc).find(x=>this.site(engine).videoMode.test(this.label(x)));
+  // A menu trigger (Arena « Video ▾ », aria-haspopup) shows the current mode: clicking it only opens the menu.
+  const b=this.buttons(doc).find(x=>this.site(engine).videoMode.test(this.label(x))&&!x.getAttribute('aria-haspopup'));
   if(!b)return null;
   const on=b.getAttribute('aria-pressed')==='true'||b.getAttribute('aria-selected')==='true'||b.getAttribute('aria-checked')==='true'||b.getAttribute('data-state')==='active'||b.getAttribute('data-state')==='on';
   return on?null:b;
@@ -74,8 +87,20 @@ globalThis.FruchtEngines={
  // Messages that appear AFTER our submission only (the page may already show old ones).
  fresh(now,before){return now.length>before.length?now.slice(before.length):now.replace(before,'');},
  problem(text,engine){const s=this.site(engine);if(s.quota.test(text))return 'quota';if(s.refusal.test(text))return 'refusal';return null;},
+ // Arena (preload="none") and Grok in a background tab keep readyState 0: an https .mp4 address is enough there.
+ // Arena's own promo clip (/videos/cta/) is never ours.
  newVideo(doc,old){
-  return [...doc.querySelectorAll('video')].find(v=>{const src=v.currentSrc||v.src||v.querySelector?.('source')?.src;return src&&!old.has(src)&&v.readyState>=1&&!(v.duration<2);})||null;
+  return [...doc.querySelectorAll('video')].find(v=>{const src=v.currentSrc||v.src||v.querySelector?.('source')?.src;if(!src||old.has(src)||/\/videos\/cta\//.test(src))return false;
+   return (v.readyState>=1&&!(v.duration<2))||/^https:\/\/[^#?]+\.mp4(?:[?#]|$)/i.test(src);})||null;
+ },
+ // Grok shows its credit gauge in the composer; « 100% credits used » means the next video is refused.
+ spent(doc){return [...doc.querySelectorAll('[data-credit-notice],button[aria-label]')].some(b=>/100\s*% credits used/i.test(b.getAttribute?.('aria-label')||''));},
+ // « Resets November 7 » / « Resets Nov 7 »: seconds until that day (local midnight); null when unreadable.
+ resetIn(text,now=new Date()){
+  const m=String(text||'').match(/resets?\s+(?:on\s+)?(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})/i);if(!m)return null;
+  const at=new Date(now.getFullYear(),'janfebmaraprmayjunjulaugsepoctnovdec'.indexOf(m[1].toLowerCase())/3,Number(m[2]));
+  if(at<=now)at.setFullYear(at.getFullYear()+1);
+  return Math.max(60,Math.round((at-now)/1000));
  },
  // Deepest visible element whose own text is exactly this label (Playwright get_by_text(exact=True) in the reference).
  exact(doc,label){
@@ -156,17 +181,23 @@ globalThis.FruchtEngines={
   const shown=this.account(doc);
   if(expected&&shown&&shown!==expected)throw h.fail('login',site.label+' : le compte connecté ('+shown+') n’est pas le compte attendu ('+expected+'). Changez de compte dans l’onglet ; aucun envoi effectué.');
   const mode=this.videoModeButton(doc,engine);if(mode){mode.click();await h.sleep(800);}
+  if(engine==='grok'&&this.spent(doc))throw h.fail('quota',site.label+' : limite du compte atteinte (« 100% credits used »). Aucun envoi effectué ; le clip passe au moteur suivant.');
   if(attachments?.length){
-   const input=this.fileInput(doc);
+   // The page may still be building its composer: wait a little for the field.
+   let input=null;for(let i=0;i<20&&!input;i++){input=this.fileInput(doc,this.editor(doc));if(!input)await h.sleep(500);}
    if(!input)throw h.fail('interface',site.label+' : champ d’image introuvable. Aucun envoi effectué.');
    const dt=new h.DataTransfer();
    for(const a of attachments){const bin=h.atob(a.data),bytes=Uint8Array.from(bin,c=>c.charCodeAt(0));dt.items.add(new h.File([bytes],a.name,{type:a.mime||'image/png'}));}
    input.files=dt.files;input.dispatchEvent(new h.Event('change',{bubbles:true}));await h.sleep(3000);
+   // Grok: the board becomes the first frame (« Remove image » appears once it is uploaded).
+   if(engine==='grok'){let up=false;for(let i=0;i<30&&!up;i++){up=this.buttons(doc).some(b=>/^Remove image$/i.test(b.getAttribute('aria-label')||''));if(!up)await h.sleep(1000);}
+    if(!up)throw h.fail('interface',site.label+' : image non importée après 30 s. Aucun envoi effectué.');}
   }
   const editor=this.editor(doc);if(!editor)throw h.fail('interface',site.label+' : zone de texte introuvable. Aucun envoi effectué.');
   h.fill(editor,task.payload.prompt);await h.sleep(700);
   let send=null;for(let i=0;i<40&&!send;i++){h.blocked();send=this.sendButton(doc,engine);if(!send)await h.sleep(700);}
   if(!send)throw h.fail('interface',site.label+' : bouton de génération inactif ou introuvable. Aucun envoi effectué.');
+  if(engine==='grok'&&this.spent(doc))throw h.fail('quota',site.label+' : limite du compte atteinte (« 100% credits used »). Aucun envoi effectué ; le clip passe au moteur suivant.');
   if(task.payload.dry_run===true)return {ok:false,dry_run:true,generation_submitted:false,error:'Essai à blanc réussi : '+site.label+' prêt (mode vidéo, image, prompt). Rien n’a été envoyé.'};
   const before=doc.body?.innerText||'',old=new Set([...doc.querySelectorAll('video')].map(v=>v.currentSrc||v.src).filter(Boolean));
   if(!(await h.intent()))throw h.fail('interface','Envoi suspendu : association de la tâche perdue. Aucun prompt envoyé.');
@@ -176,7 +207,7 @@ globalThis.FruchtEngines={
    h.blocked();
    const video=this.newVideo(doc,old);if(video){await h.sleep(1500);return await h.videoPayload(video);}
    const kind=this.problem(this.fresh(doc.body?.innerText||'',before),engine);
-   if(kind==='quota')throw h.fail('quota',site.label+' : limite du compte atteinte. Changez de compte ou attendez le renouvellement.',{retryAfter:h.retryAfter(doc.body?.innerText||'')});
+   if(kind==='quota')throw h.fail('quota',site.label+' : limite du compte atteinte. Changez de compte ou attendez le renouvellement.',{retryAfter:h.retryAfter(doc.body?.innerText||'')||this.resetIn(doc.body?.innerText||'')});
    if(kind==='refusal')throw h.fail('refusal',site.label+' : génération refusée par la modération.');
    await h.sleep(2000);
   }

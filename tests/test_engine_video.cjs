@@ -3,10 +3,13 @@ const assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('nod
 const code=fs.readFileSync(path.join(__dirname,'../extension/engine-video.js'),'utf8');
 const el=(props={})=>({hidden:false,disabled:false,clicks:0,attrs:{},innerText:'',textContent:'',getAttribute(k){return this.attrs[k]??null;},
  getBoundingClientRect:()=>({width:60,height:30}),click(){this.clicks++;this.onclick?.();},dispatchEvent(){},...props});
-function page({engine='grok',loggedOut=false,account=null,videoAfter=3,after='',before='',pressed=false,buy=false}={}){
+function page({engine='grok',loggedOut=false,account=null,videoAfter=3,after='',before='',pressed=false,buy=false,spent=false,newVideo=null,menu=false}={}){
  const state={polls:0,sent:false,intent:0,filled:null,files:null};
- const mode=el({innerText:engine==='grok'?'Video':'Vidéo',attrs:{'aria-pressed':pressed?'true':'false'}});
- const send=el({innerText:engine==='grok'?'Submit':'Send',onclick(){state.sent=true;}});
+ const mode=el({innerText:engine==='grok'?'Video':'Vidéo',attrs:{'aria-pressed':pressed?'true':'false',...(menu?{'aria-haspopup':'dialog'}:{})}});
+ // Real labels (06/11/2026): Grok « Submit » (aria-label), Arena « Send message » (aria-label).
+ const send=el({attrs:{'aria-label':engine==='grok'?'Submit':'Send message'},onclick(){state.sent=true;}});
+ const gauge=el({attrs:{'aria-label':'100% credits used','data-credit-notice':'true'}});
+ const remove=el({attrs:{'aria-label':'Remove image'}});
  const upgrade=el({innerText:'Upgrade to SuperGrok'});
  const login=el({innerText:'Sign in'});
  const editor=el({tagName:'TEXTAREA'});
@@ -16,11 +19,12 @@ function page({engine='grok',loggedOut=false,account=null,videoAfter=3,after='',
  const doc={
   get body(){return {innerText:before+(state.sent&&state.polls>=1?after:'')};},
   querySelectorAll(q){
-   if(q.startsWith('button'))return [...(loggedOut?[login]:[]),mode,...(buy?[upgrade]:[]),send];
+   if(q.startsWith('button'))return [...(loggedOut?[login]:[]),...(engine==='grok'&&state.files?[remove]:[]),mode,...(buy?[upgrade]:[]),...(spent&&state.filled?[gauge]:[]),send];
+   if(q.startsWith('[data-credit-notice]'))return spent&&state.filled?[gauge]:[];
    if(q.startsWith('textarea'))return loggedOut?[]:[editor];
    if(q.startsWith('[contenteditable'))return [];
    if(q==='input[type="file"]')return [input];
-   if(q==='video'){state.polls++;return state.sent&&state.polls>=videoAfter?[oldVideo,{src:'blob:new',currentSrc:'blob:new',readyState:4,duration:6}]:[oldVideo];}
+   if(q==='video'){state.polls++;return state.sent&&state.polls>=videoAfter?[oldVideo,newVideo||{src:'blob:new',currentSrc:'blob:new',readyState:4,duration:6}]:[oldVideo];}
    if(q.includes('img[alt*="@"]'))return account?[avatar]:[];
    return [];
   }};
@@ -45,6 +49,44 @@ const img=[{name:'scene0.jpg',data:'abc',mime:'image/jpeg'}];
   const d=page({engine});const dry=await d.E.run(task(engine,{dry_run:true}),img,d.h);
   assert.equal(dry.dry_run,true);assert.equal(dry.generation_submitted,false);assert.equal(d.send.clicks,0);assert.equal(d.state.intent,0);
  }
+ // Arena: « Video ▾ » is the modality menu (aria-haspopup): never clicked, it only opens a list.
+ const arenaMenu=page({engine:'arena',menu:true});await arenaMenu.E.run(task('arena'),img,arenaMenu.h);assert.equal(arenaMenu.mode.clicks,0,'menu trigger untouched');assert.equal(arenaMenu.send.clicks,1);
+ // Grok at its weekly limit: the composer shows « 100% credits used » once the prompt is in: nothing is sent.
+ const spent=page({spent:true});const e7=await spent.E.run(task('grok'),img,spent.h).then(()=>null,e=>e);
+ assert.equal(e7.kind,'quota');assert.equal(spent.send.clicks,0,'no send at 100% credits');assert.equal(spent.state.intent,0);
+ // Real toast after a send: « You've hit your weekly limit · Resets November 7 ».
+ const weekly=page({after:" You've hit your weekly limit\nResets November 7, or increase your limits to keep going now.\nIncrease Limits",videoAfter:99});
+ weekly.h.retryAfter=()=>null;const e8=await weekly.E.run(task('grok'),img,weekly.h).then(()=>null,e=>e);
+ assert.equal(e8.kind,'quota');assert.ok(e8.retryAfter>=60,'reset date read');
+ assert.equal(weekly.E.resetIn('Resets November 7',new Date(2026,10,6,15,36)),Math.round((new Date(2026,10,7)-new Date(2026,10,6,15,36))/1000));
+ assert.equal(weekly.E.resetIn('Resets Jan 2',new Date(2026,11,30)),3*86400,'next year');assert.equal(weekly.E.resetIn('no date'),null);
+ // Arena clips (preload="none") and Grok clips in a background tab never load: readyState 0, https .mp4 address.
+ const lazySource={src:'https://messages-prod.x.r2.cloudflarestorage.com/a/b.mp4?X-Amz=1'};
+ const lazy=page({engine:'arena',newVideo:{src:'',currentSrc:'',readyState:0,duration:NaN,querySelector:()=>lazySource}});
+ await lazy.E.run(task('arena'),img,lazy.h);assert.equal(lazy.send.clicks,1,'unloaded Arena clip found');
+ const cta=page({engine:'arena',videoAfter:1e9});
+ assert.equal(cta.E.newVideo({querySelectorAll:()=>[{src:'https://arena.ai/videos/cta/agents-cta.mp4',readyState:4,duration:44}]},new Set()),null,'Arena promo clip ignored');
+ assert.equal(cta.E.newVideo({querySelectorAll:()=>[{src:'https://assets.grok.com/u/generated/1/generated_video.mp4#t=0.1',readyState:0}]},new Set())?.readyState,0,'unloaded Grok clip found');
+ assert.equal(cta.E.newVideo({querySelectorAll:()=>[{src:'blob:https://x/1',readyState:0}]},new Set()),null,'unloaded blob still waits');
+ // Grok /imagine (real page): 3 hidden file fields, the first two start template tools; the composer's own is in its form.
+ const card1={accept:'image/jpeg,image/png'},card2={accept:'image/jpeg,image/png'},composerInput={accept:'image/jpeg,image/png',name:'files',multiple:true};
+ const form={contains:x=>x===composerInput},three={querySelectorAll:()=>[card1,card2,composerInput]};
+ assert.equal(cta.E.fileInput(three,{closest:()=>form}),composerInput,'form field chosen');
+ assert.equal(cta.E.fileInput(three,null),composerInput,'name=files chosen');
+ assert.equal(cta.E.fileInput({querySelectorAll:()=>[card1]},null),card1);
+ // Grok: no « Remove image » after the import: nothing sent.
+ const stuck=page();const realButtons=stuck.E.buttons.bind(stuck.E);stuck.E.buttons=d=>realButtons(d).filter(b=>b.attrs['aria-label']!=='Remove image');
+ const e9=await stuck.E.run(task('grok'),img,stuck.h).then(()=>null,e=>e);assert.equal(e9.kind,'interface');assert.match(e9.message,/image non importée/);assert.equal(stuck.send.clicks,0);
+ // runner.js gives the connectors a bound atob (bare h.atob = « Illegal invocation » in Chrome).
+ assert.match(fs.readFileSync(path.join(__dirname,'../extension/runner.js'),'utf8'),/atob:s=>atob\(s\)/);
+ // Arena in a background tab (real page): React 19 waits for an animation frame to show its content.
+ const queue=[],shown=[];const win={document:{hidden:true},$RB:['a','b'],$RV(list){shown.push(...list);list.length=0;},
+  requestAnimationFrame:()=>'raf',cancelAnimationFrame(){},setTimeout:f=>{queue.push(f);return 41;},clearTimeout(){},performance:{now:()=>1}};
+ win.window=win;const rctx=vm.createContext(win);vm.runInContext(fs.readFileSync(path.join(__dirname,'../extension/readiness.js'),'utf8'),rctx);
+ vm.runInContext('('+String(rctx.FruchtReadiness.revealHidden)+')()',rctx);
+ assert.deepEqual(shown,['a','b'],'pending content revealed');let ran=0;assert.equal(win.requestAnimationFrame(()=>ran++),41);queue.splice(0).forEach(f=>f());assert.equal(ran,1,'frames run while hidden');
+ win.document.hidden=false;assert.equal(win.requestAnimationFrame(()=>ran++),'raf','visible: real frames');
+ assert.ok(!/^revealHidden\s*\(/.test(String(rctx.FruchtReadiness.revealHidden)),'serializable function');
  const already=page({pressed:true});await already.E.run(task('grok'),img,already.h);assert.equal(already.mode.clicks,0,'video mode already on: untouched');
  const out=page({loggedOut:true});const e1=await out.E.run(task('grok'),img,out.h).then(()=>null,e=>e);
  assert.equal(e1.kind,'login');assert.equal(out.send.clicks,0);
