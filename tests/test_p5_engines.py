@@ -145,7 +145,17 @@ class RealMediaTests(unittest.TestCase):
     def test_qc_duration_range_per_engine(self):
         folder = pathlib.Path(tempfile.mkdtemp()); self.clip(folder, 'six.mp4', 6)
         self.assertEqual([e for e in quality.technical(folder / 'six.mp4', engines.ENGINES['grok']['range'])['hard_errors'] if 'Durée' in e], [])
-        self.assertTrue(any('Durée' in e for e in quality.technical(folder / 'six.mp4', engines.ENGINES['flow']['range'])['hard_errors']), 'a 6 s clip is wrong for Flow')
+        flow = quality.technical(folder / 'six.mp4', engines.ENGINES['flow']['range'])
+        self.assertEqual([e for e in flow['hard_errors'] if 'Durée' in e], [], '0.1.99: a 6 s clip for Flow never blocks')
+        self.assertTrue(any('Durée' in e for e in flow['notes']), 'it is noted instead')
+        self.clip(folder, 'one.mp4', 1)
+        self.assertTrue(any('inutilisable' in e for e in quality.technical(folder / 'one.mp4', engines.ENGINES['flow']['range'])['hard_errors']))
+
+    def test_longer_flow_clip_replaced_by_hand_keeps_its_length(self):
+        j = {'config': {'engine': 'flow', 'clip_seconds': 8}}
+        self.assertEqual(engines.clip_length(j, 10.0, {}), 10.0)
+        self.assertEqual(engines.clip_length(j, 8.2, {}), 8.0)
+        self.assertEqual(engines.clip_length(j, 20.0, {}), 16.0)
 
     def test_montage_keeps_real_grok_durations(self):
         s.STATE = s.fresh(); j = clip_job('grok'); folder = s.job_dir(j)
