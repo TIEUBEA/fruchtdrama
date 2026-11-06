@@ -1015,7 +1015,7 @@ def schedule_images(j):
             if not board_gate(j):
                 # Every board drawn and validated: the clips stage waits for a clip still in progress, then goes on.
                 j['stage']='clips';j.pop('early_clips_off',None);schedule(j);return
-    if j['stage']=='images' and j['status']=='running':early_clip(j)
+    if j['stage']=='images' and (j['status']=='running' or (j['status']=='waiting_quota' and j.get('quota_lane')=='chat')):early_clip(j)
 
 def board_ready(j,i):
     """Board i may be animated: it is drawn and, when the board check is on, the check has given its verdict.
