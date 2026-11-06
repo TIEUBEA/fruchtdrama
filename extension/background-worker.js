@@ -407,11 +407,37 @@ async function soon(){
  if(!cfg.enabled&&!Object.values(LANE_KEY).some(k=>cfg[k]))return;
  fastTimer=setTimeout(()=>{fastTimer=null;triggerPoll();},FAST_POLL);fastTimer?.unref?.();  // unref: node tests only
 }
+// Google numbers the signed-in accounts /u/0, /u/1… in sign-in order: adding or removing one shifts them (real case
+// 06/11/2026: /u/3 became another account, its project answered 404 and clip 1 failed three times). The account is
+// found again by its address, the studio is told the new number, and nothing is sent before.
+async function readFlowIdentity(id){
+ for(let i=0;i<30;i++){await delay(500);const t=await chrome.tabs.get(id);if(t.status==='complete')break;}
+ for(let k=0;k<4;k++){
+  await delay(1500);
+  try{const [r]=await chrome.scripting.executeScript({target:{tabId:id},files:['flow-session.js']}).then(()=>chrome.scripting.executeScript({target:{tabId:id},func:()=>({email:globalThis.FruchtFlowSession.identity(document),href:location.href})}));if(r?.result?.email||/\/404/.test(r?.result?.href||''))return r.result;}catch{}
+ }
+ return {};
+}
+async function ensureFlowSlot(task,tab,cfg){
+ const target=task.payload.flow_route,want=String(target.email||'').toLowerCase();if(!want)return tab;
+ let seen=await readFlowIdentity(tab.id);
+ if(seen.email===want&&!/\/404/.test(seen.href||''))return tab;
+ for(let n=0;n<12;n++){
+  await chrome.tabs.update(tab.id,{url:'https://flow.google.com/u/'+n+'/'});
+  seen=await readFlowIdentity(tab.id);
+  if(seen.email!==want)continue;
+  const url=target.url.replace(/\/u\/\d+\//,'/u/'+n+'/');
+  await call('/api/bridge/flow-slot',{task:task.id,client:cfg.client,slot:n});
+  target.url=url;await chrome.tabs.update(tab.id,{url});return tab;
+ }
+ throw Error('Compte Flow '+want+' introuvable dans ce Chrome (déconnecté ?). Reconnecte-le dans Mes comptes. Aucun crédit dépensé.');
+}
 async function tabForTask(task,cfg,key){
  let tab;
  if(task.kind==='flow_video'){
   if(task.payload.flow_route){
    tab=await FruchtFlowSession.tabFor(task,chrome);
+   tab=await ensureFlowSlot(task,tab,cfg);
    if(task.payload.flow_route.new_project){
     tab=await prepareNewFlowProject(task,tab,cfg,key);
    }

@@ -2165,6 +2165,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     if any(t['status']=='claimed' and t.get('profile')==p['id'] for t in STATE['tasks']):raise ValueError('Attendez la fin du clip en cours avant de modifier ce compte')
                     p.update(flow_url=url,flow_email=email,flow_client=c['id'],auto_enabled=True)
                     STATE['settings']['flow_auto']=True;save();return self.send_json({'ok':True,'profile':p['id']})
+                if path=='/api/bridge/flow-slot':
+                    # The Google account numbers moved (/u/N): the same account is found at another number by its address.
+                    t=next((t for t in STATE['tasks'] if t['id']==b.get('task') and t.get('client')==b.get('client') and t['status']=='claimed' and t['kind']=='flow_video'),None)
+                    if not t:raise ValueError('Tâche Flow non associée à cette passerelle')
+                    slot=b.get('slot')
+                    if isinstance(slot,bool) or not isinstance(slot,int) or not 0<=slot<=20:raise ValueError('Numéro de compte invalide')
+                    move=lambda u:re.sub(r'/u/\d+/','/u/'+str(slot)+'/',u,count=1) if isinstance(u,str) else u
+                    p=profile_by(t.get('profile'));j=job_by(t['job'])
+                    if p:p['flow_url']=move(p.get('flow_url'));p['slot']=slot
+                    for x in STATE['tasks']:
+                        if x.get('profile')==t.get('profile') and x['status'] in ('queued','claimed') and (x.get('payload') or {}).get('flow_route'):x['payload']['flow_route']['url']=move(x['payload']['flow_route']['url'])
+                    for jj in STATE['jobs']:
+                        if t.get('profile') in (jj.get('flow_projects') or {}):jj['flow_projects'][t['profile']]=move(jj['flow_projects'][t['profile']])
+                    event(j,'Compte Flow retrouvé au numéro '+str(slot)+' de ce Chrome (Google a renuméroté les comptes connectés).');save();return self.send_json({'ok':True})
                 if path=='/api/bridge/flow-project':
                     t=next((t for t in STATE['tasks'] if t['id']==b.get('task') and t.get('client')==b.get('client') and t['status']=='claimed' and t['kind']=='flow_video'),None)
                     if not t:raise ValueError('Tâche Flow non associée à cette passerelle')

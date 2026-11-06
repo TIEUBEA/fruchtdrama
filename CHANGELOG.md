@@ -9,6 +9,9 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 ## 0.1.91 (06/11/2026)
 Les comptes se règlent dans **Mes comptes, avant de commencer** (demande du propriétaire : « la connexion, les vérifications anti-robot, on devrait faire ça dans le menu Comptes et ajouter tous les comptes avant de commencer quoi que ce soit »). Cas réel : en pleine production, deux clips Flow ont échoué « Page du fournisseur indisponible ou vide après 90 secondes » et l'épisode est passé en « Action requise » ; il a fallu chercher l'onglet en arrière-plan.
 
+**Corrigé (essai réel 06/11)**
+- Google renumérote les comptes connectés (/u/0, /u/1…) quand on en ajoute ou retire un : le projet Flow d'un compte répondait 404 ou « compte non confirmé » et les clips échouaient. L'extension vérifie l'adresse du compte dans l'onglet ; si elle ne correspond pas, elle retrouve le compte par son adresse, prévient le studio du nouveau numéro (profil, clips en file, projets) et continue, sans rien envoyer avant.
+
 **Ajouté**
 - **Préparer mes comptes** (gros bouton en haut de Mes comptes, et tout seul à chaque ouverture de la fenêtre FruchtDrama) : ChatGPT, Claude s'il sert, Grok / Arena s'ils sont enregistrés et **chaque compte Google Flow** sont ouverts dans un onglet en arrière-plan et lus comme avant une tâche (bon site, zone de saisie présente, pas de page de connexion, pas de vérification anti-robot, compte Google attendu) ; le solde Flow est relu au passage. Résultat par compte : **Prêt**, **À régler** avec la raison exacte, ou **Pas d'accès**. Aucun prompt envoyé, aucun crédit dépensé, aucune vérification contournée, rien au premier plan.
 - **Régler maintenant** sur un compte « À régler » : sur ton clic seulement, l'onglet de ce compte passe devant ; tu te connectes ou tu résous la vérification toi-même, puis **C'est fait** revérifie ce compte.
