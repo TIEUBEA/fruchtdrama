@@ -42,4 +42,11 @@ assert.equal(e.grok,'Grok · gr•••e@example.com');assert.equal(e.old,'Aren
 // 4. Nothing at work: no badge, no summary.
 ctx.state.usage={in_use:[],last_used:{}};vm.runInContext('globalThis.h=accountsHome()',ctx);
 assert.doesNotMatch(ctx.h,/acc-row live|En ce moment/);assert.match(ctx.h,/Pas utilisé en ce moment\./);
+// 5. Episode « Ce qui se passe »: 4 latest useful lines, technical lines and consecutive repeats left to « Tout le journal ».
+{const src=fs.readFileSync(path.join(__dirname,'../web/atelier.js'),'utf8');
+ const part=src.slice(src.indexOf('const JOURNAL_TECH'),src.indexOf('const journalTime'));
+ const jc=vm.createContext({});vm.runInContext(part.replace(/^const journalOpen[\s\S]*?\n(?=function journalLines)/m,'')+';globalThis.f=journalLines;',jc);
+ const ev=['Scénario reçu.','Tâche préparée : clip:0','Connecteur en cours : clip:0','Réservation prudente de 12 crédits sur a.','Compte Flow 1 (a, 0 crédit, vide) → compte 2 (b, 38 crédits) ; clips reçus conservés.',
+  'Import de la planche dans Flow…','Import de la planche dans Flow…','Média reçu : clip_0.mp4','En cours : Clip 2 · IA : ChatGPT.','Clip 1 reçu.','Clip 1 reçu.','Planche 3 refaite.','Montage lancé.'].map((text,i)=>({at:i,text}));
+ assert.deepEqual([...jc.f(ev)].map(e=>e.text),['Montage lancé.','Planche 3 refaite.','Clip 1 reçu.','Compte Flow 1 (a, 0 crédit, vide) → compte 2 (b, 38 crédits) ; clips reçus conservés.']);}
 console.log('Utilisé maintenant : comptes Flow triés et numérotés, compte en cours, dernier usage, ligne IA de l’épisode et compte sous chaque clip vérifiés.');

@@ -15,7 +15,9 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 **Amélioré**
 - Comptes Flow numérotés « Compte 1, 2, 3… » et triés par crédits restants, du plus grand au plus petit ; les comptes vides puis ceux à régler en bas, avec l'heure de recharge des vides. Le numéro d'un compte ne change jamais (premiers numéros donnés dans l'ordre des crédits, un nouveau compte prend le plus petit numéro libre) : « compte 2 » désigne toujours le même compte, dans la page comme dans le journal.
-- Journal : chaque bascule de compte Flow s'écrit « Compte Flow 2 (ar•••5@example.com, 0 crédit, vide) → compte 3 (…, 38 crédits) » ; chaque tâche prise s'écrit « En cours : Clip 4 · IA : Flow · compte 3 (…) » au lieu de « Connecteur en cours : clip:3 ». Le choix du compte Flow de l'épisode affiche aussi son numéro.
+- Journal : chaque bascule de compte Flow s'écrit « Compte Flow 2 (ar•••5@example.com, 0 crédit, vide) → compte 3 (…, 38 crédits) » ; chaque tâche prise s'écrit « En cours : Clip 4 · IA : Flow · compte 3 (…) » au lieu de « Connecteur en cours : clip:3 ». Le choix du compte Flow (page Créer) affiche aussi son numéro.
+- Page de l'épisode allégée : le journal n'est plus caché. Bloc « Ce qui se passe » toujours visible sous les étapes, avec les 4 dernières lignes utiles et leur heure (lignes techniques « Tâche préparée », « Connecteur en cours », « Réservation prudente… », « Import de la planche… », fichiers reçus et répétitions masquées) ; « Tout le journal » déplie la liste complète.
+- Retirés de l'épisode : les menus « Compte Flow de cet épisode » (la rotation automatique et Mes comptes choisissent le compte ; la ligne « IA : … » de la carte dit lequel travaille) et « IA de scénario » (choisie à la création). « Supprimer l'épisode… » devient un petit lien discret sous le titre.
 
 ## 0.1.94 (06/11/2026)
 **Corrigé**

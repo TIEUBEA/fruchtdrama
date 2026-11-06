@@ -103,8 +103,11 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   await waitFor(()=>evaluate(`document.body.innerText.includes('b@x.com')&&!!document.querySelector('[data-action="accountSwitched"]')`),15000,'bandeau changement de compte');
   await evaluate(`document.querySelector('[data-action="accountSwitched"]').click()`);
   await waitFor(async()=>(await (await fetch(base+'/api/state')).json()).jobs.find(x=>x.id===switching).status==='running',10000,'changement confirmé');
-  // 7 bis. Interface: a Grok production shows its engine, not the Flow profile selector.
-  assert.ok(await evaluate(`document.querySelector('#jobProfile').closest('label').hidden`),'Flow selector hidden for a Grok episode');
+  // 7 bis. Interface (0.1.95): no account or script AI menu on the episode (Mes comptes and the rotation choose);
+  // « Ce qui se passe » always shown, technical lines only in « Tout le journal »; delete is a quiet link.
+  assert.ok(await evaluate(`!document.querySelector('#jobProfile')&&!document.querySelector('#jobProvider')`),'no account menu on the episode');
+  assert.ok(await evaluate(`(()=>{const p=document.querySelector('.journal');return !!p&&p.querySelector('h3').innerText==='Ce qui se passe'&&!p.closest('details')&&p.querySelectorAll('.journal-lines li').length<=4&&![...p.querySelectorAll('.journal-lines li')].some(l=>/Tâche préparée|Connecteur en cours/.test(l.innerText))})()`),'journal shown, short and readable');
+  assert.ok(await evaluate(`!!document.querySelector('.episode-title [data-delete-job]')`),'delete link next to the title');
   // 8. P5-07: add a Grok account from Connexions (address only).
   await evaluate(`document.querySelector('nav [data-page="connections"]').click()`);
   // 0.1.74: Mes comptes keeps technical settings folded in « Avancé », opened here as the owner would.
