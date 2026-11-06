@@ -10,6 +10,7 @@ import covers
 import quality
 import errors
 import engines
+import engine_chain
 import montage, source_video
 import story_backup
 import board_check
@@ -25,7 +26,7 @@ import maintenance
 import series
 import licence
 import readiness
-VERSION='0.1.92'
+VERSION='0.1.93'
 OFFICIAL_ORIGIN='chrome-extension://bhdmibhibonmaamgcbpmbhedhohfongj'  # extension/manifest.json "key"
 import sys
 import traceback
@@ -42,7 +43,7 @@ STEPS = ['research', 'script', 'characters', 'images', 'clips', 'quality', 'cove
 LABELS = {'ideas':'Dix histoires', 'sheet':'Fiche de décision', 'research':'Recherche', 'script':'Scénario', 'characters':'Personnages', 'images':'Scènes', 'clips':'Animation Flow', 'quality':'Contrôle qualité', 'cover':'Couverture', 'edit':'Montage', 'done':'Terminé'}
 CREATION_LANGUAGES=('Deutsch (de-DE)','Français (fr-FR)','English (en-US)','Español (es-ES)','Português (pt-BR)')
 # Default research query per creation language (same values as the web form).
-SITES=('chatgpt','flow','tiktok','grok','arena','claude')
+SITES=('chatgpt','flow','tiktok','grok','arena','vidogrid','claude')
 RESEARCH_QUERIES={'Deutsch (de-DE)':'KI Früchte Geschichten deutsch','Français (fr-FR)':'histoires fruits IA français','English (en-US)':'AI fruit drama stories English','Español (es-ES)':'historias de frutas IA español','Português (pt-BR)':'histórias de frutas IA português'}
 
 # Claude model and effort chosen in « Écrite par » (claude.ai interface, selected by the extension).
@@ -114,7 +115,7 @@ def remove_service_accounts(service):
         for p in list(STATE['profiles']):
             try:delete_profile(p['id']);removed+=1
             except ValueError:kept.append(p.get('flow_email') or p.get('label') or p['id'])
-    if service in ('grok','arena'):
+    if service in ('grok','arena','vidogrid'):
         for a in list(engine_accounts.accounts(STATE,service)):
             if engine_accounts.busy(STATE,a):kept.append(a['email']);continue
             STATE['engine_accounts'].remove(a);removed+=1
@@ -122,7 +123,7 @@ def remove_service_accounts(service):
         if service in i.get('services',[]):
             i['services'].remove(service)
             if service in ('chatgpt','claude'):removed+=1
-    if service in ('chatgpt','claude','grok','arena'):readiness.store(STATE)['sites'].pop(service,None)
+    if service in ('chatgpt','claude','grok','arena','vidogrid'):readiness.store(STATE)['sites'].pop(service,None)
     return removed,kept
 
 def client_accepts(client,task):
@@ -325,7 +326,7 @@ def stall_info(j,moment=None):
     return None
 
 def task_stall(j,task,moment,ago,shared):
-    kind=task.get('kind','');service=SERVICE.get((task.get('payload') or {}).get('provider'),'Google Flow' if kind=='flow_video' else 'Grok ou Arena' if kind=='engine_video' else 'le site')
+    kind=task.get('kind','');service=SERVICE.get((task.get('payload') or {}).get('provider'),'Google Flow' if kind=='flow_video' else engines.ENGINES.get((task.get('payload') or {}).get('engine'),{}).get('label','Grok, Arena ou Vidogrid') if kind=='engine_video' else 'le site')
     online=[c for c in STATE['clients'].values() if not c.get('disabled') and (ago(c.get('seen')) or 1e9)<STALL_ONLINE]
     paid=kind in ('flow_video','engine_video')
     retry_note=('Vérifie d’abord dans '+service+' si le clip a été créé : le relancer peut coûter des crédits.' if paid else 'Relancer renvoie la demande à '+service+' (aucun crédit Flow).')
@@ -1177,13 +1178,31 @@ def board_ready(j,i):
     if not j['scenes'][i].get('image'):return False
     return j['config'].get('board_controls','none')=='none' or bool(j.get('board_checked'))
 
+def held_clips(j):
+    """Clips that wait for the owner: a Flow submission that may have been charged, or every engine tried.
+    The other clips go on (owner 06/11/2026); « Action requise » comes only when nothing else is left to make."""
+    out={int(t['slot'].split(':')[1]) for t in uncertain_clip_tasks(j)}
+    return out|{i for i,s in enumerate(j.get('scenes') or []) if s.get('engine_exhausted') and not s.get('clip')}
+
+def held_message(j):
+    uncertain=uncertain_clip_tasks(j)
+    if uncertain:return uncertain_message(j)
+    rows=[f'clip {i+1} : '+engine_chain.summary(s) for i,s in enumerate(j['scenes']) if s.get('engine_exhausted') and not s.get('clip')]
+    return 'Aucun moteur n’a pu faire '+('ces clips' if len(rows)>1 else 'ce clip')+', même avec le prompt adouci — '+' ; '.join(rows)+'. Modifie la scène (« Refaire » avec une consigne) ou importe un clip, puis Reprendre.'
+
 def schedule_clips(j):
     """Clips stage. Returns True while clips remain to make (queued, in flight or waiting); False when every clip is in.
     One clip first (unchanged rules: switch, wait for credits); then, with Flow and the automatic switch, more clips at
-    once on other ready accounts, up to the « clips en parallèle » setting."""
+    once on other ready accounts, up to the « clips en parallèle » setting. A clip held for the owner never stops the others."""
     active=video_tasks(j);busy={int(t['slot'].split(':')[1]) for t in active if str(t.get('slot','')).startswith('clip:')}
-    todo=[i for i,s in enumerate(j['scenes']) if not s.get('clip') and i not in busy]
-    if not todo:return bool(active)
+    held=held_clips(j)
+    todo=[i for i,s in enumerate(j['scenes']) if not s.get('clip') and i not in busy and i not in held]
+    if not todo:
+        if active:return True
+        if held:
+            if j['status']=='running':j['status']='attention';event(j,held_message(j))
+            return True
+        return False
     if not active:
         schedule_clip(j,todo.pop(0))
         if j['status']!='running':return True
@@ -1198,43 +1217,118 @@ def early_clip(j):
     ready; otherwise nothing is changed and the clips stage, after the boards, waits and says why as before."""
     if not STATE.get('settings',{}).get('parallel_clips',True) or j['config'].get('dry_run') or j.get('early_clips_off'):return False
     active=video_tasks(j)
-    if len(active)>=video_slots(j) or uncertain_clip_tasks(j):return False
-    busy={int(t['slot'].split(':')[1]) for t in active if str(t.get('slot','')).startswith('clip:')}
-    i=next((i for i,s in enumerate(j['scenes']) if not s.get('clip') and i not in busy and board_ready(j,i)),None)
+    if len(active)>=video_slots(j):return False
+    busy={int(t['slot'].split(':')[1]) for t in active if str(t.get('slot','')).startswith('clip:')};held=held_clips(j)
+    i=next((i for i,s in enumerate(j['scenes']) if not s.get('clip') and i not in busy and i not in held and board_ready(j,i)),None)
     return i is not None and schedule_clip(j,i,early=True,parallel=bool(active))
 
-def schedule_clip(j,i,early=False,parallel=False):
-    """Queue clip i (Flow, or Grok/Arena). early=True (during the boards): returns False without touching the
-    episode when an account, credits or a check is missing. Returns True when a task was queued or the episode waits.
-    parallel=True: an extra clip while another one works: another ready account only, the episode's account unchanged."""
+# Bascule par clip (0.1.93, owner 06/11/2026: « un essai par cas »): each clip tries Flow, then Arena, Vidogrid, Grok
+# (order in the settings), one try each, engines without a ready account skipped; see engine_chain.py.
+def current_account(j,engine):
+    return (j.get('engine_account_by') or {}).get(engine) or (j.get('engine_account') if engine==engines.of(j) else None)
+
+def flow_can_pay(j):
+    """A Flow account can pay this clip now or after the clip it works on (busy accounts count: the clip waits its turn)."""
+    return bool(flow_accounts.choose(STATE,j.get('flow_profile'),int(j['config'].get('flow_cost',12))))
+
+def engine_ready(j,engine,moment=None):
+    """This engine may take a clip of this episode: an account known ready, never one « À régler » or at its limit.
+    The episode's own engine (« Moteur des clips ») is tried as before 0.1.93 even when nothing was checked yet."""
+    moment=moment or time.time()
+    if engine not in engines.AVAILABLE:return False
+    if engine=='flow':return flow_can_pay(j)
+    own=engine==engines.of(j)
+    if j['config'].get('dry_run') and not own:return False  # a dry run checks the episode's engine only
+    if (STATE.get('engine_walls') or {}).get(engine,0)>moment:return False
+    rows=engine_accounts.accounts(STATE,engine)
+    if rows:
+        account=engine_accounts.choose(STATE,engine,current_account(j,engine),moment)
+        if not account:return False
+        # A fallback never asks the owner to change account: a guided change is for the episode's own engine only.
+        if not own and current_account(j,engine) and account['id']!=current_account(j,engine):return False
+    entry=readiness.site_entry(STATE,engine)
+    if entry and entry.get('state') in readiness.NOT_READY:return False
+    return own or bool(rows) or readiness.site_has_account(STATE,engine)
+
+def clip_engine_for(j,i,early=False):
+    """Engine of the next try of clip i, or None when every engine has been tried (the clip waits for the owner)."""
+    s=j['scenes'][i];chain=engine_chain.order(STATE.get('settings'),j['config'])
+    if j['config'].get('dry_run'):return engines.of(j)
+    ready=lambda e:engine_ready(j,e)
+    nxt=engine_chain.pick(s,chain,ready)
+    if nxt:return nxt
+    if not s.get('engine_tries'):
+        # Nothing ready at all: the first engine keeps its own wait (credits, quota, accounts to fix), as before.
+        return chain[0]
+    if early:return None
+    before=engine_chain.round_of(s);nxt=engine_chain.advance(s,chain,ready)
+    if nxt:
+        if engine_chain.round_of(s)>before:event(j,f'Clip {i+1} : prompt adouci, nouvel essai sur {engine_chain.LABELS[nxt]}.')
+        return nxt
+    s['engine_exhausted']=True;alert(j,'action','Clip '+str(i+1)+' : '+held_message(j))
+    return None
+
+def clip_prompt(j,i,engine):
     s=j['scenes'][i]
-    if engines.of(j)!='flow':
-        # P5-06: Grok / Arena. No credit balance to reserve; quotas are handled per account.
-        cast='\n'.join(c['id']+': '+c['appearance']+' Voice: '+c['voice'] for c in j['characters'])
-        dialog=dialogue_lines(j,s)
-        seconds=engines.spec(j)['seconds'];language=j['config'].get('language','Deutsch (de-DE)')
-        prompt=f"One continuous shot, {seconds} seconds, portrait 9:16. Animate the attached image with real motion: the camera moves (dolly, pan or push-in), characters walk, turn and use their hands, the background is alive (extras, objects, light). No text, no music. Spoken language ONLY: {language}. Natural native voices, no translation or extra narration. Preserve identity.\n{cast}\n{s['video_prompt']}{plan_video_block(j,s)}\nExact dialogue in this order; only the named speaker moves their lips, all others stay silent:\n{dialog}"+correction(j.get('corrections',{}).get(f'clip:{i}'))
-        payload={'engine':engines.of(j),'prompt':prompt,'attachments':[asset_url(j,flow_reference(j,s['image']))],'seconds':seconds}
-        engine=engines.of(j)
-        if engine_accounts.accounts(STATE,engine) and not j['config'].get('dry_run'):
-            moment=time.time();account=engine_accounts.choose(STATE,engine,j.get('engine_account'),moment)
-            if not account:
-                if early:return False
-                # P5-08: every registered account is at its limit: wait for the first renewal.
-                j['status']='waiting_quota';j['wait_until']=engine_accounts.next_free(STATE,engine,moment)
-                event(j,'Tous les comptes '+engines.ENGINES[engine]['label']+' sont à leur limite. Reprise automatique vers '+clock_in(j['wait_until'])+', ou ajoutez un compte.');return True
-            if j.get('engine_account') and account['id']!=j['engine_account']:
-                if early:return False
-                previous=engine_accounts.by_id(STATE,j['engine_account'])
-                j['engine_account']=account['id'];j['status']='waiting_account'
-                j['account_switch']={'engine':engine,'from':(previous or {}).get('email'),'to':account['email'],'label':account['label']}
-                event(j,'Compte '+engines.ENGINES[engine]['label']+' suivant : connectez-vous vous-même à '+account['email']+' dans l’onglet de la fenêtre FruchtDrama, puis cliquez « J’ai changé de compte ». Clips reçus conservés.');return True
-            j['engine_account']=account['id'];payload['account']={'email':account['email'],'label':account['label']}
-        if j['config'].get('dry_run'):payload['dry_run']=True
-        add_task(j,'engine_video',payload,f'clip:{i}');return True
-    if any(t['slot']==f'clip:{i}' for t in uncertain_clip_tasks(j)):
+    cast='\n'.join(c['id']+': '+c['appearance']+' Voice: '+c['voice'] for c in j['characters'])
+    dialog=dialogue_lines(j,s);language=j['config'].get('language','Deutsch (de-DE)');seconds=engines.ENGINES[engine]['seconds']
+    if engine=='flow':
+        prompt=f"One continuous shot, 8 seconds, portrait 9:16. No text, no music. Spoken language ONLY: {language}. Natural native voices in the requested language, no translation or extra narration. Preserve identity.\n{cast}\n{s['video_prompt']}{plan_video_block(j,s)}\nExact dialogue in this order; only the named speaker moves their lips, all others stay silent:\n{dialog}"
+    else:
+        prompt=f"One continuous shot, {seconds} seconds, portrait 9:16. Animate the attached image with real motion: the camera moves (dolly, pan or push-in), characters walk, turn and use their hands, the background is alive (extras, objects, light). No text, no music. Spoken language ONLY: {language}. Natural native voices, no translation or extra narration. Preserve identity.\n{cast}\n{s['video_prompt']}{plan_video_block(j,s)}\nExact dialogue in this order; only the named speaker moves their lips, all others stay silent:\n{dialog}"
+    prompt+=correction(j.get('corrections',{}).get(f'clip:{i}'))
+    # Last round (every engine refused): the scene is reworded once so that an engine accepts it.
+    return engine_chain.soften(prompt) if engine_chain.round_of(s)>=engine_chain.FINAL_ROUND else prompt
+
+def schedule_clip(j,i,early=False,parallel=False):
+    """Queue clip i on the engine of its next try (Flow, Arena, Vidogrid or Grok). early=True (during the boards): returns
+    False without touching the episode when an account, credits or a check is missing. Returns True when a task was queued
+    or the episode waits. parallel=True: an extra clip while another one works: another ready account only."""
+    if i in held_clips(j):
         if early:return False
-        j['status']='attention';event(j,uncertain_message(j));return True
+        j['status']='attention';event(j,held_message(j));return True
+    engine=clip_engine_for(j,i,early)
+    if not engine:
+        if early:return False
+        return True  # held for the owner: schedule_clips goes on with the other clips
+    if engine!='flow':return schedule_engine_clip(j,i,engine,early,parallel)
+    return schedule_flow_clip(j,i,early,parallel)
+
+def engine_busy(engine):
+    """One tab per site in the FruchtDrama window: never two clips at once on Grok, Arena or Vidogrid."""
+    return any(t.get('kind')=='engine_video' and t['status'] in ('queued','claimed') and (t.get('payload') or {}).get('engine')==engine for t in STATE['tasks'])
+
+def schedule_engine_clip(j,i,engine,early=False,parallel=False):
+    # P5-06: Grok / Arena / Vidogrid. No credit balance to reserve; quotas are handled per account.
+    s=j['scenes'][i]
+    if parallel and engine_busy(engine):return False
+    seconds=engines.ENGINES[engine]['seconds']
+    payload={'engine':engine,'prompt':clip_prompt(j,i,engine),'attachments':[asset_url(j,flow_reference(j,s['image']))],'seconds':seconds}
+    if engine_accounts.accounts(STATE,engine) and not j['config'].get('dry_run'):
+        moment=time.time();account=engine_accounts.choose(STATE,engine,current_account(j,engine),moment)
+        if not account:
+            if early:return False
+            # P5-08: every registered account is at its limit: wait for the first renewal.
+            j['status']='waiting_quota';j['wait_until']=engine_accounts.next_free(STATE,engine,moment)
+            event(j,'Tous les comptes '+engines.ENGINES[engine]['label']+' sont à leur limite. Reprise automatique vers '+clock_in(j['wait_until'])+', ou ajoutez un compte.');return True
+        if current_account(j,engine) and account['id']!=current_account(j,engine):
+            if early:return False
+            previous=engine_accounts.by_id(STATE,current_account(j,engine))
+            j['engine_account']=account['id'];j.setdefault('engine_account_by',{})[engine]=account['id'];j['status']='waiting_account'
+            j['account_switch']={'engine':engine,'from':(previous or {}).get('email'),'to':account['email'],'label':account['label']}
+            event(j,'Compte '+engines.ENGINES[engine]['label']+' suivant : connectez-vous vous-même à '+account['email']+' dans l’onglet de la fenêtre FruchtDrama, puis cliquez « J’ai changé de compte ». Clips reçus conservés.');return True
+        j.setdefault('engine_account_by',{})[engine]=account['id']
+        if engine==engines.of(j):j['engine_account']=account['id']
+        payload['account']={'email':account['email'],'label':account['label']}
+    if j['config'].get('dry_run'):payload['dry_run']=True
+    if horizontal(j):payload['aspect']='16:9'
+    words=sum(len(x['text'].split()) for x in s.get('dialogue') or [])
+    if engine!=engines.of(j) and words>engines.words_for(engine):
+        event(j,f'Clip {i+1} sur {engines.ENGINES[engine]["label"]} : {seconds} s pour {words} mots écrits pour un clip plus long, la fin de la réplique peut être coupée.')
+    add_task(j,'engine_video',payload,f'clip:{i}');return True
+
+def schedule_flow_clip(j,i,early=False,parallel=False):
+    s=j['scenes'][i]
     flow_accounts.follow_active_browser(STATE)
     cost=j['config']['flow_cost'];busy=busy_flow_profiles()
     if parallel:
@@ -1263,11 +1357,7 @@ def schedule_clip(j,i,early=False,parallel=False):
     if p['id']!=j.get('flow_profile') and not parallel:
         previous=profile_by(j.get('flow_profile'))
         j['flow_profile']=p['id'];event(j,'Passage automatique au compte Flow '+(p.get('flow_email') or p.get('label') or '')+f" ({p['balance']} crédits)"+(' : '+(previous.get('flow_email') or previous.get('label') or '')+(' sans accès à Flow' if previous.get('blocked')=='unavailable' else ' vide') if previous else '')+' ; clips reçus conservés.')
-    cast='\n'.join(c['id']+': '+c['appearance']+' Voice: '+c['voice'] for c in j['characters'])
-    dialog=dialogue_lines(j,s)
-    language=j['config'].get('language','Deutsch (de-DE)')
-    prompt=f"One continuous shot, 8 seconds, portrait 9:16. No text, no music. Spoken language ONLY: {language}. Natural native voices in the requested language, no translation or extra narration. Preserve identity.\n{cast}\n{s['video_prompt']}{plan_video_block(j,s)}\nExact dialogue in this order; only the named speaker moves their lips, all others stay silent:\n{dialog}"+correction(j.get('corrections',{}).get(f'clip:{i}'))
-    payload={'prompt':prompt,'attachments':[asset_url(j,flow_reference(j,s['image']))],'cost':cost,'balance':p['balance'],'seconds':8,**({'model':j['config']['flow_model'],'resolution':j['config'].get('flow_resolution','720p')} if j['config'].get('flow_model') else {})}
+    payload={'prompt':clip_prompt(j,i,'flow'),'attachments':[asset_url(j,flow_reference(j,s['image']))],'cost':cost,'balance':p['balance'],'seconds':8,**({'model':j['config']['flow_model'],'resolution':j['config'].get('flow_resolution','720p')} if j['config'].get('flow_model') else {})}
     if j['config'].get('dry_run'):payload['dry_run']=True
     target=flow_accounts.route(p) if STATE.get('settings',{}).get('flow_auto') else None
     if target:
@@ -1278,6 +1368,46 @@ def schedule_clip(j,i,early=False,parallel=False):
     if parallel:event(j,'Clip '+str(i+1)+' en parallèle sur le compte Flow '+readiness.mask(p.get('flow_email') or p.get('label'))+f" ({p['balance']} crédits).")
     add_task(j,'flow_video',payload,f'clip:{i}',profile=p['id']);return True
 
+def clip_failed(j,t,result,kind):
+    """A clip failed (0.1.93). Returns True when handled here: next engine, softened last round, or held for the owner.
+
+    Known failure (nothing sent to Flow, or a free engine): the clip moves at once to the next engine, no « Action
+    requise ». A Flow submission that may have been charged is never sent again by chance (uncertain_clip_tasks): that
+    clip waits for the owner, the other clips go on."""
+    slot=str(t.get('slot',''))
+    if t.get('kind') not in ('flow_video','engine_video') or not slot.startswith('clip:') or j['config'].get('dry_run'):return False
+    i=int(slot.split(':')[1])
+    if i>=len(j.get('scenes') or []) or j['scenes'][i].get('clip'):return False
+    scene=j['scenes'][i];engine='flow' if t['kind']=='flow_video' else (t.get('payload') or {}).get('engine')
+    reason=result.get('error','')
+    if t['kind']=='flow_video':
+        # Flow's own failure message after the submission (flow_failed): nothing more to wait for, nothing charged.
+        if result.get('generation_submitted') is not False and result.get('flow_failed') is not True:
+            t['status']='failed';t['uncertain']=True;j['status']='running'
+            alert(j,'action',f'Clip {i+1} : envoi Flow incertain ({engine_chain.short(reason)}) : le clip a peut-être été généré et facturé. Vérifie le projet Flow, puis importe-le ou confirme qu’il n’existe pas. Les autres clips continuent.')
+            schedule(j);return True
+        if result.get('flow_blocked') in ('credits','unavailable','not_ready') and (t.get('payload') or {}).get('flow_route'):
+            return False  # this Google account, not Flow itself: the next Flow account, then the next engine (schedule_clip)
+    chain=engine_chain.order(STATE.get('settings'),j['config'])
+    ready=lambda e:engine_ready(j,e)
+    if kind=='quota' and t['kind']=='engine_video':
+        moment=time.time();email=((t.get('payload') or {}).get('account') or {}).get('email')
+        account=next((a for a in engine_accounts.accounts(STATE,engine) if a['email']==email),None) or engine_accounts.by_id(STATE,current_account(j,engine))
+        if not engine_chain.pick(scene,chain,lambda e:e!=engine and ready(e)):return False  # nothing else: the existing wait for renewal
+        if account:engine_accounts.wall(account,moment,errors.retry_after(result),reason)
+        else:STATE.setdefault('engine_walls',{})[engine]=moment+(errors.retry_after(result) or engine_accounts.DEFAULT_WALL)
+    elif kind in errors.HUMAN and not engine_chain.pick(scene,chain,lambda e:e!=engine and ready(e)):
+        return False  # nothing else ready: the owner signs in or solves the check, as before
+    note_not_ready(t,result)
+    engine_chain.record(scene,engine,kind,reason,now())
+    before=engine_chain.round_of(scene);nxt=engine_chain.advance(scene,chain,ready)
+    t['status']='failed';j['status']='running'
+    event(j,engine_chain.line(i,engine,kind,reason,nxt,engine_chain.round_of(scene)>before))
+    if not nxt:
+        scene['engine_exhausted']=True
+        alert(j,'action',f'Clip {i+1} : aucun moteur ne l’a fait, même avec le prompt adouci — {engine_chain.summary(scene)}. Modifie la scène (« Refaire » avec une consigne) ou importe un clip, puis Reprendre. Les autres clips continuent.')
+    schedule(j);return True
+
 def uncertain_clip_tasks(j):
     """Flow submissions that may have been charged but whose clip was never received."""
     scenes=j.get('scenes',[])
@@ -1285,7 +1415,7 @@ def uncertain_clip_tasks(j):
         index=int(t['slot'].split(':')[1])
         return index<len(scenes) and not scenes[index].get('clip')
     return [t for t in STATE['tasks'] if t.get('job')==j['id'] and t.get('kind')=='flow_video' and t.get('status')=='failed'
-            and t.get('reservation') and not t['reservation'].get('refunded') and not t.get('acknowledged')
+            and ((t.get('reservation') and not t['reservation'].get('refunded')) or t.get('uncertain')) and not t.get('acknowledged')
             and str(t.get('slot','')).startswith('clip:') and missing(t)]
 
 def uncertain_message(j):
@@ -1392,9 +1522,12 @@ def redo(j,slot,note='',include_clip=False,start=True):
         remember(slot,scene.pop('image'))
         if scene.get('clip'):remember(f'clip:{index}',scene.pop('clip'))
         if include_clip:j.setdefault('corrections',{})[f'clip:{index}']=note
+        engine_chain.reset(scene)  # a new board: every engine may try it again
     elif kind=='clip':
-        if not scene.get('clip'):raise ValueError('Rien à refaire : clip pas encore créé')
-        remember(slot,scene.pop('clip'))
+        # 0.1.93: a clip that no engine could make is redone with the owner's instruction, from the first engine.
+        if not scene.get('clip') and not scene.get('engine_exhausted'):raise ValueError('Rien à refaire : clip pas encore créé')
+        if scene.get('clip'):remember(slot,scene.pop('clip'))
+        engine_chain.reset(scene)
     else:
         if not j.get('cover_file'):raise ValueError('Rien à refaire : couverture pas encore créée')
         remember('cover',j.pop('cover_file'));j.pop('cover',None)
@@ -1623,6 +1756,12 @@ def accept_task_result(t,result):
         if t.get('kind')=='flow_video' and result.get('generation_submitted') is False and reservation and not reservation.get('refunded'):
             p=profile_by(reservation['profile'])
             if p:p['balance']+=reservation['amount'];reservation['refunded']=True;event(j,'Réservation locale de crédits annulée : aucune génération n’a été envoyée à Flow.')
+        elif t.get('kind')=='flow_video' and result.get('flow_failed') is True and reservation and not reservation.get('refunded'):
+            # Flow showed its own failure message after the submission: a failed generation is not charged by Flow.
+            p=profile_by(reservation['profile'])
+            if p:p['balance']+=reservation['amount'];reservation['refunded']=True;event(j,'Flow a affiché un échec de génération : réservation locale annulée (Flow ne facture pas un clip échoué).')
+        # 0.1.93: one try per engine and per clip (Flow, Arena, Vidogrid, Grok), then a softened prompt, then the owner.
+        if not was_paused and clip_failed(j,t,result,kind):return
         t['status']='failed'; j['status']='paused' if was_paused else 'attention'; event(j,errors.message(kind,result.get('error')))
         name=quotas.service(t)
         if kind=='quota' and name and not was_paused:
@@ -1739,6 +1878,9 @@ def accept_task_result(t,result):
             j['scenes'][index]['image']=file
         elif slot.startswith('clip:'):
             sc=j['scenes'][int(slot.split(':')[1])];sc['clip']=file
+            # The engine that made it (montage length, quality range) ; the next clip starts again from the first engine.
+            if t.get('kind') in ('flow_video','engine_video'):sc['engine']='flow' if t['kind']=='flow_video' else t['payload'].get('engine')
+            engine_chain.reset(sc)
             # The board the clip was animated from: a later board change shows « la planche a changé après le clip ».
             sc['clip_from']=sc.get('image');sc.pop('text_after_clip',None)
         elif slot=='cover':
@@ -1836,7 +1978,7 @@ def render_job(id):
             if probe:
                 pr=subprocess.run([probe,'-v','error','-select_streams','a','-show_entries','stream=index','-of','csv=p=0',str(src)],capture_output=True,text=True,timeout=30); audio=bool(pr.stdout.strip())
             # P5-06: Flow clips stay 8 s; Grok/Arena clips keep their real, bounded duration.
-            full=engines.clip_length(j,clip_duration(probe,src) if probe else None)
+            full=engines.clip_length(j,clip_duration(probe,src) if probe else None,s)
             speech=(j.get('quality_report',{}).get('clips',[])[i].get('speech') if j.get('quality_version')==1 and i<len(j.get('quality_report',{}).get('clips',[])) else None)
             # "Couper les silences": blanks before the first and after the last word, from the real word timings.
             plan.append([src,audio,full,speech,montage.trim(speech,full) if mset['cut_silences'] else (0.0,full)])
@@ -2011,7 +2153,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             # Several video tasks per window (parallel clips), each in its own tab: at most the setting, one Grok/Arena.
                             mine=[o for o in STATE['tasks'] if o['status']=='claimed' and lane_of(o)=='video' and o.get('client')==client]
                             if len(mine)>=(parallel_cap() if lane else 1):continue
-                            if t['kind']=='engine_video' and any(o.get('kind')=='engine_video' for o in mine):continue
+                            # One tab per site: one clip at a time per engine (Grok, Arena, Vidogrid each in its tab).
+                            if t['kind']=='engine_video' and any(o.get('kind')=='engine_video' and (o.get('payload') or {}).get('engine')==t['payload'].get('engine') for o in STATE['tasks'] if o['status']=='claimed'):continue
                         if t['kind']=='flow_video':
                             # Never two clips on the same account at once: one reservation per account, one tab per project.
                             if any(other['kind'] in ('flow_video','flow_collect') and other['status']=='claimed' and (other.get('profile')==t.get('profile') or not lane) for other in STATE['tasks']):continue
@@ -2391,7 +2534,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     # A service found signed in with a readable address joins Mes comptes by itself (address only, no password).
                     for name in (b.get('sites') or {}):
                         entry=(STATE.get('readiness') or {}).get('sites',{}).get(name) or {}
-                        if name in ('chatgpt','claude','grok','arena') and entry.get('state')=='ready' and entry.get('email'):
+                        if name in ('chatgpt','claude','grok','arena','vidogrid') and entry.get('state')=='ready' and entry.get('email'):
                             try:identities.add(STATE,entry['email'],[name],new_id=uid)
                             except ValueError:pass
                     for j in STATE['jobs']:
@@ -2426,6 +2569,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     if 'cover_controls' in b:
                         if b['cover_controls'] not in ('fix','report','none'):raise ValueError('Réglage de la miniature inconnu')
                         STATE['settings']['cover_controls']=b['cover_controls']
+                    if 'engine_chain' in b:
+                        # 0.1.93: order of the clip engines (one try each per clip); an engine left out is never used.
+                        STATE['settings']['engine_chain']=engine_chain.validate(b['engine_chain'])
                     if 'follow' in b:
                         # Followed TikTok accounts in Le Filon (star), like the Atelier.
                         name=str(b['follow']).strip().lstrip('@')[:60];followed=STATE['settings'].setdefault('filon_follow',[])
@@ -2529,7 +2675,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         if active:
                             if b.get('flow_profile') and b['flow_profile']!=j.get('flow_profile'):raise ValueError('Un clip est déjà suivi : attendez sa récupération avant de changer de compte')
                             j['status']='running';event(j,'Suivi de la tâche en cours conservé ; aucun nouvel envoi.');save();return self.send_json(public_state())
-                        if j.get('stage')=='clips' and uncertain_clip_tasks(j):raise ValueError(uncertain_message(j))
+                        # A clip whose Flow submission is uncertain waits for the owner; the other clips may go on (0.1.93).
+                        uncertain={int(t['slot'].split(':')[1]) for t in uncertain_clip_tasks(j)}
+                        if j.get('stage')=='clips' and uncertain and not any(not x.get('clip') and k not in uncertain for k,x in enumerate(j['scenes'])):raise ValueError(uncertain_message(j))
+                        # Reprendre after « aucun moteur n'a pu faire ce clip »: every engine may try it again (the owner fixed something).
+                        for x in j.get('scenes') or []:
+                            if x.get('engine_exhausted') and not x.get('clip'):engine_chain.reset(x)
                         # Reprendre / Boucle complète: nothing is relaunched while a needed account is known « À régler ».
                         found=gate_blockers(j)
                         if found:raise AccountsNotReady(found)

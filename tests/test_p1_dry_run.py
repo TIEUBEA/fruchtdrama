@@ -76,7 +76,10 @@ class DryRunHttpTests(unittest.TestCase):
     def test_dry_run_flag_cannot_be_forged_by_a_real_task(self):
         j = clip_job(dry=False); t = self.claim(); self.assertEqual(s.STATE['profiles'][0]['balance'], 28)
         self.report(t, {'ok': False, 'dry_run': True, 'generation_submitted': False, 'error': 'x'})
-        self.assertNotIn('dry_run_passed', j); self.assertEqual(j['status'], 'attention')
+        # 0.1.93: a real failure with nothing sent goes on: last round on Flow with a softened prompt.
+        self.assertNotIn('dry_run_passed', j); self.assertEqual(j['status'], 'running')
+        again = next(x for x in s.STATE['tasks'] if x['status'] == 'queued')
+        self.assertNotIn('dry_run', again['payload']); self.assertIn('All-audiences family animation clip', again['payload']['prompt'])
         self.assertEqual(s.STATE['profiles'][0]['balance'], 40, 'real task not submitted: normal refund')
 
     def test_switching_mode_rebuilds_queued_tasks_and_waits_for_running_ones(self):

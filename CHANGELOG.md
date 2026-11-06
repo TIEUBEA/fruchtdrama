@@ -7,6 +7,27 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 
 
+## 0.1.93 (06/11/2026)
+Demande du propriétaire, après une heure perdue sur un clip Flow qui échouait en boucle : « Un essai par cas. Flow en priorité ; ça ne marche pas → un essai sur Arena ; ça ne marche pas → un essai sur Vidogrid ; en dernier recours → Grok lui-même. Si rien ne marche, modifier un peu la scène pour que le moteur l'accepte. »
+
+**Ajouté**
+- **Bascule de moteur par clip** : chaque clip fait un seul essai par moteur, dans l'ordre Flow → Arena → Vidogrid → Grok (réglable dans Mes comptes › « Ordre des moteurs pour chaque clip »). Un moteur sans compte prêt (pas connecté, « À régler », au quota, Flow sans crédits) est sauté sans compter d'essai. Un échec pour lequel rien n'a été envoyé ni dépensé (refus, page indisponible, import impossible, délai dépassé, message d'échec de Flow) fait passer le clip au moteur suivant tout de suite, sans « Action requise ». Le journal le dit en une ligne : « Clip 3 : Flow a refusé (raison) → essai sur Arena. »
+- **Dernier tour** : quand les quatre moteurs ont échoué, le prompt vidéo est adouci (vocabulaire de `refusal.py`, cadre « tout public », bagarres et armes montrées par les regards et les gestes) et Flow réessaie une fois. Ensuite seulement « Action requise », avec la raison donnée par chaque moteur. « Refaire » le clip avec une consigne, ou Reprendre, relance tous les moteurs.
+- **Envoi Flow incertain** (génération peut-être lancée et facturée) : la règle reste, jamais de renvoi au hasard ; mais ce clip seul attend le propriétaire, **les autres clips continuent**. « Action requise » arrive quand il ne reste plus que lui. Reprendre n'est plus refusé tant que d'autres clips restent à faire.
+- **Flow : message d'échec lu** (correctif de dev 0.1.92.1) : Flow ne facture pas une génération échouée ; la réservation locale est rendue et le clip passe au moteur suivant, sans le bloquer comme envoi incertain.
+- **Nouveau moteur Vidogrid** (vidogrid.ai, modèle Grok Imagine Video 1.5 Lite, 10 s, 720p), sur le parcours réel vérifié dans fruit-france : page rechargée pour chaque clip, modèle Lite, planche en @image1 (champ fichier, ou « Select Files » sans fenêtre de fichiers), 9:16 (16:9 pour un épisode horizontal), 720p, 10 s, un seul clic sur « Generate with Grok », vidéo récupérée (la vitrine « showcase » ignorée). Un « Generation failed » n'est pas recliqué : le clip passe au moteur suivant. Compte vérifiable dans Mes comptes (Préparer mes comptes, « + Ajouter un compte » qui ouvre la page, connexion « Continue with Google » faite par le propriétaire, aucun mot de passe).
+- **Chaque clip garde son moteur** (`scenes[i].engine`) : le montage garde la durée réelle de chaque clip (Flow 8 s, Arena 8 s, Grok 6 s, Vidogrid 10 s), recadre tout en 1080 × 1920 et cale les sous-titres sur ces durées ; le contrôle qualité juge chaque clip avec la plage de son moteur. Un clip passé sur Grok dont la réplique est écrite pour 8 s est signalé dans le journal (fin de réplique peut-être coupée).
+
+**Accéléré**
+- Import de la planche dans Flow : rien ne progresse pendant 90 s (aucun changement visible, aucun pourcentage) → échec « rien envoyé », clip au moteur suivant ; avant, 5 min d'attente puis « Action requise ».
+- Délais après envoi par moteur : Grok 4 min, Arena et Vidogrid 7 min (avant : 10 min pour tous) ; un moteur gratuit qui dépasse passe au suivant.
+- Un clip par site en même temps (Grok, Arena et Vidogrid ont chacun leur onglet) ; deux moteurs différents peuvent travailler en même temps dans les deux voies vidéo.
+
+**Reste non essayé sur un vrai compte**
+- Vidogrid : connecteur écrit d'après le parcours Playwright de fruit-france et testé sur une page simulée ; à essayer en vrai (case d'image « 0/1 », case à cocher, lecture de la vidéo : si la page refuse de la lire, l'extension la télécharge depuis vidogrid.ai seulement).
+- L'essai unique par moteur remplace, pour Vidogrid, les 60 relances automatiques du robot fruit-france après une erreur 503.
+
+
 ## 0.1.92 (06/11/2026)
 **Ajouté**
 - L'extension se met à jour toute seule : quand une nouvelle version est posée dans son dossier, elle se recharge d'elle-même entre deux tâches (plus de rechargement manuel dans chrome://extensions après chaque correctif).

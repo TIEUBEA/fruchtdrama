@@ -1,6 +1,6 @@
 const BASE='http://127.0.0.1:8840';
 // Two lanes, like the Atelier (clips leave while ChatGPT draws the boards): 'chat' (ChatGPT, Claude, TikTok) and
-// 'video' (Flow, Grok, Arena). Each lane follows one task at a time, in its own tabs, with its own saved state:
+// 'video' (Flow, Grok, Arena, Vidogrid). Each lane follows one task at a time, in its own tabs, with its own saved state:
 // activeTask (chat; also any task saved by 0.1.88 and older) and activeVideoTask (video).
 // 0.1.91, parallel clips: a second video lane (activeVideoTask2) takes another Flow clip on another Google account, in its
 // own tab; the studio never gives two lanes the same account.
@@ -67,7 +67,7 @@ async function loadAttachments(paths){
  }
  return files;
 }
-function allowedMedia(url){try{const u=new URL(url);return u.protocol==='https:'&&['chatgpt.com','oaiusercontent.com','googleusercontent.com','googlevideo.com','labs.google','flow.google.com'].some(d=>u.hostname===d||u.hostname.endsWith('.'+d));}catch{return false;}}
+function allowedMedia(url){try{const u=new URL(url);return u.protocol==='https:'&&['chatgpt.com','oaiusercontent.com','googleusercontent.com','googlevideo.com','labs.google','flow.google.com','vidogrid.ai'].some(d=>u.hostname===d||u.hostname.endsWith('.'+d));}catch{return false;}}
 async function receiveMedia(task,result){
  let bytes,mime=result.mime;
  if(result.base64){bytes=Uint8Array.from(atob(result.base64),c=>c.charCodeAt(0));}
@@ -264,7 +264,8 @@ async function begin(task,tab,cfg,key=LANE_KEY[laneOf(task)]){
  // Flow no longer keeps an <input type=file> in the page: « Importer » makes a detached one and clicks it, which
  // opened Chrome's native file dialog that no extension can fill (06/11/2026: imports stuck for 5 min, clips failed).
  // In the page's own world, a click on a file input of this tab receives the board directly: no dialog at all.
- if(task.kind==='flow_video'&&attachments?.length)await chrome.scripting.executeScript({target:{tabId:tab.id},world:'MAIN',args:[attachments.map(a=>({name:a.name,mime:a.mime,data:a.data}))],func:files=>{
+ // Same for Vidogrid's « Select Files » (0.1.93).
+ if(['flow_video','engine_video'].includes(task.kind)&&attachments?.length)await chrome.scripting.executeScript({target:{tabId:tab.id},world:'MAIN',args:[attachments.map(a=>({name:a.name,mime:a.mime,data:a.data}))],func:files=>{
   window.__fruchtFiles=files;
   if(window.__fruchtClickPatched)return;window.__fruchtClickPatched=true;
   const original=HTMLInputElement.prototype.click;

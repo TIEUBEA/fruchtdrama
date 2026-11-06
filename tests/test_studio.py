@@ -301,7 +301,9 @@ class HTTPTests(unittest.TestCase):
         self.assertEqual(t['slot'],'clip:0');self.assertEqual(p['balance'],0)
         self.assertIsNone(self.req('/api/bridge/task?client='+pair['client'],headers=auth));self.assertEqual(p['balance'],0)
         self.req('/api/bridge/result',{'client':pair['client'],'task':t['id'],'result':{'ok':False,'error':'Coût non lisible'}},auth)
-        self.assertEqual(j['status'],'attention');self.assertEqual(p['balance'],0)
+        # 0.1.93: clip 1 (uncertain) waits for the owner; the next clips wait for credits.
+        self.assertEqual(s.held_clips(j),{0});self.assertEqual(j['status'],'waiting_credit');self.assertEqual(p['balance'],0)
+        self.assertEqual(j['alerts'][-1]['level'],'action')
     def test_declared_balance_cannot_be_negative(self):
         with self.assertRaises(urllib.error.HTTPError):self.req('/api/profile',{'label':'Bad','balance':-1})
         self.assertFalse(s.STATE['profiles'])

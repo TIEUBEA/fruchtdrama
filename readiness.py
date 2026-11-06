@@ -17,7 +17,8 @@ import flow_refill
 
 FRESH = 15 * 60          # a check older than this is done again before a production
 CHECK_TIMEOUT = 120      # a production never waits longer than this for a check that does not come back
-SITE_LABELS = {'chatgpt': 'ChatGPT', 'claude': 'Claude', 'grok': 'Grok', 'arena': 'Arena', 'flow': 'Google Flow'}
+SITE_LABELS = {'chatgpt': 'ChatGPT', 'claude': 'Claude', 'grok': 'Grok', 'arena': 'Arena', 'vidogrid': 'Vidogrid', 'flow': 'Google Flow'}
+ENGINE_SITES = ('grok', 'arena', 'vidogrid')
 NOT_READY = ('fix', 'no_access')
 STATES = ('ready', 'fix', 'no_access')
 CHAT_STAGES = ('research', 'ideas', 'sheet', 'script', 'characters', 'images', 'clips', 'quality', 'cover')
@@ -72,7 +73,7 @@ def needs(cfg, stage):
             sites.append('claude')
     engine = cfg.get('video_engine') or 'flow'
     flow = stage in VIDEO_STAGES and engine == 'flow'
-    if stage in VIDEO_STAGES and engine in ('grok', 'arena'):
+    if stage in VIDEO_STAGES and engine in ENGINE_SITES:
         sites.append(engine)
     return {'sites': sites, 'flow': flow}
 
@@ -98,8 +99,8 @@ def setup_missing(state):
     missing = []
     if not site_has_account(state, 'chatgpt'):
         missing.append({'key': 'site:chatgpt', 'service': 'chatgpt', 'label': 'ChatGPT', 'reason': 'aucun compte prêt (personnages et planches)'})
-    if not (flow_has_account(state) or site_has_account(state, 'grok') or site_has_account(state, 'arena')):
-        missing.append({'key': 'engine', 'service': 'flow', 'label': 'Clips', 'reason': 'aucun compte Google Flow ni Grok prêt'})
+    if not (flow_has_account(state) or any(site_has_account(state, e) for e in ENGINE_SITES)):
+        missing.append({'key': 'engine', 'service': 'flow', 'label': 'Clips', 'reason': 'aucun compte Google Flow, Arena, Vidogrid ni Grok prêt'})
     return missing
 
 
@@ -125,7 +126,7 @@ def blockers(state, cfg, stage, cost, moment, eligible, selected=None):
         label = SITE_LABELS[name]
         if entry and entry.get('state') in NOT_READY and fresh(entry, moment):
             out.append({'key': 'site:' + name, 'service': name, 'label': label, 'reason': reason_of(entry)})
-        elif not entry and name in ('grok', 'arena', 'claude') and not site_has_account(state, name):
+        elif not entry and name in ENGINE_SITES + ('claude',) and not site_has_account(state, name):
             out.append({'key': 'site:' + name, 'service': name, 'label': label, 'reason': 'pas connecté'})
     if need['flow']:
         automatic = state.get('settings', {}).get('flow_auto', False)
@@ -163,7 +164,7 @@ def full_targets(state):
     identities = state.get('identities') or []
     if state.get('settings', {}).get('provider') == 'claude' or (seen.get('claude') or {}).get('connected') or any('claude' in i.get('services', []) for i in identities):
         sites.append('claude')
-    for engine in ('grok', 'arena'):
+    for engine in ENGINE_SITES:
         if any(a.get('engine') == engine for a in state.get('engine_accounts', [])) or (seen.get(engine) or {}).get('connected'):
             sites.append(engine)
     profiles = [p['id'] for p in flow_registered(state) if p.get('slot') is not None or p.get('auto_enabled')]

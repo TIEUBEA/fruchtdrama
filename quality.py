@@ -73,7 +73,7 @@ def analyse(j,folder):
     report={'fingerprint':fingerprint(j,folder),'hard_errors':[],'warnings':[],'clips':[],
             'limits':['La transcription peut se tromper, surtout sur les noms propres.','Identité du locuteur et synchronisation des lèvres non certifiées automatiquement.']}
     for i,scene in enumerate(j['scenes']):
-        result=technical(folder/scene['clip'],engines.spec(j)['range'],(j.get('config') or {}).get('format')=='horizontal');report['clips'].append(result)
+        result=technical(folder/scene['clip'],engines.clip_range(j,scene),(j.get('config') or {}).get('format')=='horizontal');report['clips'].append(result)
         report['hard_errors'] += [f"Scène {i+1} : {x}" for x in result['hard_errors']]
         # Actual sampled frames, never the generated input still presented as clip evidence.
         sheet=f'quality-scene-{i:02}.jpg'

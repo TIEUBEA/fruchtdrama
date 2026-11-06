@@ -30,7 +30,7 @@ def clip_job(engine='grok', dry=False):
 
 class EngineUnitTests(unittest.TestCase):
     def test_catalogue_and_validation(self):
-        self.assertEqual(set(engines.ENGINES), {'flow', 'grok', 'arena'})
+        self.assertEqual(set(engines.ENGINES), {'flow', 'grok', 'arena', 'vidogrid'})
         self.assertEqual(engines.validate(None), 'flow')
         with self.assertRaises(ValueError):
             engines.validate('sora')

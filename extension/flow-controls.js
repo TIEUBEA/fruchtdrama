@@ -207,7 +207,13 @@ globalThis.FruchtFlow={
   const pattern=/^(?:Zum Prompt hinzufügen|Add to prompt|Ajouter au prompt|Ajouter à l’invite|Ajouter à l'invite)$/i;
   let selected=!expectedName||selection.existingReference===true;
   let selectedSource=selection.referenceSource||'';
+  // 0.1.93 (owner: « pas 10 min d'attente ») : 90 s (180 passes) without any visible change at the import is a failure
+  // before any generation was sent: the clip goes at once to the next engine. The 5 min bound stays for slow uploads.
+  let lastSeen=null,lastChange=0;
   for(let n=0;n<600;n++){
+   const seen=this.importSignature(doc,expectedName,selected);
+   if(seen!==lastSeen){lastSeen=seen;lastChange=n;}
+   else if(n-lastChange>=180)throw Error('Flow : image toujours en traitement, rien ne progresse depuis 90 s. Aucun envoi de génération effectué.');
    if(this.uploadConsent(doc))await pause(400);
    if(expectedName&&this.frameMatches(doc,this.referenceKey(doc,expectedName)))return;
    if(n%20===0)onProgress('Import Flow : traitement de l’image en cours ('+Math.round(n/2)+' s, limite 5 min). Ne relancez pas la production.');
@@ -237,6 +243,17 @@ globalThis.FruchtFlow={
   }
   const pending=this.control(doc,pattern,true);
   throw Error(pending?'Flow : image toujours en traitement après 5 minutes ; bouton « Zum Prompt hinzufügen » désactivé. Aucun envoi de génération effectué.':'Flow : bouton « Zum Prompt hinzufügen » absent après 5 minutes. Aucun envoi de génération effectué.');
+ },
+ // What the import shows now (picker, reference, Début, confirmation, % uploaded): any change is progress.
+ importSignature(doc,name,selected){
+  const pattern=/^(?:Zum Prompt hinzufügen|Add to prompt|Ajouter au prompt|Ajouter à l’invite|Ajouter à l'invite)$/i;
+  const percent=(String(doc.body?.innerText||'').match(/\d{1,3}\s?%/g)||[]).join(',');
+  let reference=false,frame=false,preview=false,confirm=null;
+  try{reference=!!(name&&this.referenceKey(doc,name));}catch{}
+  try{frame=!!this.startThumbnail(doc)?.querySelector?.('img');}catch{}
+  try{preview=!!(name&&this.previewMatches(doc,name));}catch{}
+  try{const c=this.control(doc,pattern,true);confirm=c?(c.disabled||c.getAttribute?.('aria-disabled')==='true'?'off':'on'):null;}catch{}
+  return JSON.stringify([selected,reference,frame,preview,confirm,percent]);
  },
  existingReference(doc,name){
   if(!name)return null;

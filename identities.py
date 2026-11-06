@@ -10,8 +10,8 @@ import uuid
 
 import engine_accounts
 
-SERVICES = ('chatgpt', 'claude', 'flow', 'grok', 'arena')
-LABELS = {'chatgpt': 'ChatGPT', 'claude': 'Claude', 'flow': 'Google Flow', 'grok': 'Grok', 'arena': 'Arena'}
+SERVICES = ('chatgpt', 'claude', 'flow', 'grok', 'arena', 'vidogrid')
+LABELS = {'chatgpt': 'ChatGPT', 'claude': 'Claude', 'flow': 'Google Flow', 'grok': 'Grok', 'arena': 'Arena', 'vidogrid': 'Vidogrid'}
 EMAIL = re.compile(r'[^\s@]+@[^\s@]+\.[^\s@]+')
 
 
@@ -58,7 +58,7 @@ def add(state, email, services, label='', balance=0, new_id=None):
     if 'flow' in chosen and not flow_profiles(state, email):
         state['profiles'].append({'id': new_id(), 'label': email, 'balance': balance, 'checked': None,
                                   'credit_source': 'manual' if balance else 'unknown'})
-    for engine in ('grok', 'arena'):
+    for engine in ('grok', 'arena', 'vidogrid'):
         if engine in chosen and not any(a['email'] == email for a in engine_accounts.accounts(state, engine)):
             engine_accounts.add(state, engine, identity['label'], email)
     return identity
@@ -71,7 +71,7 @@ def remove_service(state, email, service, delete_profile):
     if service == 'flow':
         for p in flow_profiles(state, email):
             delete_profile(p['id'])
-    if service in ('grok', 'arena'):
+    if service in ('grok', 'arena', 'vidogrid'):
         for a in [a for a in engine_accounts.accounts(state, service) if a['email'] == email]:
             if engine_accounts.busy(state, a):
                 raise ValueError('Ce compte génère un clip : attendez la fin')
@@ -132,7 +132,7 @@ def view(state, now, clip_cost=12):
             services['flow'] = {'state': 'blocked' if blocked or total <= 0 else 'low' if low else 'live' if (sites.get('flow') or {}).get('email') == email else 'ok',
                                 'text': f'{total} crédits' + (' · solde bas' if low and total > 0 else ' · épuisé' if total <= 0 else ' · ouvert' if (sites.get('flow') or {}).get('email') == email else ''),
                                 'balance': total, 'profiles': [p['id'] for p in profiles]}
-        for engine in ('grok', 'arena'):
+        for engine in ('grok', 'arena', 'vidogrid'):
             account = next((a for a in engine_accounts.accounts(state, engine) if a['email'] == email), None)
             if account:
                 walled = engine_accounts.walled(account, now)

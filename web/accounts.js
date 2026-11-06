@@ -2,7 +2,11 @@
 // ni enlever ceux déjà ajoutés »). Like the Atelier, simpler: one block per service, one line per account (Prêt / À régler +
 // raison / Bloqué jusqu'à HH:MM, crédits for Flow), « + Ajouter un compte », « Supprimer », « Tout supprimer ».
 // Everything technical is in « Avancé », closed. No password is ever asked or kept.
-const ACC_SERVICES=[['chatgpt','ChatGPT',true,'personnages, planches et miniature'],['flow','Google Flow',true,'les clips (ou Grok)'],['grok','Grok',false,'les clips, si tu choisis Grok'],['claude','Claude',false,'l’histoire, si tu préfères Claude'],['arena','Arena',false,'les clips, si tu choisis Arena']];
+const ACC_SERVICES=[['chatgpt','ChatGPT',true,'personnages, planches et miniature'],['flow','Google Flow',true,'les clips, en premier'],['arena','Arena',false,'les clips, si Flow ne peut pas'],['vidogrid','Vidogrid',false,'les clips (Grok Lite, 10 s), si Flow et Arena ne peuvent pas'],['grok','Grok',false,'les clips, en dernier recours'],['claude','Claude',false,'l’histoire, si tu préfères Claude']];
+// 0.1.93: each clip tries the engines in this order, one try each (owner 06/11/2026: « un essai par cas »).
+const ENGINE_ORDER_DEFAULT=['flow','arena','vidogrid','grok'],ENGINE_NAMES={flow:'Flow',arena:'Arena',vidogrid:'Vidogrid',grok:'Grok'};
+function engineOrder(){const o=(state.settings?.engine_chain||ENGINE_ORDER_DEFAULT).filter(e=>ENGINE_NAMES[e]);return o.length?o:ENGINE_ORDER_DEFAULT;}
+function engineOrderBlock(){const o=engineOrder();return `<section class="panel acc-service"><h2>Ordre des moteurs pour chaque clip</h2><p class="hint">Un essai par moteur et par clip ; un moteur sans compte prêt est sauté. Si tous échouent, le prompt est adouci et Flow réessaie une fois, puis le clip t’attend.</p><div class="chips">${o.map((e,i)=>`<span class="qchip">${i+1}. ${ENGINE_NAMES[e]}${i?` <button class="link-btn" data-engine-up="${e}" title="Passer avant le moteur précédent">monter</button>`:''}</span>`).join(' › ')}</div></section>`;}
 const accHH=t=>new Date(t*1000).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
 const accMask=e=>{e=String(e||'');const i=e.indexOf('@');return i<0?e:e.slice(0,2)+'•••'+(i>3?e[i-1]:'')+e.slice(i);};
 const accReady=()=>state.readiness||{sites:{},pending:[]};
@@ -21,7 +25,7 @@ function accountRows(svc){const R=accReady(),pending=new Set(R.pending||[]),now=
    return {key,email:p.flow_email||p.label,tone,text,reason,credits:p.balance||0,fix:r.state==='fix',del:{profile:p.id}};});}
  const session=(R.sites||{})[svc],seen=(state.sites||{})[svc]||{},live=session?.email||seen.email||null,key='site:'+svc;
  let emails=(state.identities||[]).filter(i=>(i.services||[]).includes(svc)).map(i=>i.email);
- const engine=['grok','arena'].includes(svc)?(state.engine_accounts||[]).filter(a=>a.engine===svc):[];
+ const engine=['grok','arena','vidogrid'].includes(svc)?(state.engine_accounts||[]).filter(a=>a.engine===svc):[];
  for(const a of engine)if(!emails.includes(a.email))emails.push(a.email);
  if(live&&!emails.includes(live))emails.push(live);
  const rows=emails.map(email=>({email}));
@@ -51,16 +55,17 @@ function accountsWelcome(context){const miss=state.setup||[];if(!miss.length)ret
 function accountsBlockBanner(){if(!accountsBlock||page==='connections')return '';
  return `<div class="notice human acc-block" role="alert"><b>Comptes à régler avant de commencer</b>${accountsBlock.list.map(b=>`<p class="hint">${esc(b.label)} : ${esc(b.reason)}</p>`).join('')}<div class="actions"><button class="primary" data-page="connections">Ouvrir Mes comptes</button><button class="secondary" data-acc-dismiss="1">Fermer</button></div></div>`;}
 function accountsHome(){const R=accReady(),checked=R.checked?new Date(R.checked).toLocaleString('fr-FR',{dateStyle:'short',timeStyle:'short'}):null,running=(R.pending||[]).length;
- const block=([svc,name,needed,role])=>{const rows=accountRows(svc);if(!needed&&!rows.length&&svc!=='claude'&&svc!=='grok')return '';
+ const block=([svc,name,needed,role])=>{const rows=accountRows(svc);  // every block shown: the clip engines are all in the order (0.1.93)
   const add=svc==='flow'?`<button class="primary big" data-add-google="1">+ Ajouter un compte</button>`:`<button class="primary big" data-site-open="${svc}">+ Ajouter un compte</button>`;
   const verify=svc==='flow'?`<button class="secondary" data-acc-verify="flow">Vérifier</button>`:`<button class="secondary" data-ready-recheck="site:${svc}">Vérifier</button>`;
   const line=r=>`<li class="acc-row"><span class="acc-mail">${r.email?esc(accMask(r.email)):'Compte de cette fenêtre'}</span>${svc==='flow'?`<span class="acc-credits">${r.credits} crédits</span>`:''}<span class="acc-state">${pill(r.tone,r.text)}${r.reason?`<small>${esc(r.reason)}</small>`:''}</span><span class="acc-act">${r.fix?`<button class="primary" data-ready-fix="${r.key}">Régler maintenant</button><button class="secondary" data-ready-recheck="${r.key}">C’est fait</button>`:''}${r.del?`<button class="link-btn danger" data-acc-del='${esc(JSON.stringify(r.del))}' data-acc-name="${esc(accMask(r.email||''))}">Supprimer</button>`:''}</span></li>`;
   return `<section class="panel acc-service"><div class="acc-head"><div><h2>${name} <span class="tag">${needed?'NÉCESSAIRE':'FACULTATIF'}</span></h2><p class="hint">${role}</p></div><div class="acc-buttons">${add}${verify}</div></div>
 <ul class="acc-list">${rows.map(line).join('')||`<li class="acc-empty">Aucun compte. Clique « + Ajouter un compte », connecte-toi dans l’onglet qui s’ouvre, reviens ici et clique « Vérifier ».</li>`}</ul>${rows.some(r=>r.del)&&rows.length>1?`<div class="acc-foot"><button class="link-btn danger" data-acc-del-all="${svc}" data-acc-name="${name}">Tout supprimer</button></div>`:''}</section>`;};
  return `<div class="intro"><div><h1>Mes comptes</h1><p>Ajoute tes comptes une fois, ici. Le studio les vérifie avant chaque vidéo, sans rien dépenser. Aucun mot de passe gardé.</p></div><button class="primary big" data-ready-prepare="1">${ico('refresh')} Préparer mes comptes</button></div>
-<p class="hint acc-checked">${running?'Vérification en cours dans la fenêtre FruchtDrama…':checked?'Dernière vérification : '+checked+'.':'Pas encore vérifié.'}</p>`+accountsWelcome()+ACC_SERVICES.map(block).join('');}
-document.addEventListener('click',async e=>{const b=e.target.closest?.('[data-ready-prepare],[data-ready-fix],[data-ready-recheck],[data-acc-verify],[data-acc-del],[data-acc-del-all],[data-acc-dismiss],[data-wall-wait]');if(!b)return;e.stopImmediatePropagation();
+<p class="hint acc-checked">${running?'Vérification en cours dans la fenêtre FruchtDrama…':checked?'Dernière vérification : '+checked+'.':'Pas encore vérifié.'}</p>`+accountsWelcome()+engineOrderBlock()+ACC_SERVICES.map(block).join('');}
+document.addEventListener('click',async e=>{const b=e.target.closest?.('[data-engine-up],[data-ready-prepare],[data-ready-fix],[data-ready-recheck],[data-acc-verify],[data-acc-del],[data-acc-del-all],[data-acc-dismiss],[data-wall-wait]');if(!b)return;e.stopImmediatePropagation();
  try{
+  if(b.dataset.engineUp){const o=engineOrder().slice(),i=o.indexOf(b.dataset.engineUp);if(i>0){[o[i-1],o[i]]=[o[i],o[i-1]];await api('/api/settings',{engine_chain:o});await refresh(true);toast('Ordre des moteurs : '+o.map(e=>ENGINE_NAMES[e]).join(' › '));}return}
   if(b.dataset.accDismiss){accountsBlock=null;render();return}
   if(b.dataset.wallWait){wallWaiting.add(b.dataset.wallWait);render();toast('D’accord : reprise automatique à '+b.dataset.wallTime+', rien à faire.');return}
   if(b.dataset.readyPrepare){await api('/api/sites',{action:'prepare'});await refresh(true);toast('Vérification de tous tes comptes en arrière-plan : aucun crédit, aucun prompt.');return}
