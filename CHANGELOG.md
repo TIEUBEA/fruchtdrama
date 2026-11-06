@@ -19,6 +19,7 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 ## 0.1.94 (06/11/2026)
 **Corrigé**
+- Clip généré par Flow mais jamais récupéré : l'éditeur Omni de Flow joue la vidéo sans lecteur <video> lisible. Dès que le nouveau clip est ouvert, l'extension le télécharge par « Télécharger le contenu multimédia › 720p Taille d'origine » (chemin déjà utilisé par la récupération) au lieu d'attendre 7 min puis d'échouer.
 - Planche refusée par Flow « en raison des intérêts des fournisseurs de contenu tiers » (trop proche de la vidéo d'origine) : quand aucun moteur ne l'a acceptée, ChatGPT la redessine clairement différente (cadrage, pose, fond, couleurs ; mêmes personnages, même sens) et le clip repart du premier moteur. Deux fois au plus par scène.
 - Mise à jour automatique de l'extension : elle relisait sa propre version (celle chargée en mémoire) et ne voyait jamais la nouvelle. Elle demande maintenant au studio la version posée dans son dossier (`/api/version`) et se recharge entre deux tâches. La version de chaque fenêtre est enregistrée.
 - Refus Flow réel identifié (essai du 06/11) : « Impossible de générer la vidéo demandée pour le moment en raison des intérêts des fournisseurs de contenu tiers… Cette génération vous sera remboursée. » Il vient de l'image (planche trop proche de la vidéo d'origine en recréation à l'identique), pas du texte : lu en 15 s, le clip passe au moteur suivant.
