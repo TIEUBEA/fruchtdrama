@@ -25,6 +25,31 @@ globalThis.FruchtResponse={
     if(![...q.scenes,q.continuity].every(x=>x&&['pass','issue','uncertain'].includes(x.status)&&typeof x.detail==='string'&&x.detail.trim()))continue;
     return parsed;
    }
+   if(kind==='board_review'){
+    // Board check before the clips: one verdict per board, bound to this exact task.
+    if(parsed?.production_id!==expectedJob||parsed?.generation_task_id!==expectedTask)continue;
+    const b=parsed.board_review?.boards;
+    if(!Array.isArray(b)||b.length!==expectedScenes||!b.every((x,i)=>x&&x.index===i&&['pass','issue'].includes(x.status)&&typeof x.detail==='string'&&x.detail.trim()))continue;
+    return parsed;
+   }
+   if(kind==='cover_review'){
+    // Cover check of the full loop: one verdict, bound to this exact task.
+    if(parsed?.production_id!==expectedJob||parsed?.generation_task_id!==expectedTask)continue;
+    if(typeof parsed.ok!=='boolean')continue;
+    return parsed;
+   }
+   if(kind==='meta'){
+    if(parsed?.production_id!==expectedJob||parsed?.generation_task_id!==expectedTask)continue;
+    if(typeof parsed.title!=='string'||typeof parsed.description!=='string')continue;
+    return parsed;
+   }
+   if(kind==='ideas'||kind==='sheet'){
+    // Story start (ten stories, decision sheet): only the reply bound to this exact task.
+    if(parsed?.production_id!==expectedJob||parsed?.generation_task_id!==expectedTask)continue;
+    if(kind==='ideas'&&!(Array.isArray(parsed.ideas)&&parsed.ideas.length>=6&&parsed.ideas.every(x=>x&&typeof x.title==='string'&&typeof x.pitch==='string')))continue;
+    if(kind==='sheet'&&!(typeof parsed.logline==='string'&&Array.isArray(parsed.titles)&&Array.isArray(parsed.hooks)&&Array.isArray(parsed.cast)))continue;
+    return parsed;
+   }
    if(!parsed||typeof parsed.title!=='string'||!Array.isArray(parsed.characters)||!parsed.characters.length||!Array.isArray(parsed.scenes)||!parsed.scenes.length)continue;
    if(expectedScenes&&parsed.scenes.length!==expectedScenes)continue;
    if(expectedJob&&parsed.production_id!==expectedJob)continue;

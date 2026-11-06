@@ -34,6 +34,18 @@ class FlowAccountsTests(unittest.TestCase):
         with patch.object(s,'flow_reference',return_value='reference.jpg'):
             s.schedule(self.job)
 
+    def test_accounts_follow_the_reinstalled_extension(self):
+        """Real case 03/11: old browser pairings forgotten, Flow accounts still bound to them, episode stuck."""
+        state = {'clients': {'new': {'id': 'new', 'auto': True, 'role': 'all'}, 'old': {'id': 'old', 'auto': True, 'role': 'all', 'disabled': True}},
+                 'profiles': [profile('a', 50, 'gone'), profile('b', 50, 'old'), profile('c', 50, 'new'), {'id': 'manual', 'balance': 5}],
+                 'settings': {'flow_auto': True}}
+        self.assertEqual(accounts.follow_active_browser(state), 2)
+        self.assertEqual([p.get('flow_client') for p in state['profiles']], ['new', 'new', 'new', None])
+        self.assertEqual(accounts.choose(state, 'a', 12)['id'], 'a', 'usable again')
+        state['clients']['second'] = {'id': 'second', 'auto': True, 'role': 'all'}
+        state['profiles'][0]['flow_client'] = 'gone'
+        self.assertEqual(accounts.follow_active_browser(state), 0, 'two working browsers: never rewired by guess')
+
     def test_switch_routes_next_scene_to_registered_account(self):
         self.schedule();t=s.STATE['tasks'][0]
         self.assertEqual(t['profile'],'b');self.assertTrue(t['payload']['flow_route']['new_project'])
@@ -64,6 +76,16 @@ class FlowAccountsTests(unittest.TestCase):
         self.assertEqual(self.job['flow_profile'],'b');self.assertEqual(len(s.STATE['tasks']),2)
         self.assertEqual(s.STATE['profiles'][0]['balance'],10)
         self.assertEqual(s.STATE['profiles'][0]['blocked'],'credits')
+
+    def test_account_without_flow_access_switches_and_stays_blocked(self):
+        # Real case 03/11/2026: flow.google.com/u/1/unavailable, no project created, nothing spent.
+        s.STATE['profiles'][0]['balance']=50
+        self.schedule();t=s.STATE['tasks'][0];t['status']='claimed'
+        t['reservation']={'profile':'a','amount':12,'refunded':False};s.STATE['profiles'][0]['balance']=38
+        with patch.object(s,'flow_reference',return_value='reference.jpg'):
+            s.accept_task_result(t,{'ok':False,'generation_submitted':False,'flow_blocked':'unavailable','error':'pas d’accès à Flow'})
+        self.assertEqual(self.job['flow_profile'],'b');self.assertEqual(len(s.STATE['tasks']),2)
+        self.assertEqual(s.STATE['profiles'][0]['blocked'],'unavailable');self.assertEqual(s.STATE['profiles'][0]['balance'],50,'reservation refunded')
 
     def test_uncertain_submission_never_switches_or_refunds(self):
         s.STATE['profiles'][0]['balance']=10;self.schedule();t=s.STATE['tasks'][0]

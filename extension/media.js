@@ -62,10 +62,16 @@ globalThis.FruchtMedia={
   return ['flow.google.com','labs.google'].includes(doc.location?.hostname)&&/\/project\/[^/]+\/edit\//.test(doc.location?.pathname||'')&&this.normalize(prompt).length>=100&&this.normalize(doc.body?.innerText).includes(this.normalize(prompt));
  },
  async videoPayload(video){
-  const src=video.currentSrc||video.src;
+  // A video that never loaded (preload="none", background tab) has no currentSrc yet: its <source> gives the address.
+  const src=video.currentSrc||video.src||video.querySelector?.('source')?.src;
+  if(!src)throw Error('Vidéo sans adresse.');
   const url=new URL(src,location.href);
   if(!['https:','blob:'].includes(url.protocol))throw Error('Source vidéo non prise en charge.');
-  const response=await fetch(src,{credentials:'include',signal:AbortSignal.timeout(30000)});
+  // Arena's clips live on a presigned storage address that refuses credentialed reads (CORS « * »): read it again
+  // without cookies (real page 06/11/2026).
+  let response;
+  try{response=await fetch(src,{credentials:'include',signal:AbortSignal.timeout(30000)});}
+  catch(e){if(url.protocol!=='https:')throw e;response=await fetch(src,{credentials:'omit',signal:AbortSignal.timeout(60000)});}
   if(!response.ok)throw Error('Lecture du clip affiché refusée.');
   let blob=await response.blob();
   if(!/^video\/(mp4|webm)(?:;|$)/i.test(blob.type)){

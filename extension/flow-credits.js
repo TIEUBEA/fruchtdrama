@@ -36,10 +36,14 @@ globalThis.FruchtCredits={
   if(cfg.role==='creation'||!cfg.enabled)return false;
   const lease=await call('/api/bridge/credit-check?client='+encodeURIComponent(cfg.client));if(!lease)return false;
   let result;
+  if(lease.background&&!await globalThis.FruchtWorkspace.isOpen(chrome)){
+   await call('/api/bridge/credit-report',{id:lease.id,profile:lease.profile,client:cfg.client,result:{ok:false,error:'Fenêtre FruchtDrama fermée : solde relu à sa prochaine ouverture.'}});
+   return false;
+  }
   try{
    const tabs=await chrome.tabs.query({url:['https://flow.google.com/*','https://labs.google/*']});
    let tab=tabs.find(t=>FruchtFlowSession.project(t.url)===lease.target.url);
-   if(!tab)tab=await chrome.tabs.create({url:lease.target.url,active:false});
+   tab=tab?await globalThis.FruchtWorkspace.adopt(chrome,tab):await globalThis.FruchtWorkspace.createTab(chrome,{url:lease.target.url,active:false});
    const start=Date.now();
    while(Date.now()-start<90000){
     try{

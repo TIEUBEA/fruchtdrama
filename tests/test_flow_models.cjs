@@ -5,10 +5,10 @@ assert.ok(!f.modelPattern('gemini_omni_flash').test('Veo 3.1 Fast'));
 assert.ok(!f.modelPattern('gemini_omni_flash').test('Veo 3.1 Lite'));
 for(const text of ['Video · 720p · 8 Sek. · 1-mal','Vidéo · 720p · 8 s · x1','Video · 720p · 8 seconds · x1']){assert.equal(f.resolution(text),'720p');assert.equal(f.seconds(text),8);}
 assert.equal(f.resolution('360p 720p'),null);assert.equal(f.seconds('8 s 10 s'),null);
-function fixture({missing=false,ambiguous=false,wrongResolution=false,wrongDuration=false,target="Gemini Omni Flash 1.1"}={}){
+function fixture({missing=false,ambiguous=false,wrongResolution=false,wrongDuration=false,target="Gemini Omni Flash 1.1",aspect='9:16'}={}){
  let menu=false,current='Veo 3.1 - Lite',resolution=wrongResolution?'360p':'720p',seconds=wrongDuration?10:8,picked=[];
  const element=(text,click,checked=true)=>({innerText:text,getClientRects:()=>[{}],getAttribute:k=>k==='aria-checked'?String(checked):null,click});
- const radios=['Video','9:16','x1'].map(x=>element(x,()=>picked.push(x)));
+ const radios=['Video',aspect,'x1'].map(x=>element(x,()=>picked.push(x)));
  const settings=element('',()=>{});settings.getAttribute=k=>k==='aria-label'?'Settings trigger':null;
  Object.defineProperty(settings,'innerText',{get:()=>`Video · ${resolution} · ${seconds} s · x1`});
  const model=element('',()=>menu=true);Object.defineProperty(model,'innerText',{get:()=>current});
@@ -26,6 +26,13 @@ function fixture({missing=false,ambiguous=false,wrongResolution=false,wrongDurat
  return {doc,picked,model};
 }
 (async()=>{
+ // Real Flow label (03/11/2026): "Avertissement de crédits insuffisants" must stop before any send.
+ {const el=t=>({innerText:'',getAttribute:k=>k==='aria-label'?t:null,getClientRects:()=>[{}]});const d=labels=>({querySelectorAll:()=>labels.map(el)});
+  f.visible=()=>true;assert.ok(f.creditBlocked(d(['Avertissement de crédits insuffisants'])));assert.ok(f.creditBlocked(d(['Warnung: Nicht genügend Guthaben'])));assert.ok(!f.creditBlocked(d(['Ingrédient image','Effacer le prompt'])));}
+ // Horizontal 16:9 version: the 16:9 radio is chosen and verified; a vertical-only page refuses.
+ {const h=fixture({aspect:'16:9'});await f.configure(h.doc,async()=>{},12,'gemini_omni_flash','720p',8,'16:9');f.verifyModel(h.doc,'gemini_omni_flash','720p',8,'16:9');
+  assert.throws(()=>f.verifyModel(h.doc,'gemini_omni_flash','720p',8),/format vertical non confirmé/);
+  await assert.rejects(()=>f.configure(fixture().doc,async()=>{},12,'gemini_omni_flash','720p',8,'16:9'),/non reconnu/);}
  for(const [model,label,cost] of [['veo_3_1_fast','Veo 3.1 - Fast',20],['veo_3_1_quality','Veo 3.1 - Quality',100],['veo_3_1_quality','Veo 3.1 - Qualität',100]]){
   const x=fixture({target:label});await f.configure(x.doc,async()=>{},cost,model,'720p',8);f.verifyModel(x.doc,model,'720p',8);assert.throws(()=>f.verifyModel(x.doc,'veo_3_1_lite','720p',8),/modèle demandé/);
  }

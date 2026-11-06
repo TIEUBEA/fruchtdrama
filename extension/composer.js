@@ -2,6 +2,8 @@
 globalThis.FruchtComposer = {
  challenge(doc){
   const text=doc.body?.innerText||'';
+  // Cloudflare interstitial seen on chatgpt.com in a real check (02/11/2026).
+  if(/^(?:just a moment|un instant|einen moment|nur einen moment)/i.test(String(doc.title||'').trim())||/checking (?:if the site connection is secure|your browser)|verifying you are human/i.test(text))return true;
   if(/verify you are human|vérifiez que vous êtes humain|bestätigen sie,? dass sie ein mensch sind|unusual activity|activité inhabituelle|ungewöhnliche aktivität/i.test(text))return true;
   return [...doc.querySelectorAll('iframe')].some(frame=>{
    const label=[frame.getAttribute('title'),frame.getAttribute('src')].filter(Boolean).join(' ');
@@ -9,6 +11,53 @@ globalThis.FruchtComposer = {
    const r=frame.getBoundingClientRect();
    return r.width>100&&r.height>70;
   });
+ },
+ // Signed-out ChatGPT/Claude still shows an editor (anonymous chat): never send there (real check 02/11/2026).
+ loggedOut(doc){
+  const labels=[...doc.querySelectorAll('button,a')].filter(b=>this.visible(b)).map(b=>[b.getAttribute('aria-label'),b.innerText].filter(Boolean).join(' ').replace(/\s+/g,' ').trim());
+  // Labels are often doubled ("Log in Log in"): text + aria-label.
+  return labels.some(l=>/^(log in|sign in|se connecter|connexion|anmelden|einloggen)(?: \1)?$/i.test(l))
+   &&labels.some(l=>/^(?:sign up(?: for free)?|s.inscrire(?: gratuitement)?|registrieren|kostenlos registrieren)/i.test(l));
+ },
+ // Assistant replies, oldest first. Used to read only replies that appear after our prompt.
+ assistants(doc){
+  for(const selector of ['[data-message-author-role="assistant"]','[data-turn="assistant"]','[data-testid="assistant-message"]','.font-claude-response']){
+   const found=[...doc.querySelectorAll(selector)];if(found.length)return found;
+  }
+  return [];
+ },
+ // Content-policy refusal in a NEW short reply (P2-03). Long replies are never read as refusals.
+ refusal(doc,before){
+  const fresh=this.assistants(doc).filter(e=>!before?.has(e));
+  const last=fresh[fresh.length-1];if(!last)return null;
+  const text=String(last.innerText||last.textContent||'').trim();
+  if(!text||text.length>600)return null;
+  const patterns=[
+   /\bI(?:'|’)?m (?:not able|unable) to (?:help|create|generate|make|produce)|\bI (?:can(?:'|’)?t|cannot|am unable to) (?:help|create|generate|make|produce|assist)/i,
+   /violat\w* (?:our|the|my) (?:content|usage|image) (?:polic|guideline)|against (?:our|the|my) (?:content )?(?:policies|guidelines)|content polic(?:y|ies)/i,
+   /je ne peux pas (?:créer|générer|produire|réaliser|dessiner|t.aider|vous aider)|(?:enfrei\w*|contrevien\w*) (?:à )?(?:nos|les|mes) (?:règles|politiques|conditions)|politique de contenu/i,
+   /ich kann (?:dir |Ihnen )?(?:dabei |das |dieses Bild |so ein Bild )?(?:nicht|kein\w*) (?:helfen|erstellen|generieren|zeichnen)|versto(?:ß|ss)\w* gegen (?:unsere|die|meine) (?:Inhalts)?richtlinien|Inhaltsrichtlinien/i
+  ];
+  return patterns.some(p=>p.test(text))?text:null;
+ },
+ // Renewal delay announced by the provider, in seconds (P2-04): "resets in 22 hours and 16 minutes".
+ retryAfter(text,now=new Date()){
+  const value=String(text||'');
+  const units=[[/(\d+)\s*(?:hours?|heures?|h\b|Stunden?|Std\.?)/i,3600],[/(\d+)\s*(?:minutes?|min\b|Minuten?)/i,60],[/(\d+)\s*(?:days?|jours?|Tagen?|Tage)/i,86400]];
+  // Every anchor is tried: an unrelated "Try again" earlier on the page must not hide the real delay.
+  for(const m of value.matchAll(/(?:resets?|renouvel|réinitialis|zurückgesetzt|again|plus tard|erneut|more images|d.autres images|weitere Bilder)/gi)){
+   const zone=value.slice(Math.max(0,m.index-60),m.index+160);let total=0;
+   for(const [re,unit] of units){const n=zone.match(re);if(n)total+=Number(n[1])*unit;}
+   if(total>0)return total;
+  }
+  // Or an hour (« try again after 3:47 PM », « réessayez après 15 h 47 », « um 15:47 Uhr »): seconds until then, local time.
+  for(const m of value.matchAll(/(?:after|at|après|à|vers|um|ab|nach)\s+(\d{1,2})\s*(?::|h|\.)\s*(\d{2})\s*(a\.?m\.?|p\.?m\.?)?/gi)){
+   let h=Number(m[1]);const min=Number(m[2]),half=(m[3]||'').toLowerCase()[0];
+   if(half==='p'&&h<12)h+=12;if(half==='a'&&h===12)h=0;if(h>23||min>59)continue;
+   const at=new Date(now.getTime());at.setHours(h,min,0,0);if(at<=now)at.setDate(at.getDate()+1);
+   return Math.round((at-now)/1000);
+  }
+  return null;
  },
  visible(el) {
   if(!el || el.hidden || el.getAttribute('aria-hidden')==='true') return false;

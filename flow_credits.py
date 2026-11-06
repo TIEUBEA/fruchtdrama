@@ -33,7 +33,8 @@ def prepare(state,time):
         # Bootstrap depleted accounts even without an active production. Once
         # observed, follow the provider reset time. Never open all accounts at once.
         if not needs_funds and p.get('balance',0)>0 and p.get('credit_source')!='flow':continue
-        p['credit_probe']={'id':secrets.token_hex(8),'status':'queued','client':target['client'],'target':target,'created':stamp(time),'expires':stamp(time+180)}
+        # background: no production is waiting for it, so a closed FruchtDrama window is not reopened for it.
+        p['credit_probe']={'id':secrets.token_hex(8),'status':'queued','client':target['client'],'target':target,'created':stamp(time),'expires':stamp(time+180),'background':not needs_funds}
         return p
     return None
 
@@ -43,7 +44,7 @@ def claim(state,client,time):
     probe=profile['credit_probe']
     if probe['client']!=client or probe['status']!='queued':return None
     probe['status']='claimed';probe['expires']=stamp(time+180)
-    return {'id':probe['id'],'profile':profile['id'],'target':probe['target']}
+    return {'id':probe['id'],'profile':profile['id'],'target':probe['target'],'background':bool(probe.get('background'))}
 
 def report(state,client,body,time):
     p=next((p for p in state['profiles'] if p['id']==body.get('profile')),None)

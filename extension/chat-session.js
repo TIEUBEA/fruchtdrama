@@ -21,7 +21,7 @@ globalThis.FruchtChats={
  async tabFor(task,cfg,chrome){
   const provider=this.provider(task);
   // No reuse or navigation of a previous conversation. Recovery keeps active.tabId.
-  return chrome.tabs.create({url:provider==='claude'?'https://claude.ai/new':'https://chatgpt.com/',active:true});
+  return globalThis.FruchtWorkspace.createTab(chrome,{url:provider==='claude'?'https://claude.ai/new':'https://chatgpt.com/',active:false});
  },
  async queueClose(active,chrome){
   if(!this.isAI(active.task))return;
@@ -43,7 +43,7 @@ globalThis.FruchtChats={
      await chrome.scripting.executeScript({target:{tabId:tab.id},files:['composer.js','media.js','chat-session.js']});
      const owned=await chrome.tabs.sendMessage(tab.id,{type:'frucht-chat-owned',provider,tasks:[{id:active.task.id,job:active.task.job,kind:active.task.kind,prompt:active.task.payload.prompt}]});
      // A repurposed tab or a user draft is left open. Never close an unrelated chat.
-     if(owned?.task===active.task.id&&!owned.busy&&this.conversation(owned.url,provider))await chrome.tabs.remove([tab.id]);
+     if(owned?.task===active.task.id&&!owned.busy&&this.conversation(owned.url,provider))await globalThis.FruchtWorkspace.close(chrome,[tab.id]);
     }catch{
      await chrome.storage.local.set({status:'Résultat enregistré ; fermeture de son onglet IA en attente. Nouvelle tâche différée.'});
      return false;
@@ -57,7 +57,7 @@ globalThis.FruchtChats={
  async tidy(cfg,tasks,chrome){
   const completed=tasks.filter(t=>t.client===cfg.client&&t.status==='done'&&['chat_text','chat_image'].includes(t.kind));
   const protectedTabs=new Set(Object.values(cfg.scenarioTabs||{}).filter(x=>x.pending).map(x=>x.tabId));
-  if(cfg.activeTask)protectedTabs.add(cfg.activeTask.tabId);
+  for(const a of [cfg.activeTask,cfg.activeVideoTask])if(a)protectedTabs.add(a.tabId);
   const tabs=await chrome.tabs.query({url:['https://chatgpt.com/*','https://claude.ai/*']});
   const verified=[];
   for(const tab of tabs){
@@ -76,7 +76,7 @@ globalThis.FruchtChats={
   }
   const keep=protectedTabs;
   const close=verified.filter(x=>!keep.has(x.tab.id)).map(x=>x.tab.id);
-  if(close.length)await chrome.tabs.remove(close);
+  if(close.length)await globalThis.FruchtWorkspace.close(chrome,close);
   return {ok:true,closed:close.length,recognized:verified.length,message:close.length+' onglet(s) fermé(s), '+verified.length+' onglet(s) du studio reconnu(s). Conversations conservées ; onglets non identifiés laissés ouverts.'};
  }
 };
