@@ -9,6 +9,9 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 ## 0.1.90 (06/11/2026)
 Gestion des comptes et changement automatique, sans attente ni clic évitables (demande du propriétaire).
 
+**Accéléré**
+- L'extension regarde de nouveau le studio 3 s après chaque passage tant qu'une tâche tourne, au lieu d'attendre l'alarme de 30 s : une planche finie est vue tout de suite et la suivante part aussitôt (mesuré le 06/11 : planches à 59, 90, 120, 151 s, toujours des multiples de 30 s ; gain attendu ≈ 30 s par planche et par clip).
+
 **Corrigé**
 - Reprise d'un épisode alors que la fenêtre FruchtDrama était en ligne : « Ouverture automatique de Chrome et du compte Flow enregistré », puis « Ouverture Flow impossible (Chrome introuvable…) » et « Action requise » (cas réel 06/11). Cause : après la réinstallation de l'extension, l'ancien appairage n'avait jamais été désactivé (il tenait une tâche au moment du nouvel appairage) ; le studio comptait deux fenêtres « actives », laissait les comptes Flow sur l'ancienne et préparait le clip pour elle ; la fenêtre en ligne le refusait et le studio cherchait à ouvrir Chrome. Maintenant, quand plusieurs fenêtres sont actives, seules celles qui ont donné signe de vie depuis 3 min comptent ; les comptes Flow, les clips en file et les lectures de solde en file suivent la fenêtre en ligne (`rebind_flow_routes`). Un clip déjà parti garde sa fenêtre.
 - Rien n'est jamais lancé tant qu'une fenêtre FruchtDrama répond. Sans aucune fenêtre ouverte, Chrome démarre une seule fois **en arrière-plan, sans fenêtre** (`--no-startup-window`), sous Windows, macOS et Linux (`/opt/google/chrome/chrome`, `google-chrome`, `chromium`) ; l'extension reprend le clip dans sa fenêtre sans premier plan. Si Chrome ne démarre pas, l'épisode n'est plus mis en « Action requise » : le clip attend et part dès que la fenêtre est ouverte. Une lecture de solde en arrière-plan n'ouvre jamais Chrome.

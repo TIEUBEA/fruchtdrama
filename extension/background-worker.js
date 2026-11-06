@@ -368,6 +368,17 @@ async function poll(){
  preparing=true;let ok=false;
  try{ok=await prepare();}finally{preparing=false;}
  if(ok)await Promise.all([runLane('chat'),runLane('video')]);
+ if(ok)await soon();
+}
+// The 30 s alarm alone made every board wait up to 30 s to be seen, then up to 30 s more before the next one left
+// (06/11/2026: boards measured at 59, 90, 120, 151 s). While a task is followed or queued work may exist, look again
+// after FAST_POLL; each pass calls the studio, which keeps the service worker awake. The alarm stays as a safety net.
+const FAST_POLL=3000;let fastTimer=null,lastSoon=0;
+async function soon(){
+ if(fastTimer||Date.now()-lastSoon<FAST_POLL/2)return;lastSoon=Date.now();
+ const cfg=await chrome.storage.local.get(Object.values(LANE_KEY).concat(['enabled']));
+ if(!cfg.enabled&&!Object.values(LANE_KEY).some(k=>cfg[k]))return;
+ fastTimer=setTimeout(()=>{fastTimer=null;triggerPoll();},FAST_POLL);fastTimer?.unref?.();  // unref: node tests only
 }
 async function tabForTask(task,cfg,key){
  let tab;
