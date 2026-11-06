@@ -731,8 +731,22 @@ PLANS (règles de mise en scène) :
 def is_identical(j):
     return ((j.get('selected') or {}).get('source')=='owner_link' and j['config'].get('recreate')=='identical')
 
+def correction_ready(j):
+    return bool(is_identical(j) and j.get('rejected_script') and j.get('editorial_feedback'))
+
+def correction_prompt(j):
+    """Light rewrite, like the Atelier's « corrige et renvoie l'épisode ENTIER »: the refused script and its defects,
+    without the source images. A full rewrite took 5 to 7 min each time (real case 06/11/2026, 4 refusals = 47 min)."""
+    return ('Voici un scénario JSON refusé par le contrôle avant les images. Défauts à corriger : '
+            +json.dumps(j['editorial_feedback'],ensure_ascii=False)
+            +'\nCorrige UNIQUEMENT ces défauts : enlève des mots, n’allonge rien, ne change ni l’histoire, ni les personnages, ni l’ordre des scènes. '
+            'Pas de mots de taille (énorme, gros, géant, immense…) dans detail et tenue. Tout le reste reste identique.\n'
+            'Renvoie le JSON ENTIER corrigé, seul, sans commentaire, dans un bloc ```json.\n\n```json\n'
+            +json.dumps({k:v for k,v in j['rejected_script'].items() if k not in ('production_id','generation_task_id')},ensure_ascii=False)+'\n```')
+
 def script_prompt(j):
     if (j.get('variant') or {}).get('kind')=='language':return translation_prompt(j)
+    if correction_ready(j):return correction_prompt(j)
     ref=j['selected']; n=j['config']['scene_count']
     language=j['config'].get('language','Deutsch (de-DE)')
     schema={'production_id':j['id'],'title':'Titre dans la langue choisie','cover_title':'Question courte dans la langue choisie','hook_text':'Accroche écrite à l’écran pendant les 3 premières secondes : 4 à 7 mots, question ou promesse choc, sans révéler la fin','description':'Description TikTok dans la langue choisie, mentionnant la création par IA','lieu':'LE MONDE DE TOUT L’ÉPISODE, une fois : époque, lumière, matières ; aucun nom, aucun logo, aucun texte lisible','lieux':{'CUISINE':'la pièce décrite pour un dessinateur'},'su_du_public':'ce que le spectateur VOIT avant les personnages','cliffhanger':'la dernière réplique','characters':[{'id':'fruit_a','name':'Prénom dans la langue choisie','role':'protagoniste | antagoniste | témoin','appearance':'âge, TÊTE DE FRUIT décrite (couleur, matière, signe), vêtements précis, attitude','tenue':'la tenue en quelques mots, toujours la même','detail':'LE détail reconnaissable de loin (ex. une mèche blanche sur le front)','place':'sa place fixe dans le cadre vertical : « À DROITE — la prune violette en sweat gris »','voice':'Voix native de la langue choisie, âge, timbre, ton','veut':'ce qu’il veut','image_prompt':'Prompt de référence dans la langue choisie'}],'scenes':[{'title':'Titre court du plan (2 à 4 mots, MAJUSCULES, langue choisie)','sert':'moteur | obstacle | aggravation | twist | revanche | appel','apporte':'ce que le spectateur apprend de NEUF dans ce plan, une phrase','lieu':'CUISINE','characters':['fruit_a'],'muets':['personnages présents qui ne parlent pas'],'meaning':'Action compréhensible sans le son','montre':'CE QUE L’IMAGE MONTRE, en majuscules : qui, où, quel geste, quel objet, quelle émotion exagérée','cadre':'PLAN TAILLE / GROS PLAN… : qui est où dans le cadre vertical','camera':'ce que fait la caméra, quelques mots','actions':['ACTION 1.','ACTION 2.','LE GESTE QUI FERME LE PLAN et appelle le suivant.'],'image_prompt':'Prompt d’image dans la langue choisie, 9:16','video_prompt':'Animation, caméra, action, position des locuteurs, lèvres et personnages silencieux','dialogue':[{'speaker':'fruit_a','text':'Réplique courte dans la langue choisie, 10 mots au plus','jeu':'3 à 6 mots de jeu : « dans un souffle, les mains sur la bouche »'}]}],'state_changes':[{'from_scene':2,'character':'fruit_a','change':'Changement d’apparence visible à partir de cette scène (blessure, vêtement déchiré, objet perdu, maquillage coulé…), langue choisie'}]}
@@ -925,7 +939,7 @@ def schedule(j):
         add_task(j,'tiktok_search',{'query':query},'research')
     elif step=='script':
         if j.get('editorial_version')==2:editorial.direction(j,STATE['jobs'])
-        add_task(j,'chat_text',{'provider':j['config']['provider'],'prompt':script_prompt(j),'scene_count':j['config']['scene_count'],**({'attachments':source_attachments(j)} if source_attachments(j) else {})},'script')
+        add_task(j,'chat_text',{'provider':j['config']['provider'],'prompt':script_prompt(j),'scene_count':j['config']['scene_count'],**({'attachments':source_attachments(j)} if source_attachments(j) and not correction_ready(j) else {})},'script')
     elif step=='characters':
         if review_pending(j):
             # Nothing is paid before the owner has read the story (P1-1).
@@ -1437,8 +1451,13 @@ def accept_task_result(t,result):
             event(j,('Histoires' if slot=='ideas' else 'Fiche')+' inexploitable : '+str(e)+(' Nouvelle demande envoyée.' if j['status']=='running' else ''))
             schedule(j);return
     elif slot=='script':
-        try:store_script(j,parse_json(result.get('text','')))
+        draft=None
+        try:
+            draft=parse_json(result.get('text',''));store_script(j,draft);j.pop('rejected_script',None)
         except ValueError as e:
+            # Kept for a light correction (Atelier-like): the next request sends this script and its defects only.
+            if isinstance(draft,dict) and is_identical(j) and isinstance(draft.get('scenes'),list) and len(draft['scenes'])==j['config']['scene_count']:j['rejected_script']=draft
+            else:j.pop('rejected_script',None)
             # Editorial refusals and structurally invalid JSON share the same bounded rewrite.
             t['status']='failed';t['error']=str(e);j['editorial_attempts']=j.get('editorial_attempts',0)+1
             j['editorial_feedback']=[str(e)];j['stage']='script'

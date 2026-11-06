@@ -68,3 +68,17 @@ class RichPlanTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class LightCorrectionTests(unittest.TestCase):
+    def test_refused_remake_is_corrected_from_its_own_json_without_images(self):
+        j = {'id': 'x', 'events': [], 'selected': {'source': 'owner_link'}, 'config': {'recreate': 'identical', 'scene_count': 1},
+             'editorial_feedback': ['Scène 1 : 30 mots'], 'rejected_script': dict(script(), generation_task_id='old', production_id='x')}
+        self.assertTrue(s.correction_ready(j))
+        prompt = s.correction_prompt(j)
+        self.assertIn('Scène 1 : 30 mots', prompt)
+        self.assertIn('JSON ENTIER', prompt)
+        self.assertNotIn('old', prompt)
+        j['config']['recreate'] = 'inspired'
+        self.assertFalse(s.correction_ready(j))
+

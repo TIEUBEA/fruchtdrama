@@ -14,6 +14,7 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 - La consigne d'écriture interdit d'avance les mots de taille dans le détail et la tenue des personnages (avant, seul le contrôle les refusait).
 
 **Ajouté**
+- Réécriture légère, comme l'Atelier : après un refus en recréation à l'identique, ChatGPT reçoit son scénario refusé et la liste des défauts, sans les images, et ne corrige que ces points (1 à 2 min au lieu de 5 à 7).
 - `tools/temps_etapes.py` : temps de chaque étape d'un épisode comparé à l'Atelier (`docs/sudf/TEMPS-ATELIER.md`).
 
 ## 0.1.87 — 06/11/2026
