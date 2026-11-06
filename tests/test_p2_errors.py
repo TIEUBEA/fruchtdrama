@@ -111,6 +111,7 @@ class BridgeTests(unittest.TestCase):
         # 0.1.99: a restart never stops the episode; the task stays with its window.
         s.recover_after_restart(); self.assertEqual(t2['status'], 'claimed'); self.assertEqual(j2['status'], 'running')
         # An episode stopped by an older restart on a text or board starts again by itself.
+        t2['status'] = 'done'  # one board at a time per window (0.1.102)
         j3 = job(); j3['status'] = 'running'; s.schedule(j3); t3 = self.claim(); t3['status'] = 'failed'
         j3['status'] = 'attention'; j3['last_error'] = {'kind': 'restart', 'task': t3['id']}
         s.recover_after_restart(); self.assertEqual(j3['status'], 'running'); self.assertFalse(j3['last_error'])
@@ -136,6 +137,17 @@ class BridgeTests(unittest.TestCase):
         s.STATE['tasks'].append(q)
         info = s.stall_info(j)
         self.assertIn('ne prend plus aucune tâche', info['reason']); self.assertIn('chrome://extensions', info['hint'])
+
+
+    def test_one_board_at_a_time_per_window(self):
+        # 0.1.102: two boards sent at once by the same window both failed (ChatGPT attachment field missing).
+        for k in ('a', 'b'):
+            j = job(); j['status'] = 'running'
+            s.STATE['tasks'].append({'id': 'img' + k, 'job': j['id'], 'kind': 'chat_image', 'slot': 'image:0', 'status': 'queued', 'payload': {'provider': 'chatgpt'}, 'created': s.now()})
+        first = self.req('/api/bridge/task?client=' + self.client + '&lane=chat', headers=self.auth)
+        self.assertEqual(first['kind'], 'chat_image')
+        second = self.req('/api/bridge/task?client=' + self.client + '&lane=chat', headers=self.auth)
+        self.assertTrue(second is None or second['kind'] != 'chat_image')
 
 
 if __name__ == '__main__':

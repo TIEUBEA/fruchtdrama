@@ -14,6 +14,7 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 - Scénario : une réplique trop longue, une troisième réplique, une accroche trop longue, un détail d'accroche absent des prompts ou une fiche de concepts mal remplie sont maintenant corrigés par le studio, sans réécriture. Seul un vrai défaut provoque encore un refus : histoire déjà faite, scènes manquantes, mauvaise langue.
 - Transcription locale lancée seulement quand les sous-titres sont activés.
 - Clip que ni Flow ni Grok n'ont pu faire : la planche, avec un zoom lent, le remplace, et la vidéo va jusqu'au montage. Un bandeau le signale, et « Refaire » reste possible. Exception : un envoi Flow incertain (clip peut-être déjà facturé) garde la vérification.
+- Planches : une à la fois par fenêtre ; les scénarios restent en parallèle. Deux planches envoyées en même temps échouaient toutes les deux (« champ de pièce jointe indisponible »). Les épisodes arrêtés ainsi repartent seuls.
 - Bloc « Contrôle qualité des clips » affiché seulement s'il y a quelque chose à faire. Les lignes « correspondance avec le scénario » sont retirées.
 
 ## 0.1.101 (06/11/2026)
