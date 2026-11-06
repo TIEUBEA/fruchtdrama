@@ -4,6 +4,7 @@ TEMP=tempfile.TemporaryDirectory()
 os.environ['FRUCHT_DATA']=TEMP.name
 SPEC=importlib.util.spec_from_file_location('studio',pathlib.Path(__file__).parents[1]/'server.py')
 s=importlib.util.module_from_spec(SPEC); SPEC.loader.exec_module(s)
+from tests import accounts_ready; accounts_ready.install(s)  # 0.1.91: accounts ready before starting
 
 def script(n=4):
     return {'title':'Omas Reise','cover_title':'MUSS OMA GEHEN?','description':'Eine originelle KI-Geschichte.','characters':[{'id':'orange','name':'Oma','appearance':'Orange, cremefarbener Cardigan','voice':'Warme ältere Stimme','image_prompt':'Figurenreferenz, Orange'}], 'scenes':[{'characters':['orange'],'meaning':'Ein Koffer steht neben Oma.','image_prompt':'Oma mit Koffer','video_prompt':'Ein ruhiger Plan.','dialogue':[{'speaker':'orange','text':'Wir fahren heute gemeinsam ans Meer.'}]} for _ in range(n)]}

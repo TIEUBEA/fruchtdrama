@@ -6,6 +6,29 @@ correspondante (P0-xx, P1-x, P2-xx) détaillée dans `docs/sudf/`. Guide pour re
 version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, version par version).
 
 
+## 0.1.91 (06/11/2026)
+Les comptes se règlent dans **Mes comptes, avant de commencer** (demande du propriétaire : « la connexion, les vérifications anti-robot, on devrait faire ça dans le menu Comptes et ajouter tous les comptes avant de commencer quoi que ce soit »). Cas réel : en pleine production, deux clips Flow ont échoué « Page du fournisseur indisponible ou vide après 90 secondes » et l'épisode est passé en « Action requise » ; il a fallu chercher l'onglet en arrière-plan.
+
+**Ajouté**
+- **Préparer mes comptes** (gros bouton en haut de Mes comptes, et tout seul à chaque ouverture de la fenêtre FruchtDrama) : ChatGPT, Claude s'il sert, Grok / Arena s'ils sont enregistrés et **chaque compte Google Flow** sont ouverts dans un onglet en arrière-plan et lus comme avant une tâche (bon site, zone de saisie présente, pas de page de connexion, pas de vérification anti-robot, compte Google attendu) ; le solde Flow est relu au passage. Résultat par compte : **Prêt**, **À régler** avec la raison exacte, ou **Pas d'accès**. Aucun prompt envoyé, aucun crédit dépensé, aucune vérification contournée, rien au premier plan.
+- **Régler maintenant** sur un compte « À régler » : sur ton clic seulement, l'onglet de ce compte passe devant ; tu te connectes ou tu résous la vérification toi-même, puis **C'est fait** revérifie ce compte.
+- **Avant chaque production** (Créer, Recréer, Boucle complète, Reprendre) : si un service nécessaire est connu « À régler », rien n'est lancé et un bandeau « Comptes à régler avant de commencer » donne la liste et le lien vers Mes comptes. Ce qui n'a pas été vérifié depuis 15 min est relu d'abord (quelques secondes, 2 comptes Flow au plus) ; sans réponse en 2 min, la production part quand même. Les comptes Flow non prêts sont simplement écartés de la bascule s'il en reste un prêt avec assez de crédits.
+- **Première étape** : tant qu'il n'y a pas un compte prêt pour ChatGPT et pour un moteur de clips (Google Flow ou Grok), Créer affiche « Ajoute tes comptes pour commencer » avec un bouton vers Mes comptes, et le studio refuse de lancer.
+- **Deux clips Flow en même temps** sur deux comptes Google différents, chacun dans son onglet (réglage `parallel_flow`, 2 par défaut, 1 à 4) : jamais deux clips sur le même compte, donc jamais deux réservations sur les mêmes crédits ni deux tâches dans le même onglet. L'extension a une seconde voie vidéo qui ne prend un clip que pendant que la première travaille. **Recharger l'extension FruchtDrama.**
+
+**Corrigé**
+- Page fournisseur qui ne s'ouvre pas pendant la production : la raison exacte est dite (« Vérification anti-robot à faire », « Connexion requise », « Autre compte Google ouvert », « Page vide »), le compte est marqué « À régler » dans Mes comptes, la réservation est annulée (rien n'a été envoyé) et le clip part aussitôt sur le compte Flow prêt suivant. L'épisode ne passe en « Action requise » que s'il ne reste aucun compte prêt, avec la liste des comptes à régler.
+- Le menu latéral disait « Mes comptes · tout est prêt » alors que Flow bloquait l'épisode (cas réel 06/11 12:46) : il dit maintenant l'état réel (« 1 compte à régler », « ChatGPT bloqué jusqu'à 15:47 », « Flow bloqué jusqu'à 08:05 », « ajoute tes comptes »).
+
+**Simplifié : Mes comptes**
+- Avant : bandeau de fenêtre, six cartes de sessions, tableau Flow, onze réglages ouverts, tableau des adresses à cocher, onglets techniques ; pas de bouton clair pour ajouter ou retirer un compte.
+- Après : un bloc par service (ChatGPT, Google Flow, Grok, Claude, Arena), une ligne par compte (adresse en partie masquée, état, crédits pour Flow), un gros bouton **+ Ajouter un compte** (le service s'ouvre dans l'onglet d'à côté, tu te connectes toi-même, tu reviens et tu cliques **Vérifier**), **Supprimer** par compte et **Tout supprimer** par service (avec confirmation et sauvegarde). Les réglages sont repliés, tout le reste est dans **Avancé**, fermé.
+- Limite de quota sur tous les comptes d'un service : bandeau « Grok bloqué par le quota jusqu'à 16:04. Attends, ou ajoute un compte » avec **Attendre** (reprise automatique à l'heure dite) et **Ajouter un compte**.
+
+**Reste impossible ou risqué (non fait)**
+- Deux comptes ChatGPT en même temps : un profil Chrome n'a qu'une session ChatGPT. Deux planches en parallèle dans deux onglets du même compte ChatGPT n'est pas livré : la limite d'images est par compte (deux conversations la consomment deux fois plus vite sans gagner de temps une fois la limite atteinte), et le suivi des onglets ChatGPT (une conversation par épisode) devrait être réécrit et essayé sur un vrai compte. Aucun autre fournisseur d'images n'existe dans le code.
+- Grok / Arena : un compte à la fois (une session par site) ; le changement de compte reste guidé.
+
 ## 0.1.90 (06/11/2026)
 Gestion des comptes et changement automatique, sans attente ni clic évitables (demande du propriétaire).
 

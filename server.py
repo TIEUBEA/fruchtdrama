@@ -24,7 +24,8 @@ import power
 import maintenance
 import series
 import licence
-VERSION='0.1.90'
+import readiness
+VERSION='0.1.91'
 OFFICIAL_ORIGIN='chrome-extension://bhdmibhibonmaamgcbpmbhedhohfongj'  # extension/manifest.json "key"
 import sys
 import traceback
@@ -106,6 +107,24 @@ def delete_profile(id):
     for c in STATE['clients'].values():
         if c.get('flow_profile')==id:c['flow_profile']=None
     STATE['profiles'].remove(p)
+def remove_service_accounts(service):
+    """Every account of one service leaves the studio (Flow profiles, Grok / Arena rotation, addresses). Returns (removed, kept)."""
+    removed,kept=0,[]
+    if service=='flow':
+        for p in list(STATE['profiles']):
+            try:delete_profile(p['id']);removed+=1
+            except ValueError:kept.append(p.get('flow_email') or p.get('label') or p['id'])
+    if service in ('grok','arena'):
+        for a in list(engine_accounts.accounts(STATE,service)):
+            if engine_accounts.busy(STATE,a):kept.append(a['email']);continue
+            STATE['engine_accounts'].remove(a);removed+=1
+    for i in STATE.setdefault('identities',[]):
+        if service in i.get('services',[]):
+            i['services'].remove(service)
+            if service in ('chatgpt','claude'):removed+=1
+    if service in ('chatgpt','claude','grok','arena'):readiness.store(STATE)['sites'].pop(service,None)
+    return removed,kept
+
 def client_accepts(client,task):
     role=client.get('role','all')
     if task['kind'] in ('flow_video','flow_collect'):
@@ -124,6 +143,67 @@ VIDEO_KINDS=('flow_video','flow_collect','engine_video')
 def lane_of(task): return 'video' if task.get('kind') in VIDEO_KINDS or (not task.get('kind') and str(task.get('slot','')).startswith('clip:')) else 'chat'  # no kind: manual import
 def lane_busy(j,lane): return any(t['job']==j['id'] and t['status'] in ('queued','claimed') and lane_of(t)==lane for t in STATE['tasks'])
 def event(j, text): j['events'].append({'at':now(),'text':text}); j['updated']=now()
+
+# Parallel clips (owner 06/11/2026: « deux comptes en même temps »): several Flow clips at once, one per Google account,
+# each in its own tab. Never twice the same account at once, so a reservation is never made twice on the same credits.
+def parallel_cap():
+    try:return max(1,min(4,int(STATE.get('settings',{}).get('parallel_flow',2))))
+    except (TypeError,ValueError):return 2
+def video_tasks(j): return [t for t in STATE['tasks'] if t['job']==j['id'] and t['status'] in ('queued','claimed') and lane_of(t)=='video']
+def video_slots(j):
+    if engines.of(j)!='flow' or j['config'].get('dry_run') or not STATE.get('settings',{}).get('flow_auto') or not STATE.get('settings',{}).get('parallel_clips',True):return 1
+    return parallel_cap()
+def busy_flow_profiles(): return {t.get('profile') for t in STATE['tasks'] if t.get('kind') in ('flow_video','flow_collect') and t['status'] in ('queued','claimed') and t.get('profile')}
+
+class AccountsNotReady(ValueError):
+    """« Comptes à régler avant de commencer »: nothing is launched; the page shows the list and a link to Mes comptes."""
+    def __init__(self,blockers):
+        self.blockers=blockers;super().__init__('Comptes à régler avant de commencer : '+readiness.describe(blockers)+'. Règle-les dans Mes comptes.')
+
+def gate_blockers(j,setup=True):
+    """Known reasons not to start this production now (first step: accounts added; then nothing known « À régler »)."""
+    eligible=lambda p:flow_accounts.eligible(STATE,p)
+    out=readiness.setup_missing(STATE) if setup else []
+    return out+readiness.blockers(STATE,j['config'],j.get('stage','research'),int(j['config'].get('flow_cost',12)),time.time(),eligible,j.get('flow_profile'))
+
+def window_online():
+    return any(client_online(c) and c.get('role','all') in ('all','flow') for c in STATE['clients'].values())
+
+def request_readiness(sites,profiles,background=False,job=None):
+    """Ask the FruchtDrama window to read these services and Flow accounts (read only: no credit, no prompt)."""
+    rid=uid();targets=[readiness.profile_target(p,flow_accounts.account_home) for p in STATE['profiles'] if p['id'] in profiles and p.get('flow_url')]
+    queue=STATE.setdefault('bridge_requests',[])
+    if not job:queue[:]=[r for r in queue if not (r.get('type')=='readiness' and not r.get('job'))]  # one owner check waiting at most
+    queue.append({'type':'readiness','id':rid,'sites':list(sites),'profiles':targets,'background':bool(background),**({'job':job} if job else {})})
+    r=readiness.store(STATE);r['requested']=now()
+    r['pending']=list(dict.fromkeys(r.get('pending',[])+['site:'+n for n in sites]+['flow:'+x['id'] for x in targets]))
+    return rid
+
+def start_check(j):
+    """Before a production starts: read what is not known recently. True when it may start right away."""
+    need=readiness.checks_needed(STATE,j['config'],j.get('stage','research'),int(j['config'].get('flow_cost',12)),time.time(),lambda p:flow_accounts.eligible(STATE,p))
+    if not (need['sites'] or need['profiles']) or not window_online():return True
+    j['accounts_check']={'at':now(),'id':request_readiness(need['sites'],need['profiles'],job=j['id'])}
+    names=[readiness.SITE_LABELS[n] for n in need['sites']]+(['compte(s) Google Flow'] if need['profiles'] else [])
+    event(j,'Vérification des comptes avant de commencer ('+', '.join(names)+') : quelques secondes, sans crédit ni prompt.');return False
+
+def end_check(j,timeout=False):
+    """The check came back (or never did): start, or stop cleanly with the list of accounts to fix."""
+    j.pop('accounts_check',None)
+    if j.get('status')!='running':return
+    if timeout:
+        event(j,'Vérification des comptes sans réponse : production lancée ; un compte qui ne répond pas sera écarté pendant la production.');schedule(j);return
+    found=gate_blockers(j,setup=False)
+    if found:
+        j['status']='attention';alert(j,'action','Comptes à régler avant de commencer : '+readiness.describe(found)+'. Ouvre Mes comptes, « Régler maintenant », puis Reprendre.');return
+    event(j,'Comptes prêts : la production démarre.');schedule(j)
+
+def readiness_tick(moment=None):
+    moment=moment or time.time();changed=False
+    for j in STATE['jobs']:
+        c=j.get('accounts_check')
+        if c and moment-flow_credits.seconds(c.get('at'))>readiness.CHECK_TIMEOUT:end_check(j,timeout=True);changed=True
+    return changed
 
 COVER_REVIEW_PROMPT=('Review the attached TikTok COVER image. Do not generate an image. Check: the title text is fully visible, '
     'spelled correctly in {language} and readable on a phone; no cut-off face or text; no extra limbs or deformed faces; the characters look like '
@@ -277,6 +357,7 @@ def public_state():
         public['stall']=stall_info(j)
     s['quota_status']=quotas.summary(STATE,time.time());s['version']=VERSION
     s['accounts']=identities.view(STATE,time.time(),int(STATE['settings'].get('flow_cost',12)));s.pop('extension_origin',None)
+    s['setup']=readiness.setup_missing(STATE);s.setdefault('readiness',{'sites':{},'pending':[]})
     s['key_saved']=bool(STATE['clients'])  # an extension holds the key once it has paired, manually or automatically
     s['ffmpeg']=bool(shutil.which('ffmpeg'))
     s['licence']=LICENCE.view()
@@ -491,6 +572,10 @@ def dispatch_once():
     except Exception as e:log_error('File de nuit',e)
     try:wake_waiting()
     except Exception as e:log_error('Réveil des productions en attente',e)
+    try:
+        with LOCK:
+            if readiness_tick():save()
+    except Exception as e:log_error('Vérification des comptes',e)
     try:flow_dispatch_tick()
     except Exception as e:
         # An unavailable account must not stop the HTTP server, but the failure must stay diagnosable.
@@ -864,7 +949,7 @@ def landscape(text):
     text=re.sub(r'portrait 9:16','landscape 16:9',str(text));text=text.replace('9:16','16:9')
     return re.sub(r'\bvertical\b','horizontal',re.sub(r'\bportrait\b','landscape',text))
 
-def add_task(j, kind, payload, slot):
+def add_task(j, kind, payload, slot, profile=None):
     if horizontal(j) and kind in ('chat_image','flow_video','engine_video') or (horizontal(j) and kind=='chat_text' and slot=='script'):
         payload={**payload,'prompt':landscape(payload.get('prompt','')),'aspect':'16:9'}
     if kind=='chat_image' and j.get('refusal_levels',{}).get(slot):
@@ -881,7 +966,7 @@ def add_task(j, kind, payload, slot):
     if kind=='chat_text' and payload.get('provider')=='claude':
         # The extension selects this model and effort in claude.ai before sending (older episodes: defaults).
         payload={**payload,**{k:j.get('config',{}).get(k) or CLAUDE_DEFAULTS[k] for k in CLAUDE_DEFAULTS}}
-    t={'id':uid(),'job':j['id'],'kind':kind,'payload':payload,'slot':slot,'status':'queued','created':now(),'profile':j.get('flow_profile') if kind=='flow_video' else None}
+    t={'id':uid(),'job':j['id'],'kind':kind,'payload':payload,'slot':slot,'status':'queued','created':now(),'profile':(profile or j.get('flow_profile')) if kind=='flow_video' else None}
     STATE['tasks'].append(t); j['status']='running'; event(j,f"Tâche préparée : {slot}")
 
 def cover_prompt(j):
@@ -995,6 +1080,8 @@ def approve_sheet(j,sheet,title_index,hook_index,message,call_index=0):
 def schedule(j):
     # Consultation only (access ended, revoked, unchecked for 3 days): nothing advances, nothing is sent or paid.
     if not LICENCE.allowed(): return
+    # « Préparer mes comptes » before starting: nothing is queued until the check answers (2 min at most).
+    if j.get('accounts_check'): return
     if j['status']=='waiting_quota' and j.get('quota_lane')=='chat' and j['stage']=='images':
         # ChatGPT at its image limit: the boards wait, the clips of the boards already drawn keep going (Flow, Grok).
         early_clip(j);return
@@ -1002,6 +1089,8 @@ def schedule(j):
     step=j['stage']
     # The boards stage works on two lanes (see VIDEO_KINDS); every other stage waits for the episode's single task.
     if step=='images':return schedule_images(j)
+    if step=='clips' and not any(t['job']==j['id'] and t['status'] in ('queued','claimed') and lane_of(t)=='chat' for t in STATE['tasks']):
+        if schedule_clips(j):return
     if any(t['job']==j['id'] and t['status'] in ('queued','claimed') for t in STATE['tasks']): return
     if step=='ideas':
         if j.get('ideas'):
@@ -1040,8 +1129,6 @@ def schedule(j):
                 add_task(j,'chat_image',{'provider':'chatgpt','prompt':state_sheet_prompt(j,change)+correction(j.get('corrections',{}).get(f'state:{k}')),'attachments':[asset_url(j,state_base(j,change))]},f'state:{k}');return
         j['stage']='images'; schedule(j)
     elif step=='clips':
-        for i,s in enumerate(j['scenes']):
-            if not s.get('clip'):schedule_clip(j,i);return
         if j.get('quality_version')==1:
             j['stage']='quality';schedule(j);return
         if j.get('cover_style') in ('dramatic_v2','family_poster_v3'):
@@ -1089,17 +1176,36 @@ def board_ready(j,i):
     if not j['scenes'][i].get('image'):return False
     return j['config'].get('board_controls','none')=='none' or bool(j.get('board_checked'))
 
+def schedule_clips(j):
+    """Clips stage. Returns True while clips remain to make (queued, in flight or waiting); False when every clip is in.
+    One clip first (unchanged rules: switch, wait for credits); then, with Flow and the automatic switch, more clips at
+    once on other ready accounts, up to the « clips en parallèle » setting."""
+    active=video_tasks(j);busy={int(t['slot'].split(':')[1]) for t in active if str(t.get('slot','')).startswith('clip:')}
+    todo=[i for i,s in enumerate(j['scenes']) if not s.get('clip') and i not in busy]
+    if not todo:return bool(active)
+    if not active:
+        schedule_clip(j,todo.pop(0))
+        if j['status']!='running':return True
+        active=video_tasks(j)
+        if not active:return True
+    for i in todo[:max(0,video_slots(j)-len(active))]:
+        if not schedule_clip(j,i,early=True,parallel=True):break
+    return True
+
 def early_clip(j):
     """Atelier-like: a clip leaves for Flow/Grok while ChatGPT still draws the next boards. Only when everything is
     ready; otherwise nothing is changed and the clips stage, after the boards, waits and says why as before."""
     if not STATE.get('settings',{}).get('parallel_clips',True) or j['config'].get('dry_run') or j.get('early_clips_off'):return False
-    if lane_busy(j,'video') or uncertain_clip_tasks(j):return False
-    i=next((i for i,s in enumerate(j['scenes']) if not s.get('clip') and board_ready(j,i)),None)
-    return i is not None and schedule_clip(j,i,early=True)
+    active=video_tasks(j)
+    if len(active)>=video_slots(j) or uncertain_clip_tasks(j):return False
+    busy={int(t['slot'].split(':')[1]) for t in active if str(t.get('slot','')).startswith('clip:')}
+    i=next((i for i,s in enumerate(j['scenes']) if not s.get('clip') and i not in busy and board_ready(j,i)),None)
+    return i is not None and schedule_clip(j,i,early=True,parallel=bool(active))
 
-def schedule_clip(j,i,early=False):
+def schedule_clip(j,i,early=False,parallel=False):
     """Queue clip i (Flow, or Grok/Arena). early=True (during the boards): returns False without touching the
-    episode when an account, credits or a check is missing. Returns True when a task was queued or the episode waits."""
+    episode when an account, credits or a check is missing. Returns True when a task was queued or the episode waits.
+    parallel=True: an extra clip while another one works: another ready account only, the episode's account unchanged."""
     s=j['scenes'][i]
     if engines.of(j)!='flow':
         # P5-06: Grok / Arena. No credit balance to reserve; quotas are handled per account.
@@ -1129,7 +1235,22 @@ def schedule_clip(j,i,early=False):
         if early:return False
         j['status']='attention';event(j,uncertain_message(j));return True
     flow_accounts.follow_active_browser(STATE)
-    cost=j['config']['flow_cost'];p=flow_accounts.choose(STATE,j.get('flow_profile'),cost)
+    cost=j['config']['flow_cost'];busy=busy_flow_profiles()
+    if parallel:
+        p=flow_accounts.choose(STATE,None,cost,exclude=busy)
+        if not p or p['balance']<cost or not flow_accounts.route(p):return False
+    else:p=flow_accounts.choose(STATE,j.get('flow_profile'),cost,exclude=busy)
+    if not p and busy and flow_accounts.choose(STATE,j.get('flow_profile'),cost):
+        # Every account able to pay already works on a clip: this one waits its turn (nothing changes, no message).
+        return not early
+    if not p and STATE.get('settings',{}).get('flow_auto'):
+        unready=[x for x in readiness.candidates(STATE,cost,lambda x:flow_accounts.eligible(STATE,x)) if not flow_accounts.usable(x)]
+        if unready:
+            # Accounts with credits exist but none is ready: only now « Action requise », with the exact reasons.
+            if early:return False
+            j['status']='attention'
+            alert(j,'action','Aucun compte Google Flow prêt : '+'; '.join(readiness.mask(x.get('flow_email') or x.get('label'))+' : '+readiness.reason_of(x.get('readiness')) for x in unready)+'. Ouvre Mes comptes, « Régler maintenant » puis « C’est fait » : la production reprend avec Reprendre.')
+            return True
     if not p or p['balance']<cost:
         if early:return False
         j['status']='waiting_credit'
@@ -1138,7 +1259,7 @@ def schedule_clip(j,i,early=False):
             event(j,f'Plus aucun compte Flow avec {cost} crédits : le clip part tout seul dès qu’un compte est rechargé'+(' (premier vers '+clock_in(back)+')' if back else '')+' ou ajouté. Clips reçus conservés.')
         else:event(j,'Solde insuffisant ou profil Flow absent. Choisis un profil et vérifie son solde.')
         return True
-    if p['id']!=j.get('flow_profile'):
+    if p['id']!=j.get('flow_profile') and not parallel:
         previous=profile_by(j.get('flow_profile'))
         j['flow_profile']=p['id'];event(j,'Passage automatique au compte Flow '+(p.get('flow_email') or p.get('label') or '')+f" ({p['balance']} crédits)"+(' : '+(previous.get('flow_email') or previous.get('label') or '')+(' sans accès à Flow' if previous.get('blocked')=='unavailable' else ' vide') if previous else '')+' ; clips reçus conservés.')
     cast='\n'.join(c['id']+': '+c['appearance']+' Voice: '+c['voice'] for c in j['characters'])
@@ -1153,7 +1274,8 @@ def schedule_clip(j,i,early=False):
         if existing:target['url']=existing
         else:target['new_project']=True
         payload['flow_route']=target
-    add_task(j,'flow_video',payload,f'clip:{i}');return True
+    if parallel:event(j,'Clip '+str(i+1)+' en parallèle sur le compte Flow '+readiness.mask(p.get('flow_email') or p.get('label'))+f" ({p['balance']} crédits).")
+    add_task(j,'flow_video',payload,f'clip:{i}',profile=p['id']);return True
 
 def uncertain_clip_tasks(j):
     """Flow submissions that may have been charged but whose clip was never received."""
@@ -1531,10 +1653,11 @@ def accept_task_result(t,result):
                 j['status']='waiting_quota';j['wait_until']=moment+(errors.retry_after(result) or engine_accounts.DEFAULT_WALL)
                 event(j,'Limite atteinte sur ce compte. Reprise automatique vers '+clock_in(j['wait_until'])+'. Enregistrez d’autres comptes dans Connexions pour changer de compte.')
             return
-        if t.get('kind')=='flow_video' and result.get('generation_submitted') is False and result.get('flow_blocked') in ('credits','unavailable') and t.get('payload',{}).get('flow_route'):
+        note_not_ready(t,result)
+        if t.get('kind')=='flow_video' and result.get('generation_submitted') is False and result.get('flow_blocked') in ('credits','unavailable','not_ready') and t.get('payload',{}).get('flow_route'):
             # No credits, or no Flow access at all for this Google account: skip it, switch to the next one.
             p=profile_by(t.get('profile'))
-            if p:p['blocked']=result['flow_blocked']
+            if p and result['flow_blocked']!='not_ready':p['blocked']=result['flow_blocked']
             if not was_paused and STATE.get('settings',{}).get('flow_auto'):
                 j['status']='running';schedule(j)
         if lane_of(t)=='video' and j.get('stage')=='images' and j['status']=='attention' and not was_paused:
@@ -1621,6 +1744,7 @@ def accept_task_result(t,result):
             j['cover_file']=file;j['cover']=asset_url(j,file)
         event(j,'Média reçu : '+file)
     t['status']='done'; t['result']=result;t['done_at']=now()  # done_at: Studio counts per 6 h
+    if t.get('kind')=='flow_video' and profile_by(t.get('profile')):profile_by(t['profile'])['readiness']={'state':'ready','reason':'','at':now()}
     # A success clears the episode's last error only on its own lane: a board received does not erase a failed clip.
     failed=next((x for x in STATE['tasks'] if x.get('id')==(j.get('last_error') or {}).get('task')),None)
     if not failed or lane_of(failed)==lane_of(t):j.pop('last_error',None)
@@ -1628,6 +1752,15 @@ def accept_task_result(t,result):
     j.get('refusal_levels',{}).pop(slot,None)
     if was_paused: j['status']='paused'
     schedule(j)
+
+def note_not_ready(t,result):
+    """A provider page that did not open (sign-in, anti-robot check, empty page): the account is marked « À régler » in
+    Mes comptes with the exact reason, and the next ready Flow account takes the clip."""
+    info=result.get('not_ready')
+    if not isinstance(info,dict) or info.get('state') not in readiness.NOT_READY:return False
+    kind=t.get('kind');payload=t.get('payload') or {}
+    key=('flow:'+str(t.get('profile'))) if kind=='flow_video' else ('site:'+str(payload.get('engine'))) if kind=='engine_video' else ('site:'+str(payload.get('provider') or 'chatgpt')) if kind in ('chat_text','chat_image','chat_collect','chat_image_collect') else None
+    return bool(key) and readiness.mark(STATE,key,info['state'],str(info.get('reason') or 'page du fournisseur indisponible'),now())
 
 def run_command(args,cwd=None):
     r=subprocess.run(args,capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=240,cwd=cwd)
@@ -1833,7 +1966,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     if not self.auth_bridge():return self.send_json({'error':'Appairage requis'},401)
                     c=STATE['clients'].get(urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get('client',[''])[0])
                     if not c or c.get('disabled') or c.get('role') not in ('all','flow'):return self.send_json([])
-                    pending=STATE.get('bridge_requests',[]);STATE['bridge_requests']=[];save();return self.send_json(pending)
+                    pending=STATE.get('bridge_requests',[])
+                    if urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get('light',[''])[0]=='1':
+                        # A task is running: only the owner's clicks that show a tab are done now; checks wait for idle lanes.
+                        quick=[r for r in pending if r.get('type') in ('open','show','add_google')]
+                        STATE['bridge_requests']=[r for r in pending if r not in quick];save();return self.send_json(quick)
+                    STATE['bridge_requests']=[];save();return self.send_json(pending)
                 if path=='/api/report':
                     # P4-1: copiable failure report, without token, pairing code or e-mail addresses.
                     if self.headers.get('Sec-Fetch-Site')=='cross-site': return self.send_json({'error':'Accès local requis'},403)
@@ -1867,8 +2005,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         j=job_by(t['job'])
                         if t['status']!='queued' or not (j['status']=='running' or (j['status']=='waiting_quota' and j.get('quota_lane')=='chat' and lane_of(t)=='video')): continue
                         if not client_accepts(c,t) or (lane and lane_of(t)!=lane): continue
+                        if lane_of(t)=='video':
+                            # Several video tasks per window (parallel clips), each in its own tab: at most the setting, one Grok/Arena.
+                            mine=[o for o in STATE['tasks'] if o['status']=='claimed' and lane_of(o)=='video' and o.get('client')==client]
+                            if len(mine)>=(parallel_cap() if lane else 1):continue
+                            if t['kind']=='engine_video' and any(o.get('kind')=='engine_video' for o in mine):continue
                         if t['kind']=='flow_video':
-                            if any(other['kind'] in ('flow_video','flow_collect') and other['status']=='claimed' for other in STATE['tasks']):continue
+                            # Never two clips on the same account at once: one reservation per account, one tab per project.
+                            if any(other['kind'] in ('flow_video','flow_collect') and other['status']=='claimed' and (other.get('profile')==t.get('profile') or not lane) for other in STATE['tasks']):continue
                             p=profile_by(t['profile']); cost=t['payload']['cost']
                             if (not p or p['balance']<cost) and j['stage']=='images':
                                 # Clip sent ahead during the boards: no wait now, the boards go on; the clips stage waits for credits.
@@ -2115,6 +2259,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         backup.write_text(json.dumps(STATE,ensure_ascii=False,indent=2),'utf-8')
                         removed,kept=identities.delete_all(STATE,delete_profile);save()
                         return self.send_json({**public_state(),'removed':removed,'kept':kept,'backup':backup.name})
+                    elif b.get('remove_all_service'):
+                        # « Tout supprimer » of one service in Mes comptes: a backup first; accounts busy with a clip are kept.
+                        service=b['remove_all_service']
+                        if service not in identities.SERVICES:raise ValueError('Service inconnu')
+                        backup=DATA/'sauvegardes'/('comptes-'+service+'-avant-suppression-'+dt.datetime.now().strftime('%Y%m%d-%H%M%S')+'.json');backup.parent.mkdir(exist_ok=True)
+                        backup.write_text(json.dumps(STATE,ensure_ascii=False,indent=2),'utf-8')
+                        removed,kept=remove_service_accounts(service);save()
+                        return self.send_json({**public_state(),'removed':removed,'kept':kept,'backup':backup.name})
                     elif b.get('delete'):identities.delete(STATE,b.get('email'),delete_profile)
                     elif b.get('remove_service'):identities.remove_service(STATE,b.get('email'),b.get('remove_service'),delete_profile)
                     else:identities.add(STATE,b.get('email'),b.get('services'),b.get('label',''),b.get('balance',0),uid)
@@ -2181,10 +2333,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 elif path=='/api/sites':
                     action=b.get('action')
                     if action=='open' and b.get('site') not in SITES:raise ValueError('Site inconnu')
+                    if action in ('prepare','fix','recheck'):
+                        # « Préparer mes comptes », « Régler maintenant » (shows the tab: the owner clicked), « C'est fait ».
+                        target=str(b.get('target') or '')
+                        if action=='prepare':
+                            full=readiness.full_targets(STATE);request_readiness(full['sites'],full['profiles'])
+                        else:
+                            kind,_,name=target.partition(':')
+                            if kind=='site' and name in readiness.SITE_LABELS and name!='flow':sites,profiles=[name],[]
+                            elif kind=='flow' and profile_by(name) and profile_by(name).get('flow_url'):sites,profiles=[],[name]
+                            else:raise ValueError('Compte inconnu')
+                            if action=='recheck':request_readiness(sites,profiles)
+                            else:
+                                item={'type':'show','site':name} if kind=='site' else {'type':'show','profile':readiness.profile_target(profile_by(name),flow_accounts.account_home)}
+                                STATE.setdefault('bridge_requests',[]).append(item)
+                        save();return self.send_json(public_state())
                     if action not in ('open','check','register_flow','tidy','recover','scan_flow','add_google'):raise ValueError('Action inconnue')
                     if action=='recover' and not job_by(b.get('job')):raise ValueError('Production inconnue')
                     queue=STATE.setdefault('bridge_requests',[])
                     item={'type':action,'site':b.get('site')} if action=='open' else {'type':action,'job':b.get('job')} if action=='recover' else {'type':action}
+                    if action=='scan_flow' and b.get('check'):item['then_check']=True  # Mes comptes › Google Flow › Vérifier
                     if item not in queue:queue.append(item)
                     if action in ('register_flow','tidy','recover','scan_flow','add_google'):STATE['bridge_notice']={'at':now(),'action':action,'pending':True,'text':'Demande envoyée à la fenêtre FruchtDrama…'}
                     if action=='check':STATE.setdefault('sites',{})['_requested']=now()
@@ -2198,6 +2366,28 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     if b.get('client') not in STATE['clients']:raise ValueError('Passerelle inconnue')
                     STATE['bridge_notice']={'at':now(),'action':str(b.get('action',''))[:20],'ok':bool(b.get('ok')),'text':str(b.get('text',''))[:300]}
                     save();return self.send_json({'ok':True})
+                elif path=='/api/bridge/readiness':
+                    c=STATE['clients'].get(b.get('client'))
+                    if not c:raise ValueError('Passerelle inconnue')
+                    c['seen']=now()
+                    busy={t.get('profile') for t in STATE['tasks'] if t['status']=='claimed' and t.get('kind') in ('flow_video','flow_collect')}
+                    readiness.apply_report(STATE,b,now(),time.time(),busy,int(STATE.get('settings',{}).get('flow_daily',flow_refill.DAILY)))
+                    # A service found signed in with a readable address joins Mes comptes by itself (address only, no password).
+                    for name in (b.get('sites') or {}):
+                        entry=(STATE.get('readiness') or {}).get('sites',{}).get(name) or {}
+                        if name in ('chatgpt','claude','grok','arena') and entry.get('state')=='ready' and entry.get('email'):
+                            try:identities.add(STATE,entry['email'],[name],new_id=uid)
+                            except ValueError:pass
+                    for j in STATE['jobs']:
+                        if j.get('accounts_check') and (not b.get('id') or j['accounts_check'].get('id')==b.get('id')):end_check(j)
+                    rows=[v for v in list((b.get('sites') or {}).values())+list((b.get('profiles') or {}).values()) if isinstance(v,dict)]
+                    ready=sum(1 for v in rows if v.get('state')=='ready')
+                    STATE['bridge_notice']={'at':now(),'action':'readiness','ok':ready==len(rows),'text':f'Comptes vérifiés : {ready} prêt(s) sur {len(rows)}.'}
+                    save();return self.send_json({'ok':True})
+                elif path=='/api/bridge/readiness-request':
+                    # The FruchtDrama window was just opened: every account is checked in the background.
+                    if b.get('client') not in STATE['clients']:raise ValueError('Passerelle inconnue')
+                    full=readiness.full_targets(STATE);request_readiness(full['sites'],full['profiles'],background=b.get('background',True) is not False);save();return self.send_json({'ok':True})
                 elif path=='/api/bridge/sites':
                     c=STATE['clients'].get(b.get('client'))
                     if not c:raise ValueError('Passerelle inconnue')
@@ -2288,7 +2478,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     cfg['query']=RESEARCH_QUERIES[cfg['language']] if not requested_query or requested_query in RESEARCH_QUERIES.values() else requested_query[:200]
                     if not 3<=cfg['scene_count']<=40 or not 1<=cfg['flow_cost']<=100 or cfg['provider'] not in ('chatgpt','claude'): raise ValueError('Réglages invalides')
                     if cfg['provider']=='claude':STATE['settings'].update({k:cfg[k] for k in CLAUDE_DEFAULTS})
-                    j={'id':uid(),'title':'Nouvel épisode','brief':str(b.get('brief',''))[:4000], 'config':cfg,'editorial_version':2,'retention_version':1,'hook_version':1,'quality_version':1,'cover_style':'family_poster_v3','character_sheet':1,'flow_profile':b.get('flow_profile'),'status':'running','stage':'research','created':now(),'updated':now(),'events':[],'candidates':[],'characters':[],'scenes':[]}; STATE['jobs'].insert(0,j)
+                    j={'id':uid(),'title':'Nouvel épisode','brief':str(b.get('brief',''))[:4000], 'config':cfg,'editorial_version':2,'retention_version':1,'hook_version':1,'quality_version':1,'cover_style':'family_poster_v3','character_sheet':1,'flow_profile':b.get('flow_profile'),'status':'running','stage':'research','created':now(),'updated':now(),'events':[],'candidates':[],'characters':[],'scenes':[]}
+                    # Créer / Recréer: accounts first (owner 06/11/2026); nothing is created while one is known « À régler ».
+                    found=gate_blockers(j)
+                    if found:raise AccountsNotReady(found)
+                    STATE['jobs'].insert(0,j)
                     if source:
                         j['selected']={'title':'Vidéo fournie par le propriétaire','url':urllib.parse.urlunparse(('https',u.hostname,u.path,'','','')),'source':'owner_link'};thumbs.warm([j['selected']['url']],DATA);j['stage']='script'
                         j['config']['recreate']='identical' if req.get('recreate')=='identical' else 'inspired'
@@ -2306,7 +2500,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         if len(j['brief'].strip())<15:raise ValueError('Décrivez votre idée en quelques phrases')
                         j['stage']='sheet';j['selected']={'title':'Idée du propriétaire','source':'owner_idea'};event(j,'Projet créé d’après votre idée : fiche de décision en cours.')
                     elif not source:event(j,'Projet créé. Recherche préalable et comparaison de cinq concepts obligatoires.')
-                    schedule(j)
+                    if start_check(j):schedule(j)
                 elif path.startswith('/api/job/'):
                     id=path.split('/')[-1]; j=job_by(id)
                     if not j: raise ValueError('Projet inconnu')
@@ -2320,10 +2514,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             if b.get('flow_profile') and b['flow_profile']!=j.get('flow_profile'):raise ValueError('Un clip est déjà suivi : attendez sa récupération avant de changer de compte')
                             j['status']='running';event(j,'Suivi de la tâche en cours conservé ; aucun nouvel envoi.');save();return self.send_json(public_state())
                         if j.get('stage')=='clips' and uncertain_clip_tasks(j):raise ValueError(uncertain_message(j))
+                        # Reprendre / Boucle complète: nothing is relaunched while a needed account is known « À régler ».
+                        found=gate_blockers(j)
+                        if found:raise AccountsNotReady(found)
                         for t in STATE['tasks']:
                             if t['job']==id and t['status'] in ('queued','claimed'): t['status']='cancelled'
                         if b.get('flow_profile'): j['flow_profile']=b['flow_profile']
-                        j.pop('last_error',None);j.pop('editorial_attempts',None);j['status']='running'; event(j,'Reprise demandée ; passage automatique limité aux comptes Flow enregistrés.' if STATE.get('settings',{}).get('flow_auto') else 'Reprise demandée ; compte Flow sélectionné conservé.'); schedule(j)
+                        j.pop('last_error',None);j.pop('editorial_attempts',None);j.pop('accounts_check',None);j['status']='running'; event(j,'Reprise demandée ; passage automatique limité aux comptes Flow enregistrés.' if STATE.get('settings',{}).get('flow_auto') else 'Reprise demandée ; compte Flow sélectionné conservé.')
+                        if start_check(j):schedule(j)
                     elif action=='retry_step':
                         # « Relancer cette étape » from the blocked banner: the stuck task is dropped and the step asked again.
                         info=stall_info(j)
@@ -2484,6 +2682,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     else: raise ValueError('Action inconnue')
                 else: return self.send_json({'error':'Route inconnue'},404)
                 save(); self.send_json(public_state())
+        except AccountsNotReady as e: self.send_json({'error':str(e),'blockers':e.blockers},409)
         except Exception as e: self.send_json({'error':str(e)},400)
 
 def recover_after_restart():

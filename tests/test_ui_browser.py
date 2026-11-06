@@ -18,7 +18,7 @@ class BrowserInterfaceTests(unittest.TestCase):
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()
         cls.job = 'a1b2c3d4e5f60718'; cls.review = 'b1b2c3d4e5f60718'
         scenes = [{'characters': ['orange'], 'meaning': 'm', 'image_prompt': 'i', 'video_prompt': 'v', 'dialogue': [{'speaker': 'orange', 'text': 'Hallo'}]} for _ in range(2)]
-        state = {'version': 1, 'token': 'test-token', 'pair_code': 'abcd1234', 'profiles': [{'id': 'flow', 'label': 'flow@example.com', 'balance': 40}],
+        state = {'version': 1, 'token': 'test-token', 'pair_code': 'abcd1234', 'sites': {'chatgpt': {'connected': True}, 'grok': {'connected': True}}, 'profiles': [{'id': 'flow', 'label': 'flow@example.com', 'balance': 40}],
                  'engine_accounts': [{'id': 'g1', 'engine': 'grok', 'label': 'g@x.com', 'email': 'g@x.com', 'wall': {'at': now, 'until': time.time() + 7200, 'until_text': now, 'message': 'limit'}}],
                  'clients': {'c1': {'id': 'c1', 'label': 'Navigateur QA', 'role': 'all', 'ai_provider': 'both', 'seen': now}},
                  'settings': {'provider': 'chatgpt', 'language': 'Deutsch (de-DE)', 'scene_count': 4, 'clip_seconds': 8, 'flow_model': 'gemini_omni_flash', 'flow_resolution': '720p', 'flow_cost': 12, 'query': 'q', 'daily_budget': 50},
@@ -62,7 +62,7 @@ class BrowserInterfaceTests(unittest.TestCase):
         self.assertIn('Tes histoires et leurs parties.', html); self.assertIn('class="story-card"', html); self.assertIn('ÉPISODE QA', html)
         self.assertIn('1 connecteur(s) en ligne', html); self.assertIn('Tourner', html, 'next action with its direct button')
         self.assertNotIn('Studio inaccessible', html)
-        self.assertIn('Limite Grok atteinte', html, 'wall banner on every page'); self.assertIn('data-forget-wall="g1"', html)
+        self.assertIn('Grok bloqué par le quota jusqu’à', html, 'wall banner on every page'); self.assertIn('data-wall-wait=', html); self.assertIn('data-forget-wall="g1"', html)
 
     def test_uncertain_clip_notice_and_confirmation_button(self):
         html = self.dom('#job=' + self.job)

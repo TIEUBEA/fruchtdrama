@@ -2,7 +2,7 @@
 // The chat lane (ChatGPT) and the video lane (Grok/Flow) each follow one task, in their own tab, with their own
 // saved state, and each resumes alone after a service-worker restart.
 const assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs'),path=require('node:path');
-const URLS={10:'https://chatgpt.com/',11:'https://chatgpt.com/',20:'https://grok.com/imagine'};
+const URLS={10:'https://chatgpt.com/',11:'https://chatgpt.com/',20:'https://grok.com/imagine',21:'https://grok.com/imagine'};
 const IMAGE={id:'img1',job:'job1',kind:'chat_image',slot:'image:1',payload:{provider:'chatgpt',prompt:'board 2',attachments:[]}};
 const IMAGE2={id:'img2',job:'job1',kind:'chat_image',slot:'image:2',payload:{provider:'chatgpt',prompt:'board 3',attachments:[]}};
 const CLIP={id:'clip0',job:'job1',kind:'engine_video',slot:'clip:0',payload:{engine:'grok',prompt:'clip 1',attachments:[]}};
@@ -52,7 +52,10 @@ const base=()=>({client:'c1',token:'t',enabled:true,lastResearchReadingRecovery:
  // 2. Following both: no new claim while each lane has its task.
  const claims=h.calls.filter(u=>u.includes('/bridge/task?')).length;
  await h.run('poll()');
- assert.equal(h.calls.filter(u=>u.includes('/bridge/task?')).length,claims,'one task per lane: nothing claimed while both work');
+ // 0.1.91: while the first video lane works, the second one asks the studio for a clip of another Flow account (none here).
+ const asked=h.calls.filter(u=>u.includes('/bridge/task?')).slice(claims);
+ assert.equal(asked.length,1,'one task per lane: only the second clip lane asks while both work');assert.ok(asked[0].includes('lane=video'));
+ assert.equal(h.store.activeVideoTask2,undefined);
  assert.equal(h.calls.filter(u=>u.includes('/bridge/status')).length,2,'each lane checks its own task');
  // 3. The board finishes first: the chat lane delivers it and takes the next board, the clip keeps going.
  h.tabState[10]={task:'img1',state:'completed',result:{ok:true,file:'board2.png'}};
@@ -89,5 +92,16 @@ const base=()=>({client:'c1',token:'t',enabled:true,lastResearchReadingRecovery:
  await assert.rejects(b.run("recover('job1')"),e=>!/occupé/.test(e.message),'a clip in progress does not block a chat recovery');
  b.run('busy.video=false');
  await assert.rejects(b.run('registerFlow()'),/Attendez la fin/);
- console.log('7 scénarios des deux voies réussis : planche et clip en parallèle, une tâche par voie et par onglet, reprise des deux voies, compatibilité 0.1.88, boutons du studio.');
+ // 8. 0.1.91 parallel clips: while the first video lane works, the second takes another clip, in another tab, with its own state.
+ const v=harness(base(),{video:[CLIP,{...CLIP,id:'clip1',slot:'clip:1'}]});
+ v.run("FruchtEngines.tabFor=async t=>({id:t.id==='clip0'?20:21,windowId:1})");
+ await v.run('poll()');
+ assert.equal(v.store.activeVideoTask.task.id,'clip0');assert.equal(v.store.activeVideoTask2.task.id,'clip1');
+ assert.equal(v.store.activeVideoTask2.tabId,21);assert.equal(v.store.activeVideoTask2.key,'activeVideoTask2');
+ assert.deepEqual(v.runs.map(r=>r.tab).sort(),[20,21],'two clips, two tabs');
+ assert.equal((await v.message({type:'submission-intent',task:'clip1'},21)).ok,true);assert.equal(v.store.activeVideoTask2.submissionIntent,true);
+ v.tabState[21]={task:'clip1',state:'completed',result:{ok:true,file:'c1.mp4'}};
+ await v.run('poll()');
+ assert.ok(v.calls.includes('result:clip1'));assert.equal(v.store.activeVideoTask2,undefined);assert.equal(v.store.activeVideoTask.task.id,'clip0','first clip untouched');
+ console.log('8 scénarios des voies réussis : planche et clip en parallèle, une tâche par voie et par onglet, reprise des deux voies, compatibilité 0.1.88, boutons du studio.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

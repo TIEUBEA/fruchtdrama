@@ -5,6 +5,7 @@ TEMP = tempfile.TemporaryDirectory()
 os.environ['FRUCHT_DATA'] = TEMP.name
 SPEC = importlib.util.spec_from_file_location('studio_p0', pathlib.Path(__file__).parents[1] / 'server.py')
 s = importlib.util.module_from_spec(SPEC); SPEC.loader.exec_module(s)
+from tests import accounts_ready; accounts_ready.install(s)  # 0.1.91: accounts ready before starting
 FFMPEG = bool(shutil.which('ffmpeg') and shutil.which('ffprobe'))
 
 

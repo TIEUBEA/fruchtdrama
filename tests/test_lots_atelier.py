@@ -8,6 +8,7 @@ os.environ['FRUCHT_DATA'] = TEMP.name
 os.environ.pop('FRUCHT_BACKUPS', None)
 SPEC = importlib.util.spec_from_file_location('studio_lots_atelier', ROOT / 'server.py')
 s = importlib.util.module_from_spec(SPEC); SPEC.loader.exec_module(s)
+from tests import accounts_ready; accounts_ready.install(s)  # 0.1.91: accounts ready before starting
 import montage, story_backup
 
 TEXT = 'Wer hat meinen Kuchen gegessen?'

@@ -7,6 +7,7 @@ TEMP = tempfile.TemporaryDirectory()
 os.environ['FRUCHT_DATA'] = TEMP.name
 SPEC = importlib.util.spec_from_file_location('studio_lot4', ROOT / 'server.py')
 s = importlib.util.module_from_spec(SPEC); SPEC.loader.exec_module(s)
+from tests import accounts_ready; accounts_ready.install(s)  # 0.1.91: accounts ready before starting
 import board_check, quality
 
 BRIEF = 'Une orange cache la vérité à sa famille depuis dix ans.'

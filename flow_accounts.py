@@ -75,19 +75,30 @@ def follow_active_browser(state, now=None, quiet=180):
     return moved
 
 
-def choose(state, current, cost):
-    """Never reset balances, switch an active task, or use unregistered accounts."""
+def eligible(state, p):
+    """Accounts detected in the window carry their slot; older registrations stay usable only if routed."""
+    client = state.get('clients', {}).get(p.get('flow_client'), {})
+    return bool(route(p)) and client.get('role') in ('all', 'flow') and not client.get('disabled')
+
+
+def usable(p):
+    """Not marked « À régler » or « Pas d'accès » by « Préparer mes comptes » or by a page that did not open (0.1.91)."""
+    return (p.get('readiness') or {}).get('state') not in ('fix', 'no_access')
+
+
+def choose(state, current, cost, exclude=()):
+    """Never reset balances, switch an active task, or use unregistered accounts.
+
+    exclude: accounts already working on another clip (parallel clips, 0.1.91): never twice the same account at once."""
     profiles = state['profiles']
     selected = next((p for p in profiles if p['id'] == current), None)
     automatic=state.get('settings', {}).get('flow_auto', False)
-    def eligible(p):
-        # Accounts detected in the window carry their slot; older registrations stay usable only if routed.
-        return route(p) and state['clients'].get(p.get('flow_client'),{}).get('role') in ('all','flow') and not state['clients'].get(p.get('flow_client'),{}).get('disabled')
-    if selected and not selected.get('blocked') and selected.get('balance', 0) >= cost and (not automatic or eligible(selected)):
+    ok = lambda p: eligible(state, p) and usable(p) and p['id'] not in exclude
+    if selected and not selected.get('blocked') and selected.get('balance', 0) >= cost and selected['id'] not in exclude and (not automatic or ok(selected)):
         return selected
     if not automatic:
         return None
-    return next((p for p in flow_refill.order(profiles) if eligible(p) and p.get('balance', 0) >= cost), None)
+    return next((p for p in flow_refill.order(profiles) if ok(p) and not p.get('blocked') and p.get('balance', 0) >= cost), None)
 
 
 def chrome_profile(value):

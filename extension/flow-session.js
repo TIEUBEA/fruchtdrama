@@ -66,9 +66,10 @@ globalThis.FruchtFlowSession={
   const tabs=await chrome.tabs.query({url:['https://labs.google/*','https://flow.google.com/*']});
   let tab=tabs.find(t=>this.project(t.url)===url);
   if(!tab){
-   const saved=(await chrome.storage.local.get('flowTab')).flowTab;
-   // Reuse only the tab previously owned by this connector.
-   const owned=tabs.find(t=>t.id===saved);
+   const saved=(await chrome.storage.local.get('flowTab')).flowTab,store=await chrome.storage.local.get(['activeVideoTask','activeVideoTask2']);
+   // Reuse only the tab previously owned by this connector, never one where the other clip lane works (parallel clips).
+   const working=[store.activeVideoTask?.tabId,store.activeVideoTask2?.tabId].filter(Number.isInteger);
+   const owned=tabs.find(t=>t.id===saved&&!working.includes(t.id));
    tab=owned?await chrome.tabs.update(owned.id,{url}):await globalThis.FruchtWorkspace.createTab(chrome,{url,active:false});
   }
   tab=await globalThis.FruchtWorkspace.adopt(chrome,tab);

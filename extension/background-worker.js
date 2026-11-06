@@ -2,20 +2,24 @@ const BASE='http://127.0.0.1:8840';
 // Two lanes, like the Atelier (clips leave while ChatGPT draws the boards): 'chat' (ChatGPT, Claude, TikTok) and
 // 'video' (Flow, Grok, Arena). Each lane follows one task at a time, in its own tabs, with its own saved state:
 // activeTask (chat; also any task saved by 0.1.88 and older) and activeVideoTask (video).
-const LANE_KEY={chat:'activeTask',video:'activeVideoTask'};
+// 0.1.91, parallel clips: a second video lane (activeVideoTask2) takes another Flow clip on another Google account, in its
+// own tab; the studio never gives two lanes the same account.
+const LANE_KEY={chat:'activeTask',video:'activeVideoTask',video2:'activeVideoTask2'};
 const VIDEO_KINDS=['flow_video','flow_collect','engine_video'];
 function laneOf(task){return VIDEO_KINDS.includes(task?.kind)?'video':'chat';}
 function keyOf(active){return active?.key||LANE_KEY.chat;}
 async function saveActive(active,extra={}){await chrome.storage.local.set({[keyOf(active)]:active,...extra});}
 async function loadActive(active){const key=keyOf(active);return (await chrome.storage.local.get(key))[key];}
 async function dropActive(active){await chrome.storage.local.remove(keyOf(active));}
-const busy={chat:false,video:false};
+const busy={chat:false,video:false,video2:false};
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function call(path,body){
  const cfg=await chrome.storage.local.get('token');
  const r=await fetch(BASE+path,{method:body?'POST':'GET',headers:{Authorization:'Bearer '+cfg.token,...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined});
  const data=await r.json();if(!r.ok)throw Error(data.error||'Studio inaccessible');return data;
 }
+// Which service a task's page belongs to (for « Préparer mes comptes » and the « À régler » mark).
+function serviceOf(task){return task.kind==='flow_video'?'flow':task.kind==='engine_video'?task.payload?.engine:task.kind==='tiktok_search'?null:(task.payload?.provider==='claude'?'claude':'chatgpt');}
 async function ready(id,task,targetUrl){
  const expected=task.kind==='flow_video'?['flow.google.com','labs.google']:task.kind==='engine_video'?FruchtEngines.hosts(task.payload.engine):task.kind==='tiktok_search'?['www.tiktok.com','tiktok.com']:[task.payload.provider==='claude'?'claude.ai':'chatgpt.com'];
  for(let i=0;i<180;i++){
@@ -38,7 +42,19 @@ async function ready(id,task,targetUrl){
  }
  // Say what was seen (06/11/2026: Flow clip refused here twice with no clue).
  let seen='';try{const tab=await chrome.tabs.get(id);let host='';try{host=new URL(tab.url).hostname;}catch{}const [probe]=!expected.includes(host)?[]:await chrome.scripting.executeScript({target:{tabId:id},func:()=>({href:location.href,ready:document.readyState,editors:[...document.querySelectorAll('textarea:not([disabled]),[contenteditable="true"]')].map(e=>e.getClientRects().length).join(','),dialog:[...document.querySelectorAll('[role="dialog"]')].map(d=>(d.innerText||'').slice(0,50)).join(' | ')})});seen=' Vu : '+JSON.stringify({tab:tab.url,status:tab.status,discarded:tab.discarded,frozen:tab.frozen,expected:targetUrl||'',...(probe?.result||{})}).slice(0,400);}catch(e){seen=' Vu : onglet illisible ('+e.message+')';}
- throw Error('Page du fournisseur indisponible ou vide après 90 secondes (connexion requise, vérification anti-robot ou blocage) : aucun prompt envoyé. Ouvrez l’onglet dans la fenêtre FruchtDrama, connectez-vous vous-même, puis Reprendre.'+seen);
+ // Say exactly what is wrong (0.1.91): the account is marked « À régler » in Mes comptes and the next ready Flow account
+ // takes the clip; nothing was sent, so nothing is paid twice.
+ let verdict=null;const service=serviceOf(task);
+ if(service&&globalThis.FruchtReadiness)try{
+  const tab=await chrome.tabs.get(id),host=FruchtReadiness.hostOf(tab.url);
+  const info={kind:service==='flow'?'flow':'site',name:service,host,expectedHosts:FruchtReadiness.HOSTS[service]||expected,unavailable:/\/unavailable(?:[/?#]|$)/.test(tab.url||''),expectedEmail:task.payload?.flow_route?.email?.toLowerCase()};
+  if((FruchtReadiness.HOSTS[service]||expected).includes(host)&&!info.unavailable)Object.assign(info,await FruchtReadiness.probeTab(chrome,id,service));
+  verdict=FruchtReadiness.classify(info);if(verdict.state==='ready')verdict={state:'fix',reason:'Page du fournisseur sans réponse après 90 secondes'};
+ }catch{}
+ const error=Error('Page du fournisseur indisponible ou vide après 90 secondes ('+(verdict?.reason||'connexion requise, vérification anti-robot ou blocage')+') : aucun prompt envoyé. Le compte est marqué « À régler » dans Mes comptes.'+seen);
+ if(verdict)error.notReady=verdict;
+ if(task.kind==='flow_video')error.flowBlocked=verdict?.state==='no_access'?'unavailable':'not_ready';
+ throw error;
 }
 async function loadAttachments(paths){
  const files=[];
@@ -320,17 +336,27 @@ async function watchLogins(onlyTab){
 }
 chrome.tabs?.onUpdated?.addListener((id,info)=>{if(info.status==='complete')setTimeout(()=>{watchLogins(id).catch(recordBackgroundError);watchGoogle(id).catch(recordBackgroundError);},2500);});
 // Owner requests from "Mes comptes": open a site in the FruchtDrama window, or re-check every site.
-async function handleRequests(cfg){
- const requests=await call('/api/bridge/requests?client='+encodeURIComponent(cfg.client));
+async function handleRequests(cfg,light=false){
+ // light: a task is running; only the owner's clicks that show a tab (Se connecter, Régler maintenant, Ajouter) are done now.
+ const requests=await call('/api/bridge/requests?client='+encodeURIComponent(cfg.client)+(light?'&light=1':''));
  for(const r of requests||[]){
   if(r.type==='open'&&FruchtSites.list[r.site])await openLogin(r.site);
   if(r.type==='add_google')await addGoogle();
   if(r.type==='check'){const sites=await FruchtSites.check(chrome,FruchtWorkspace);await call('/api/bridge/sites',{client:cfg.client,sites});}
+  // « Préparer mes comptes »: read only, background tabs; a check asked while the window is closed waits for it.
+  if(r.type==='readiness'&&globalThis.FruchtReadiness){
+   if(r.background&&!await FruchtWorkspace.isOpen(chrome))continue;
+   let report;try{report=await FruchtReadiness.run(chrome,FruchtWorkspace,r);}catch(e){report={id:r.id,sites:{},profiles:{}};recordBackgroundError(e);}
+   await call('/api/bridge/readiness',{client:cfg.client,...report});
+  }
+  if(r.type==='show'&&globalThis.FruchtReadiness)await FruchtReadiness.show(chrome,FruchtWorkspace,r);
   // Former gateway-tab buttons, now clicked in the studio's Mes comptes page.
   if(r.type==='scan_flow'){
    if(r.background&&!await FruchtWorkspace.isOpen(chrome))continue;
    let text;try{const accounts=await FruchtFlowScan.scan(chrome,FruchtWorkspace);const b=await call('/api/bridge/flow-scan',{client:cfg.client,accounts});text=b.message;}catch(e){text='Détection interrompue : '+e.message;}
    await call('/api/bridge/notice',{client:cfg.client,action:'scan_flow',ok:!/interrompue/.test(text),text});
+   // « Vérifier » in Mes comptes › Google Flow: the accounts found are then each checked (next pass).
+   if(r.then_check)await call('/api/bridge/readiness-request',{client:cfg.client,background:false});
   }
   if(['register_flow','tidy','recover'].includes(r.type)){
    let result;try{result=r.type==='register_flow'?await registerFlow(true):r.type==='tidy'?await tidyChats(true):await recover(r.job,true);}catch(e){result={ok:false,error:e.message};}
@@ -357,17 +383,18 @@ async function prepare(){
  let cfg=await chrome.storage.local.get(null);
  if(!cfg.client||!cfg.token){try{if(await autoPair())cfg=await chrome.storage.local.get(null);}catch(e){recordBackgroundError(e);}}
  if(!cfg.client||!cfg.token)return false;
- if(cfg.enabled&&!busy.chat&&!busy.video&&!cfg.activeTask&&!cfg.activeVideoTask){
-  busy.chat=busy.video=true;
-  try{await handleRequests(cfg);}catch(e){recordBackgroundError(e);}finally{busy.chat=busy.video=false;}
- }
+ if(cfg.enabled&&!busy.chat&&!busy.video&&!busy.video2&&!Object.values(LANE_KEY).some(k=>cfg[k])){
+  busy.chat=busy.video=busy.video2=true;
+  try{await handleRequests(cfg);}catch(e){recordBackgroundError(e);}finally{busy.chat=busy.video=busy.video2=false;}
+ }else if(cfg.enabled){try{await handleRequests(cfg,true);}catch(e){recordBackgroundError(e);}}
  return true;
 }
 async function poll(){
  if(preparing||(busy.chat&&busy.video))return;
  preparing=true;let ok=false;
  try{ok=await prepare();}finally{preparing=false;}
- if(ok)await Promise.all([runLane('chat'),runLane('video')]);
+ // The second clip lane looks after the first one: it sees whether a clip really works there now.
+ if(ok)await Promise.all([runLane('chat'),runLane('video').then(()=>runLane('video2'))]);
  if(ok)await soon();
 }
 // The 30 s alarm alone made every board wait up to 30 s to be seen, then up to 30 s more before the next one left
@@ -414,13 +441,19 @@ async function runLane(lane){
  try{
   cfg=await chrome.storage.local.get(null);
   if(!cfg.client||!cfg.token)return;
-  if(lane==='video'){
+  if(lane==='video2'){
+   // Second clip lane: never a balance reading or a recovery here (they could touch the first lane's tab).
+   if(laneOf(cfg.activeTask?.task)==='video')return;
+   if(cfg.activeVideoTask2){await checkActive(cfg.activeVideoTask2);return;}
+   // Only while the first lane works on a clip: then the studio may give a clip of another account.
+   if(!cfg.enabled||cfg.role==='creation'||!cfg.activeVideoTask)return;
+  }else if(lane==='video'){
    // A clip saved by 0.1.88 or older sits in activeTask: the chat lane follows it; no other clip meanwhile.
    if(laneOf(cfg.activeTask?.task)==='video')return;
    if(cfg.activeVideoTask){await checkActive(cfg.activeVideoTask);return;}
    if(!cfg.enabled)return;
-   if(globalThis.FruchtCredits&&await FruchtCredits.check(cfg,chrome,call))return;
-   if(cfg.role!=='creation'&&Date.now()-(cfg.lastVideoRecovery||0)>30000){
+   if(!cfg.activeVideoTask2&&globalThis.FruchtCredits&&await FruchtCredits.check(cfg,chrome,call))return;
+   if(!cfg.activeVideoTask2&&cfg.role!=='creation'&&Date.now()-(cfg.lastVideoRecovery||0)>30000){
     await chrome.storage.local.set({lastVideoRecovery:Date.now()});
     if(await recoverExistingVideo(cfg))return;
    }
@@ -440,7 +473,7 @@ async function runLane(lane){
     if(await recoverExistingMedia(cfg))return;
    }
   }
-  claimed=await call('/api/bridge/task?client='+encodeURIComponent(cfg.client)+'&lane='+lane);if(!claimed)return;
+  claimed=await call('/api/bridge/task?client='+encodeURIComponent(cfg.client)+'&lane='+(lane==='chat'?'chat':'video'));if(!claimed)return;
   // The task is followed under this lane's key, whatever its kind (an older studio may ignore lane).
   await begin(claimed,await tabForTask(claimed,cfg,key),cfg,key);
  }catch(e){
@@ -449,7 +482,7 @@ async function runLane(lane){
   if(/fetch|network|Failed to fetch|Studio inaccessible/i.test(e.message)&&active){
    await chrome.storage.local.set({status:'Studio momentanément inaccessible. Réponse conservée, nouvel essai automatique.'});return;
   }
-  if(task&&cfg?.client)try{await call('/api/bridge/result',{task:task.id,client:cfg.client,result:{ok:false,error:e.message,...(e.flowBlocked?{flow_blocked:e.flowBlocked}:{}),...(task.kind==='flow_video'&&((claimed&&!active)||(active?.submissionIntent===false&&!active.submitted))?{generation_submitted:false}:{})}});}catch{}
+  if(task&&cfg?.client)try{await call('/api/bridge/result',{task:task.id,client:cfg.client,result:{ok:false,error:e.message,...(e.flowBlocked?{flow_blocked:e.flowBlocked}:{}),...(e.notReady?{not_ready:e.notReady}:{}),...(task.kind==='flow_video'&&((claimed&&!active)||(active?.submissionIntent===false&&!active.submitted))?{generation_submitted:false}:{})}});}catch{}
   if(active){const data=await chrome.storage.local.get('scenarioTabs');const tabs=data.scenarioTabs||{};if(tabs[active.task.job])tabs[active.task.job].pending=false;await chrome.storage.local.set({scenarioTabs:tabs});}
   await chrome.storage.local.remove(key);
   await chrome.storage.local.set({status:'À vérifier : '+e.message});
@@ -554,7 +587,7 @@ async function registerFlow(owned=false){
  const cfg=await chrome.storage.local.get(null);
  if(!cfg.client||!cfg.token)throw Error('Appairez d’abord la passerelle au studio.');
  // The Flow tab is the video lane's: nothing followed in either lane, no pass in progress.
- if(cfg.activeTask||cfg.activeVideoTask||((busy.chat||busy.video)&&!owned))throw Error('Attendez la fin de la tâche en cours avant de mémoriser ce compte.');
+ if(cfg.activeTask||cfg.activeVideoTask||cfg.activeVideoTask2||((busy.chat||busy.video||busy.video2)&&!owned))throw Error('Attendez la fin de la tâche en cours avant de mémoriser ce compte.');
  if(cfg.role==='creation')throw Error('Ce navigateur est réservé à votre IA ; utilisez la passerelle Flow.');
  const tab=await FruchtWorkspace.latest(chrome,FLOW_PROJECT);
  if(!FruchtFlowSession.project(tab?.url))throw Error('Ouvrez, dans la fenêtre FruchtDrama, le projet Flow du compte à mémoriser, puis cliquez ici.');
@@ -587,6 +620,8 @@ async function openWorkspace(){
  }
  const cfg=await chrome.storage.local.get(null);if(!cfg.client||!cfg.token||!cfg.enabled)return;
  try{const sites=await FruchtSites.check(chrome,FruchtWorkspace);await call('/api/bridge/sites',{client:cfg.client,sites});const accounts=await FruchtFlowScan.scan(chrome,FruchtWorkspace);const b=await call('/api/bridge/flow-scan',{client:cfg.client,accounts});await call('/api/bridge/notice',{client:cfg.client,action:'scan_flow',ok:true,text:b.message});}catch(e){recordBackgroundError(e);}
+ // « Préparer mes comptes » at each opening of the window: every account read in the background (next pass).
+ try{await call('/api/bridge/readiness-request',{client:cfg.client});triggerPoll();}catch(e){recordBackgroundError(e);}
 }
 chrome.action?.onClicked?.addListener(()=>openWorkspace().catch(recordBackgroundError));
 chrome.windows?.onRemoved?.addListener(id=>FruchtWorkspace.closed(chrome,id).catch(recordBackgroundError));
