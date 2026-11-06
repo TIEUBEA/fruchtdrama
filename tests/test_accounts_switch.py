@@ -187,7 +187,15 @@ class SwitchHttp(unittest.TestCase):
             t = self.req('/api/bridge/task?client=' + self.client + '&lane=video')
         self.assertEqual(t['profile'], 'b', 'same request, next account, no waiting_credit')
         self.assertEqual(j['flow_profile'], 'b'); self.assertEqual(s.STATE['profiles'][0]['balance'], 0, 'nothing reserved on the empty one')
-        self.assertIn('Passage automatique au compte Flow b@example.com (50 crédits)', ' '.join(e['text'] for e in j['events']))
+        # 0.1.95: the journal names both accounts by their number, with their credits.
+        text = ' '.join(e['text'] for e in j['events'])
+        self.assertIn('Compte Flow 2 (a•••@example.com, 0 crédit, vide) → compte 1 (b•••@example.com, 50 crédits)', text)
+        self.assertIn('En cours : Clip 1 · IA : Flow · compte 1 (b•••@example.com, 38 crédits).', text)
+        # « Mes comptes » sees which account works now, and when it was last used.
+        usage = self.req('/api/state')['usage']
+        self.assertEqual([(u['key'], u['number'], u['credits'], u['short']) for u in usage['in_use']], [('flow:b', 1, 38, 'Clip 1')])
+        self.assertAlmostEqual(usage['last_used']['flow:b'], time.time(), delta=30)
+        self.assertNotIn('flow:a', usage['last_used'])
 
     def test_board_held_by_a_gone_window_is_asked_again(self):
         s.STATE['clients'][self.client]['auto'] = True

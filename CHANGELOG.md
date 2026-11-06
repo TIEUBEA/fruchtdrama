@@ -8,8 +8,25 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 
 
+
+## 0.1.95.1 (06/11/2026)
+- Grok n'est jamais utilisé sans l'accord du propriétaire (gros consommateur) : quand Flow, Arena et Vidogrid échouent, l'épisode propose « Utiliser Grok pour cet épisode ». Ordre : Flow → Arena → Vidogrid → (Grok sur validation).
+- Téléchargements Flow un par un : deux clips finis à la même seconde ne pouvaient pas être distingués (clips 6 et 9 générés mais non rangés, importés à la main).
+
+## 0.1.95 (06/11/2026)
+**Ajouté**
+- Mes comptes : on voit quel compte travaille, sur quelle IA, pour quoi et à quel moment. Encadré « En ce moment » en haut de la page, bandeau « Utilisé maintenant » dans chaque service (ChatGPT, Google Flow, Arena, Vidogrid, Grok, Claude) avec la tâche (« Clip 3 de BANANITO », « Planche 7 », « Scénario ») et l'heure de début, badge « En cours » sur la ligne du compte utilisé. Sinon « Dernier utilisé il y a 3 min » (heure gardée par compte à chaque tâche prise par la fenêtre FruchtDrama).
+- Page de l'épisode : dans les cartes Planches et Clips, une ligne par tâche en cours, par exemple « Clip 4 · IA : Flow · compte 2 (ar•••5@example.com, 38 crédits) » ou « Planche 7 · IA : ChatGPT ». Sous chaque clip reçu, le moteur et le compte qui l'ont fait (« Flow · compte 2 », adresse masquée dans la fiche de la scène).
+
+**Amélioré**
+- Comptes Flow numérotés « Compte 1, 2, 3… » et triés par crédits restants, du plus grand au plus petit ; les comptes vides puis ceux à régler en bas, avec l'heure de recharge des vides. Le numéro d'un compte ne change jamais (premiers numéros donnés dans l'ordre des crédits, un nouveau compte prend le plus petit numéro libre) : « compte 2 » désigne toujours le même compte, dans la page comme dans le journal.
+- Journal : chaque bascule de compte Flow s'écrit « Compte Flow 2 (ar•••5@example.com, 0 crédit, vide) → compte 3 (…, 38 crédits) » ; chaque tâche prise s'écrit « En cours : Clip 4 · IA : Flow · compte 3 (…) » au lieu de « Connecteur en cours : clip:3 ». Le choix du compte Flow (page Créer) affiche aussi son numéro.
+- Page de l'épisode allégée : le journal n'est plus caché. Bloc « Ce qui se passe » toujours visible sous les étapes, avec les 4 dernières lignes utiles et leur heure (lignes techniques « Tâche préparée », « Connecteur en cours », « Réservation prudente… », « Import de la planche… », fichiers reçus et répétitions masquées) ; « Tout le journal » déplie la liste complète.
+- Retirés de l'épisode : les menus « Compte Flow de cet épisode » (la rotation automatique et Mes comptes choisissent le compte ; la ligne « IA : … » de la carte dit lequel travaille) et « IA de scénario » (choisie à la création). « Supprimer l'épisode… » devient un petit lien discret sous le titre.
+
 ## 0.1.94 (06/11/2026)
 **Corrigé**
+- Clip généré par Flow mais jamais récupéré : l'éditeur Omni de Flow joue la vidéo sans lecteur <video> lisible. Dès que le nouveau clip est ouvert, l'extension le télécharge par « Télécharger le contenu multimédia › 720p Taille d'origine » (chemin déjà utilisé par la récupération) au lieu d'attendre 7 min puis d'échouer.
 - Planche refusée par Flow « en raison des intérêts des fournisseurs de contenu tiers » (trop proche de la vidéo d'origine) : quand aucun moteur ne l'a acceptée, ChatGPT la redessine clairement différente (cadrage, pose, fond, couleurs ; mêmes personnages, même sens) et le clip repart du premier moteur. Deux fois au plus par scène.
 - Mise à jour automatique de l'extension : elle relisait sa propre version (celle chargée en mémoire) et ne voyait jamais la nouvelle. Elle demande maintenant au studio la version posée dans son dossier (`/api/version`) et se recharge entre deux tâches. La version de chaque fenêtre est enregistrée.
 - Refus Flow réel identifié (essai du 06/11) : « Impossible de générer la vidéo demandée pour le moment en raison des intérêts des fournisseurs de contenu tiers… Cette génération vous sera remboursée. » Il vient de l'image (planche trop proche de la vidéo d'origine en recréation à l'identique), pas du texte : lu en 15 s, le clip passe au moteur suivant.

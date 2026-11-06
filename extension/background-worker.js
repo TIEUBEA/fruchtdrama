@@ -177,6 +177,11 @@ async function checkActive(active){
  }
  if(status.submitted&&!active.submitted){active.submitted=true;await saveActive(active);}
  if(status.state==='completed'){
+  // Flow Omni (06/11/2026) plays the clip without any <video> element: the finished clip is fetched by its own download.
+  if(status.result?.flow_download&&active.task.kind==='flow_video'){
+   // One Flow download at a time: two finished at the same second could not be told apart (06/11/2026, clips 6 and 9).
+   const lanes=await chrome.storage.local.get(Object.values(LANE_KEY));
+   if(Object.values(lanes).some(a=>a&&a.task?.id!==active.task.id&&a.download))return;await chrome.scripting.executeScript({target:{tabId:active.tabId},files:['media.js','flow-controls.js','flow-download.js','chat-session.js']});await requestFlowDownload(active);return;}
   if(!status.result.ok&&/Extension reloaded|context invalidated|Interface non reconnue|association.*perdue/i.test(status.result.error||'')&&await recoverFlowPreparation(active))return;
   if(!status.result.ok&&status.result.recoverable&&FruchtRecovery.mayCollect(active,context,Date.now())){await collectBound(active,context);return;}
   if(context.task_status==='failed'&&status.result.ok){await collectBound(active,context);return;}

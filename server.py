@@ -15,6 +15,7 @@ import montage, source_video
 import story_backup
 import board_check
 import engine_accounts
+import account_usage
 import identities, flow_refill
 import ideas
 import thumbs
@@ -26,7 +27,7 @@ import maintenance
 import series
 import licence
 import readiness
-VERSION='0.1.94'
+VERSION='0.1.95'
 OFFICIAL_ORIGIN='chrome-extension://bhdmibhibonmaamgcbpmbhedhohfongj'  # extension/manifest.json "key"
 import sys
 import traceback
@@ -349,6 +350,7 @@ def task_stall(j,task,moment,ago,shared):
     return None
 
 def public_state():
+    account_usage.number_flow(STATE)  # « Compte 1, 2, 3… » stable, before the copy
     s=copy.deepcopy(STATE); s.pop('token',None)
     for t in s['tasks']:
         t.pop('result',None)
@@ -358,6 +360,7 @@ def public_state():
         public['uncertain_clips']=sorted({int(t['slot'].split(':')[1]) for t in uncertain_clip_tasks(j)})
         public['stall']=stall_info(j)
     s['quota_status']=quotas.summary(STATE,time.time());s['version']=VERSION
+    s['usage']=account_usage.view(STATE)  # which account works now, on which AI, for what (0.1.95)
     s['accounts']=identities.view(STATE,time.time(),int(STATE['settings'].get('flow_cost',12)));s.pop('extension_origin',None)
     s['setup']=readiness.setup_missing(STATE);s.setdefault('readiness',{'sites':{},'pending':[]})
     s['key_saved']=bool(STATE['clients'])  # an extension holds the key once it has paired, manually or automatically
@@ -1237,6 +1240,8 @@ def engine_ready(j,engine,moment=None):
     moment=moment or time.time()
     if engine not in engines.AVAILABLE:return False
     if engine=='flow':return flow_can_pay(j)
+    # Owner 06/11/2026: Grok is costly, never used without their go-ahead (« Utiliser Grok » on the episode).
+    if engine=='grok' and not (j.get('grok_ok') or STATE.get('settings',{}).get('grok_auto')):return False
     own=engine==engines.of(j)
     if j['config'].get('dry_run') and not own:return False  # a dry run checks the episode's engine only
     if (STATE.get('engine_walls') or {}).get(engine,0)>moment:return False
@@ -1266,6 +1271,7 @@ def clip_engine_for(j,i,early=False):
         if engine_chain.round_of(s)>before:event(j,f'Clip {i+1} : prompt adouci, nouvel essai sur {engine_chain.LABELS[nxt]}.')
         return nxt
     if redraw_refused_board(j,i):return None
+    ask_grok(j,i)
     s['engine_exhausted']=True;alert(j,'action','Clip '+str(i+1)+' : '+held_message(j))
     return None
 
@@ -1357,7 +1363,7 @@ def schedule_flow_clip(j,i,early=False,parallel=False):
         return True
     if p['id']!=j.get('flow_profile') and not parallel:
         previous=profile_by(j.get('flow_profile'))
-        j['flow_profile']=p['id'];event(j,'Passage automatique au compte Flow '+(p.get('flow_email') or p.get('label') or '')+f" ({p['balance']} crédits)"+(' : '+(previous.get('flow_email') or previous.get('label') or '')+(' sans accès à Flow' if previous.get('blocked')=='unavailable' else ' vide') if previous else '')+' ; clips reçus conservés.')
+        j['flow_profile']=p['id'];account_usage.number_flow(STATE);event(j,account_usage.switch_line(previous,p))
     payload={'prompt':clip_prompt(j,i,'flow'),'attachments':[asset_url(j,flow_reference(j,s['image']))],'cost':cost,'balance':p['balance'],'seconds':8,**({'model':j['config']['flow_model'],'resolution':j['config'].get('flow_resolution','720p')} if j['config'].get('flow_model') else {})}
     if j['config'].get('dry_run'):payload['dry_run']=True
     target=flow_accounts.route(p) if STATE.get('settings',{}).get('flow_auto') else None
@@ -1366,7 +1372,7 @@ def schedule_flow_clip(j,i,early=False,parallel=False):
         if existing:target['url']=existing
         else:target['new_project']=True
         payload['flow_route']=target
-    if parallel:event(j,'Clip '+str(i+1)+' en parallèle sur le compte Flow '+readiness.mask(p.get('flow_email') or p.get('label'))+f" ({p['balance']} crédits).")
+    if parallel:account_usage.number_flow(STATE);event(j,'Clip '+str(i+1)+' en parallèle : '+account_usage.flow_name(p,word='compte Flow')+'.')
     add_task(j,'flow_video',payload,f'clip:{i}',profile=p['id']);return True
 
 def clip_failed(j,t,result,kind):
@@ -1405,6 +1411,7 @@ def clip_failed(j,t,result,kind):
     t['status']='failed';j['status']='running'
     event(j,engine_chain.line(i,engine,kind,reason,nxt,engine_chain.round_of(scene)>before))
     if not nxt and redraw_refused_board(j,i):schedule(j);return True
+    if not nxt:ask_grok(j,i)
     if not nxt:
         scene['engine_exhausted']=True
         alert(j,'action',f'Clip {i+1} : aucun moteur ne l’a fait, même avec le prompt adouci — {engine_chain.summary(scene)}. Modifie la scène (« Refaire » avec une consigne) ou importe un clip, puis Reprendre. Les autres clips continuent.')
@@ -1415,6 +1422,13 @@ THIRD_PARTY_NOTE=('Video engine refusal: this board looks too close to existing 
     'clearly different: another camera angle and framing, another pose and gesture for each character, another background '
     'layout and lighting, different colours for clothes details and props. Keep the characters recognisable (species, hair, '
     'outfit type) and keep the meaning of the scene.')
+
+def ask_grok(j,i):
+    """Every free engine failed: offer Grok, once per episode, never used before the owner says yes."""
+    if j.get('grok_ok') or 'grok' not in engine_chain.order(STATE.get('settings'),j['config']) or j.get('grok_asked'):return
+    j['grok_asked']=True
+    alert(j,'action',f'Clip {i+1} : Flow, Arena et Vidogrid n’y arrivent pas. Grok peut essayer, mais il consomme beaucoup : valide pour l’utiliser sur cet épisode.')
+    j['alerts'][-1]['command']='allow_grok';j['alerts'][-1]['label']='Utiliser Grok pour cet épisode'
 
 def redraw_refused_board(j,i):
     """Real case 06/11/2026: Flow refused a board « en raison des intérêts des fournisseurs de contenu tiers » whatever the
@@ -1901,6 +1915,10 @@ def accept_task_result(t,result):
             sc=j['scenes'][int(slot.split(':')[1])];sc['clip']=file
             # The engine that made it (montage length, quality range) ; the next clip starts again from the first engine.
             if t.get('kind') in ('flow_video','engine_video'):sc['engine']='flow' if t['kind']=='flow_video' else t['payload'].get('engine')
+            # And the account that made it (0.1.95): « Flow · compte 2 » under the clip.
+            made_by=account_usage.clip_account(t,STATE['profiles']) if t.get('kind') in ('flow_video','engine_video') else None
+            if made_by:sc['account']=made_by
+            else:sc.pop('account',None)
             engine_chain.reset(sc)
             # The board the clip was animated from: a later board change shows « la planche a changé après le clip ».
             sc['clip_from']=sc.get('image');sc.pop('text_after_clip',None)
@@ -2194,9 +2212,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                 t['status']='cancelled';j['status']='running';schedule(j);continue
                             if t['payload'].get('dry_run'):
                                 # A dry run never sends: nothing to reserve (P1-4).
-                                t['status']='claimed'; t['client']=client; t['claimed']=now(); event(j,'Essai à blanc : préparation de '+t['slot']+' dans Flow, sans envoi.'); save(); return self.send_json(t)
+                                t['status']='claimed'; t['client']=client; t['claimed']=now(); account_usage.touch(STATE,t,time.time()); event(j,'Essai à blanc : préparation de '+t['slot']+' dans Flow, sans envoi.'); save(); return self.send_json(t)
                             p['balance']-=cost;flow_refill.spent(p,time.time());t['reservation']={'profile':p['id'],'amount':cost,'refunded':False}; event(j,f"Réservation prudente de {cost} crédits sur {p['label']}. En cas d’échec, vérifier le solde réel avant de le réajuster.")
-                        t['status']='claimed'; t['client']=client; t['claimed']=now(); event(j,('Essai à blanc : préparation de '+t['slot']+' dans '+engines.ENGINES[t['payload']['engine']]['label']+', sans envoi.') if t['kind']=='engine_video' and t['payload'].get('dry_run') else 'Connecteur en cours : '+t['slot']); save(); return self.send_json(t)
+                        t['status']='claimed'; t['client']=client; t['claimed']=now(); account_usage.touch(STATE,t,time.time()); event(j,('Essai à blanc : préparation de '+t['slot']+' dans '+engines.ENGINES[t['payload']['engine']]['label']+', sans envoi.') if t['kind']=='engine_video' and t['payload'].get('dry_run') else account_usage.claim_line(STATE,t)); save(); return self.send_json(t)
                     save(); return self.send_json(None)
                 if path=='/api/bridge/status':
                     if not self.auth_bridge():return self.send_json({'error':'Appairage requis'},401)
@@ -2716,6 +2734,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         if b.get('flow_profile'): j['flow_profile']=b['flow_profile']
                         j.pop('last_error',None);j.pop('editorial_attempts',None);j.pop('accounts_check',None);j['status']='running'; event(j,'Reprise demandée ; passage automatique limité aux comptes Flow enregistrés.' if STATE.get('settings',{}).get('flow_auto') else 'Reprise demandée ; compte Flow sélectionné conservé.')
                         if start_check(j):schedule(j)
+                    elif action=='allow_grok':
+                        j['grok_ok']=True;j['alerts']=[a for a in j.get('alerts',[]) if a.get('command')!='allow_grok']
+                        for sc in j['scenes']:
+                            if sc.get('engine_exhausted') and not sc.get('clip'):engine_chain.reset(sc)
+                        j['status']='running';event(j,'Grok autorisé par le propriétaire pour cet épisode.');schedule(j)
                     elif action=='retry_step':
                         # « Relancer cette étape » from the blocked banner: the stuck task is dropped and the step asked again.
                         info=stall_info(j)

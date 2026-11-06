@@ -102,7 +102,7 @@ class ChainScheduleTests(unittest.TestCase):
         s.STATE = fresh()
 
     def test_one_try_per_engine_then_softened_flow_then_owner(self):
-        j = clip_job(); s.schedule(j)
+        s.STATE["settings"]["grok_auto"] = True; j = clip_job(); s.schedule(j)
         t = queued(j)[0]; self.assertEqual((t['slot'], engine_of(t)), ('clip:0', 'flow'))
         fail(t, {'ok': False, 'generation_submitted': False, 'error': 'Flow : coût affiché différent du budget prévu. Aucun envoi effectué.'})
         self.assertEqual(s.STATE['profiles'][0]['balance'], 100, 'nothing sent: reservation given back')
@@ -240,3 +240,13 @@ class ThirdPartyRedraw(unittest.TestCase):
     def test_other_refusals_do_not_redraw(self):
         j = {'id': 'tq', 'events': [], 'config': {}, 'scenes': [{'image': 'b.png', 'engine_tries': [{'reason': 'Page vide'}]}]}
         self.assertFalse(s.redraw_refused_board(j, 0))
+
+
+class GrokNeedsOwner(unittest.TestCase):
+    def test_grok_is_never_ready_without_the_owner(self):
+        s.STATE = s.fresh()
+        j = {'id': 'g', 'events': [], 'config': {}, 'scenes': [{}]}
+        self.assertFalse(s.engine_ready(j, 'grok'))
+        s.ask_grok(j, 0)
+        self.assertEqual(j['alerts'][-1]['command'], 'allow_grok')
+        n = len(j['alerts']); s.ask_grok(j, 0); self.assertEqual(len(j['alerts']), n, 'asked once')
