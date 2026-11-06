@@ -166,10 +166,9 @@ class Lanes(unittest.TestCase):
         j = job(n=3, drawn=1); s.schedule(j)
         clip = active(j, 'video')[0]; clip['status'] = 'claimed'
         s.accept_task_result(clip, {'ok': False, 'error': 'Interface non reconnue'})
-        self.assertEqual(j['status'], 'attention')
+        self.assertEqual(j['status'], 'running', 'the boards go on')
         deliver(active(j, 'chat')[0])
         self.assertEqual(j['last_error']['task'], clip['id'], 'a board received does not erase the clip failure')
-        self.assertEqual(j['status'], 'attention')
 
     def test_stall_names_the_silent_lane(self):
         import datetime as dt
@@ -282,3 +281,18 @@ class ChatQuotaKeepsClips(unittest.TestCase):
         j['status'] = 'waiting_quota'; j['quota_lane'] = 'video'; j['wait_until'] = 9e12
         s.schedule(j)
         self.assertEqual(active(j), [])
+
+
+class FailedEarlyClip(unittest.TestCase):
+    def setUp(self):
+        s.STATE = s.fresh()
+
+    def test_boards_go_on_when_an_early_clip_fails(self):
+        j = job(n=3, drawn=1); s.schedule(j)
+        clip = next(t for t in active(j) if t['slot'] == 'clip:0'); clip['status'] = 'claimed'
+        s.accept_task_result(clip, {'ok': False, 'error': 'Génération trop longue ou média non détecté.'})
+        self.assertEqual(j['status'], 'running')
+        self.assertTrue(j['early_clips_off'])
+        self.assertIn('image:1', [t['slot'] for t in active(j)])
+        self.assertEqual(active(j, 'video'), [])
+        self.assertEqual(j['alerts'][-1]['level'], 'action')

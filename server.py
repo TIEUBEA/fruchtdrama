@@ -1465,6 +1465,12 @@ def accept_task_result(t,result):
             if p:p['blocked']=result['flow_blocked']
             if not was_paused and STATE.get('settings',{}).get('flow_auto'):
                 j['status']='running';schedule(j)
+        if lane_of(t)=='video' and j.get('stage')=='images' and j['status']=='attention' and not was_paused:
+            # A clip sent ahead failed: the boards go on (ChatGPT is not blocked by Flow); the clips wait for the clips
+            # stage, where a possibly sent clip is checked by the owner before anything is sent again.
+            j['early_clips_off']=True;j['status']='running'
+            alert(j,'action','Clip '+str(int(t['slot'].split(':')[1])+1)+' en échec ('+str(result.get('error',''))[:120]+'). Les planches continuent ; vérifie le projet Flow avant que les clips reprennent.')
+            schedule(j)
         return
     slot=t['slot']
     if slot=='research': apply_research(j,result.get('candidates',[]))
