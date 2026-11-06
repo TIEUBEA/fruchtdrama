@@ -5,6 +5,11 @@ correspondante (P0-xx, P1-x, P2-xx) détaillée dans `docs/sudf/`. Guide pour re
 `docs/sudf/REPRISE.md`. **Mode d'emploi détaillé** (installer, lancer, utiliser), mis à jour à chaque
 version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, version par version).
 
+## 0.1.105 (07/11/2026)
+
+**Corrigé**
+- Flow : « résolution demandée non confirmée » faisait échouer chaque clip, sur tous les comptes. Flow propose maintenant une autre résolution que le 720p demandé. La résolution affichée par Flow est acceptée. Le coût affiché doit toujours être égal au budget avant tout envoi, et la vidéo finale reste en 1080p.
+
 ## 0.1.104 (07/11/2026)
 
 **Amélioré** (Recréer à l'identique, d'après la comparaison avec l'original de BANANITO)
