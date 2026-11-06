@@ -50,7 +50,7 @@ Page **Mes comptes**, en haut : une carte par site.
 
 ![Mes comptes : une carte par site (adresse masquée)](guide/g03-comptes.jpg)
 
-1. Chaque carte dit si vous êtes **connecté**. ChatGPT, Google Flow et « Accès à tes fichiers » sont **nécessaires** ; TikTok, Claude, Grok et LMArena sont facultatifs.
+1. Chaque carte dit si vous êtes **connecté**. ChatGPT, Google Flow et « Accès à tes fichiers » sont **nécessaires** ; TikTok, Claude et Grok sont facultatifs (Grok est conseillé : il prend les clips que Flow ne fait pas).
 2. **Changer de compte** ouvre le site dans un onglet de la fenêtre : connectez-vous **vous-même**. La carte passe au vert toute seule et l'onglet se referme.
 
 Plus bas, **Comptes Google Flow** : pour utiliser **plusieurs comptes et leurs crédits**.
@@ -88,8 +88,8 @@ Les vidéos qui marchent, avec leurs **vrais chiffres** : vues, vues par heure, 
    Le dernier choix est gardé. Les images restent toujours dessinées par ChatGPT et les clips faits par Google Flow : seule l'histoire change de main.
 2. **Option** : *Pas d'idée* (10 histoires proposées), *J'ai une idée*, *Refaire une virale* (lien TikTok, voir 6 bis), *Décide tout à ma place*.
 3. **Niche** : 9 choix (Fruits, Chats, Animaux, Bébés, Créatures, Gourmandises, Avatar humain, Cartoon, Survie).
-4. **Durée** : Essai · 30 s, **Courte · 1 min (le minimum pour être payé par TikTok)**, Moyenne · 2 min, Longue · 3 min, Très longue · 4 min. Le nombre de plans et le coût Flow estimé s'affichent dessous.
-5. **Moteur vidéo** : Google Flow (conseillé), Grok ou Arena (expérimentaux).
+4. **Durée** : Essai · 30 s, **Courte · 1 min (le minimum pour être payé par TikTok)**, Moyenne · 2 min, Longue · 3 min, Très longue · 4 min. Le nombre de plans et le coût Flow estimé s'affichent dessous. Les plans durent **10 s** chez Flow : « Courte · 1 min » = **7 clips de 10 s ≈ 70 s**, assez pour TikTok Creator Rewards (vidéos d'au moins 1 min). Au plus 30 mots parlés par plan (3 mots par seconde). Les épisodes déjà créés gardent leurs plans de 8 s.
+5. **Moteur vidéo** : Google Flow (conseillé, 10 s par clip) ou Grok (6 s par clip). Chaque clip fait un essai sur Flow ; si le clip n'est pas généré, il part **aussitôt sur Grok**, sans rien vous demander.
 6. **Langue** : **cinq langues** — Français, English, Español, Português (Brasil), Deutsch. Répliques, titre, voix et sous-titres sont dans cette langue.
 7. **Format** (Vertical 9:16, Horizontal 16:9, Les deux) et **Qualité** (Normale, ou Économie : moins de contrôles, rien n'est refait).
 8. **Fabrication** : « Lancer la production automatiquement » coché = tout s'enchaîne après la fiche ; décoché = vous validez la fiche vous-même avant tout paiement. Puis **Personnages** (Simple ou Détaillé), **Sous-titres** (Sans ou Avec karaoké), **Essai à blanc des clips** (tout est préparé, rien n'est envoyé ni payé) et **Réglages Flow**.
@@ -104,7 +104,7 @@ Choisir l'option **Refaire une virale** : la partie 3 devient « La vidéo à re
 
 - **Lien TikTok** de la vidéo. Le studio la récupère, en tire les moments clés et ce qui est dit, et les montre à l'IA. La vidéo reste sur votre ordinateur.
 - Case vide : une **histoire originale inspirée** de la vidéo (même mécanique d'émotion, autres personnages, lieux et répliques).
-- Case **Recréer à l'identique** cochée : **la même histoire, scène par scène** — mêmes personnages, mêmes lieux, mêmes événements, même fin ; seules les répliques sont reformulées et les prénoms changent. Attention : plus c'est proche de l'original, plus TikTok risque de juger la vidéo non originale (moins de vues, pas de rémunération).
+- Case **Recréer à l'identique** cochée : **la même histoire, scène par scène** — mêmes personnages, mêmes lieux, mêmes événements, même fin ; seules les répliques sont reformulées et les prénoms changent. L'histoire est **condensée en ~1 min** (7 plans de 10 s) pour la monétisation TikTok, même si l'original est plus long : les temps forts sont gardés, le reste est fusionné. Attention : plus c'est proche de l'original, plus TikTok risque de juger la vidéo non originale (moins de vues, pas de rémunération).
 - **Captures en plus** (jusqu'à 4 images, par exemple votre photo pour un personnage) et **Instructions en plus** : facultatifs.
 
 En bas de la page, **Vidéos déjà récupérées** liste les vidéos déjà refaites, avec **Ouvrir l'épisode** :
@@ -149,6 +149,10 @@ Un **bandeau en haut de l'épisode** dit ce qui demande votre regard :
 ![Bandeau rouge « Action requise »](guide/g12-bandeau.jpg)
 
 - **Rouge « Action requise »** : le studio vous attend (la raison est écrite). Faites ce qui est demandé, puis **▶ Boucle complète**.
+- **Rouge « Bloqué : … depuis N min »** : une étape (scénario, planches, clips, montage) dépasse sa durée normale. La raison est écrite ; **Relancer cette étape** la redemande. Le même bandeau apparaît sur la carte du Studio et dans le menu : la vidéo ne tourne pas, rien ne le cache.
+- **Gros bandeau « En pause — rien ne tourne »** ou **« Arrêté — action requise »** : la raison et **Reprendre**.
+- **« N clips en échec »** : Flow puis Grok n'ont pas fait ces clips (« Clip N : Flow (raison) puis Grok (raison) — clip à refaire »). Les autres clips continuent ; le montage attend. Ouvrez la scène, **Refaire…** (avec une consigne) ou **Importer** un clip.
+- **Envoi Flow incertain** : n'arrête plus rien. Le clip part sur Grok ; si le clip Flow est retrouvé ensuite, il complète ou remplace celui de Grok.
 - **Orange « Décidé automatiquement — à vérifier avant de publier »** : les scènes acceptées seules par la boucle. Regardez-les avant de publier.
 
 ### Personnages

@@ -2,11 +2,11 @@
 // ni enlever ceux déjà ajoutés »). Like the Atelier, simpler: one block per service, one line per account (Prêt / À régler +
 // raison / Bloqué jusqu'à HH:MM, crédits for Flow), « + Ajouter un compte », « Supprimer », « Tout supprimer ».
 // Everything technical is in « Avancé », closed. No password is ever asked or kept.
-const ACC_SERVICES=[['chatgpt','ChatGPT',true,'personnages, planches et miniature'],['flow','Google Flow',true,'les clips, en premier'],['arena','Arena',false,'les clips, si Flow ne peut pas'],['vidogrid','Vidogrid',false,'les clips (Grok Lite, 10 s), si Flow et Arena ne peuvent pas'],['grok','Grok',false,'les clips, en dernier recours'],['claude','Claude',false,'l’histoire, si tu préfères Claude']];
-// 0.1.93: each clip tries the engines in this order, one try each (owner 06/11/2026: « un essai par cas »).
-const ENGINE_ORDER_DEFAULT=['flow','arena','vidogrid','grok'],ENGINE_NAMES={flow:'Flow',arena:'Arena',vidogrid:'Vidogrid',grok:'Grok'};
-function engineOrder(){const o=(state.settings?.engine_chain||ENGINE_ORDER_DEFAULT).filter(e=>ENGINE_NAMES[e]);return o.length?o:ENGINE_ORDER_DEFAULT;}
-function engineOrderBlock(){const o=engineOrder();return `<section class="panel acc-service"><h2>Ordre des moteurs pour chaque clip</h2><p class="hint">Un essai par moteur et par clip ; un moteur sans compte prêt est sauté. Si tous échouent, le prompt est adouci et Flow réessaie une fois, puis le clip t’attend.</p><div class="chips">${o.map((e,i)=>`<span class="qchip">${i+1}. ${ENGINE_NAMES[e]}${i?` <button class="link-btn" data-engine-up="${e}" title="Passer avant le moteur précédent">monter</button>`:''}</span>`).join(' › ')}</div></section>`;}
+const ACC_SERVICES=[['chatgpt','ChatGPT',true,'personnages, planches et miniature'],['flow','Google Flow',true,'les clips, en premier'],['grok','Grok',true,'les clips, dès que Flow échoue'],['claude','Claude',false,'l’histoire, si tu préfères Claude']];
+// 0.1.97: each clip tries Flow, then Grok at once, one try each (owner 06/11/2026: « on n'a plus que Flow et Grok »).
+const ENGINE_ORDER_DEFAULT=['flow','grok'],ENGINE_NAMES={flow:'Flow',grok:'Grok'};
+function engineOrder(){const o=(state.settings?.engine_chain||ENGINE_ORDER_DEFAULT).filter(e=>ENGINE_NAMES[e]);for(const e of ENGINE_ORDER_DEFAULT)if(!o.includes(e))o.push(e);return o;}
+function engineOrderBlock(){const o=engineOrder();return `<section class="panel acc-service"><h2>Ordre des moteurs pour chaque clip</h2><p class="hint">Un essai par moteur et par clip ; un moteur sans compte prêt est sauté. Si les deux échouent, l’erreur s’affiche sur l’épisode (« clip à refaire ») et les autres clips continuent.</p><div class="chips">${o.map((e,i)=>`<span class="qchip">${i+1}. ${ENGINE_NAMES[e]}${i?` <button class="link-btn" data-engine-up="${e}" title="Passer avant le moteur précédent">monter</button>`:''}</span>`).join(' › ')}</div></section>`;}
 const accHH=t=>new Date(t*1000).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
 const accMask=e=>{e=String(e||'');const i=e.indexOf('@');return i<0?e:e.slice(0,2)+'•••'+(i>3?e[i-1]:'')+e.slice(i);};
 const accReady=()=>state.readiness||{sites:{},pending:[]};
@@ -28,7 +28,7 @@ function accountRows(svc){const R=accReady(),pending=new Set(R.pending||[]),now=
    .sort((a,b)=>a.rank-b.rank||b.credits-a.credits||(a.number||99)-(b.number||99));}
  const session=(R.sites||{})[svc],seen=(state.sites||{})[svc]||{},live=session?.email||seen.email||null,key='site:'+svc;
  let emails=(state.identities||[]).filter(i=>(i.services||[]).includes(svc)).map(i=>i.email);
- const engine=['grok','arena','vidogrid'].includes(svc)?(state.engine_accounts||[]).filter(a=>a.engine===svc):[];
+ const engine=svc==='grok'?(state.engine_accounts||[]).filter(a=>a.engine===svc):[];
  for(const a of engine)if(!emails.includes(a.email))emails.push(a.email);
  if(live&&!emails.includes(live))emails.push(live);
  const rows=emails.map(email=>({email}));
@@ -70,7 +70,7 @@ const TRACK_OF=slot=>{slot=String(slot||'');return slot.startsWith('clip:')?3:sl
 function trackAI(j,i){const rows=accUsage().in_use.filter(u=>u.job===j.id&&TRACK_OF(u.slot)===i);if(!rows.length)return '';
  return `<div class="track-ai">${rows.map(u=>`<p><span class="acc-dot" aria-hidden="true"></span><span>${esc(u.short||u.what)} · <b>IA : ${esc(usageAI(u))}</b></span></p>`).join('')}</div>`;}
 // Under a received clip: the engine and the account that made it (scenes[i].engine since 0.1.93, .account since 0.1.95).
-function madeBy(s,full){if(!s?.clip||!s.engine)return '';const name=ENGINE_NAMES[s.engine]||s.engine,a=s.account||{};
+function madeBy(s,full){if(!s?.clip||!s.engine)return '';const name=ENGINE_NAMES[s.engine]||s.engine.charAt(0).toUpperCase()+s.engine.slice(1),a=s.account||{};  // a clip made before 0.1.97 by Arena keeps its name
  if(s.engine==='flow'){const p=(state.profiles||[]).find(x=>x.id===a.profile);const n=p?.number;return name+(n?' · compte '+n:'')+(full&&a.email?' ('+accMask(a.email)+')':'');}
  return name+(full&&a.email?' · '+accMask(a.email):'');}
 // Top of Mes comptes: every account working right now, in one glance.

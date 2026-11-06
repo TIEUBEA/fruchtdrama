@@ -30,14 +30,22 @@ def clip_job(engine='grok', dry=False):
 
 class EngineUnitTests(unittest.TestCase):
     def test_catalogue_and_validation(self):
-        self.assertEqual(set(engines.ENGINES), {'flow', 'grok', 'arena', 'vidogrid'})
+        self.assertEqual(set(engines.ENGINES), {'flow', 'grok'}, 'Arena and Vidogrid removed (0.1.97)')
+        self.assertEqual(engines.AVAILABLE, ('flow', 'grok'))
+        for gone in ('arena', 'vidogrid'):
+            with self.assertRaises(ValueError):
+                engines.validate(gone)
         self.assertEqual(engines.validate(None), 'flow')
         with self.assertRaises(ValueError):
             engines.validate('sora')
         self.assertEqual(engines.of({'config': {}}), 'flow', 'older productions stay on Flow')
 
     def test_word_limit_follows_duration(self):
-        self.assertEqual(engines.word_limit({'config': {}}), 20)
+        self.assertEqual(engines.word_limit({'config': {}}), 20, 'an episode made before 0.1.97: 8 s, 20 words')
+        self.assertEqual(engines.word_limit({'config': {'flow_seconds': 10}}), 30, '10 s plans: 3 words a second')
+        self.assertEqual(engines.word_limit({'config': {'flow_seconds': 10}}, 25), 30)
+        self.assertEqual(engines.spec({'config': {'flow_seconds': 10}})['seconds'], 10)
+        self.assertEqual(engines.words_for('grok', j={'config': {'flow_seconds': 10}}), 15)
         self.assertEqual(engines.word_limit({'config': {'video_engine': 'grok'}}), 15)
         self.assertEqual(engines.word_limit({'config': {'video_engine': 'grok'}}, 25), 18)
 
@@ -75,7 +83,7 @@ class ScheduleTests(unittest.TestCase):
             s.edit_script(j, {'scenes': [{'dialogue': [{'speaker': 'orange', 'text': t}]} for t in (' '.join(['Wort'] * 16), 'b', 'c', 'd')]})
 
     def test_dry_run_for_grok(self):
-        j = clip_job('arena', dry=True); s.schedule(j)
+        j = clip_job('grok', dry=True); s.schedule(j)
         t = s.STATE['tasks'][-1]; self.assertTrue(t['payload']['dry_run']); t['status'] = 'claimed'
         s.accept_task_result(t, {'ok': False, 'dry_run': True, 'generation_submitted': False, 'error': 'Essai à blanc réussi'})
         self.assertEqual(j['status'], 'paused'); self.assertTrue(j['dry_run_passed'])
@@ -115,7 +123,7 @@ class HttpTests(unittest.TestCase):
 
     def test_engine_is_validated_and_gated_until_its_connector_ships(self):
         self.req({'brief': 'x', 'config': {}})
-        self.assertEqual(s.STATE['jobs'][0]['config']['video_engine'], 'flow'); self.assertEqual(s.STATE['jobs'][0]['config']['clip_seconds'], 8)
+        self.assertEqual(s.STATE['jobs'][0]['config']['video_engine'], 'flow'); self.assertEqual(s.STATE['jobs'][0]['config']['clip_seconds'], 10)
         engines.AVAILABLE = ('flow',)
         with self.assertRaises(urllib.error.HTTPError) as e:
             self.req({'brief': 'x', 'config': {'video_engine': 'grok'}})

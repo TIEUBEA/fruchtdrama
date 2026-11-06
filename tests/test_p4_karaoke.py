@@ -33,7 +33,7 @@ class UnitTests(unittest.TestCase):
     def test_clip_length_follows_the_engine(self):
         late = speech(start=8.2)
         self.assertIsNone(quality.caption_events(self.scene, late, 0, 4, 30, 8, True), 'words after 8 s rejected for Flow')
-        self.assertIsNotNone(quality.caption_events(self.scene, late, 0, 4, 30, 10.5, True), 'accepted for a 10 s Arena clip')
+        self.assertIsNotNone(quality.caption_events(self.scene, late, 0, 4, 30, 10.5, True), 'accepted for a 10 s clip')
 
     def test_new_productions_default_to_karaoke(self):
         import json, threading, urllib.request

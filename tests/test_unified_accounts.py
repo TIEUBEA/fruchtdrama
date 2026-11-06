@@ -17,11 +17,14 @@ class UnitTests(unittest.TestCase):
         st = {'profiles': [], 'engine_accounts': []}
         identities.add(st, ' Moi@Gmail.com ', ['chatgpt', 'flow', 'grok', 'arena'], 'Principal', 50)
         self.assertEqual(len(st['profiles']), 1); self.assertEqual(st['profiles'][0]['balance'], 50)
-        self.assertEqual({a['engine'] for a in st['engine_accounts']}, {'grok', 'arena'})
+        self.assertEqual({a['engine'] for a in st['engine_accounts']}, {'grok'}, 'Arena removed (0.1.97): ignored')
         identities.add(st, 'moi@gmail.com', ['flow', 'claude'])
         self.assertEqual(len(st['profiles']), 1, 'no duplicate Flow profile'); self.assertEqual(len(st['identities']), 1)
         rows = identities.view(st, time.time())
-        self.assertEqual(len(rows), 1); self.assertEqual(rows[0]['order'], ['chatgpt', 'claude', 'flow', 'grok', 'arena'])
+        self.assertEqual(len(rows), 1); self.assertEqual(rows[0]['order'], ['chatgpt', 'claude', 'flow', 'grok'])
+        # Rows left by an older version (Arena, Vidogrid) are ignored without error.
+        st['engine_accounts'].append({'id': 'old', 'engine': 'arena', 'label': 'x', 'email': 'moi@gmail.com'})
+        self.assertNotIn('arena', identities.view(st, time.time())[0]['services'])
         self.assertEqual(rows[0]['label'], 'Principal'); self.assertNotIn('password', json.dumps(st))
 
     def test_old_records_grouped_by_address(self):
@@ -88,8 +91,10 @@ class HttpTests(unittest.TestCase):
     def test_account_api(self):
         st = self.req('/api/account', {'email': 'Moi@x.com', 'services': ['chatgpt', 'flow', 'grok', 'arena'], 'balance': 50})
         self.assertEqual(len(st['accounts']), 1); self.assertEqual(st['accounts'][0]['services']['flow']['balance'], 50)
-        st = self.req('/api/account', {'email': 'moi@x.com', 'remove_service': 'arena'})
         self.assertNotIn('arena', st['accounts'][0]['services'])
+        self.assertEqual(self.error('/api/account', {'email': 'moi@x.com', 'remove_service': 'arena'})[0], 400)
+        st = self.req('/api/account', {'email': 'moi@x.com', 'remove_service': 'grok'})
+        self.assertNotIn('grok', st['accounts'][0]['services'])
         st = self.req('/api/account', {'email': 'moi@x.com', 'delete': True})
         self.assertEqual(st['accounts'], []); self.assertEqual(st['profiles'], [])
         self.assertEqual(self.error('/api/account', {'email': 'x', 'services': ['grok']})[0], 400)

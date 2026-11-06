@@ -3,8 +3,8 @@
 // page, no anti-robot check. Read only: no prompt is typed or sent, no credit is spent, no check is bypassed.
 // A tab that needs the owner (sign-in, anti-robot check) stays open in the background; « Régler maintenant » shows it.
 globalThis.FruchtReadiness={
- HOSTS:{chatgpt:['chatgpt.com'],claude:['claude.ai'],grok:['grok.com'],arena:['arena.ai','lmarena.ai'],vidogrid:['vidogrid.ai','www.vidogrid.ai'],flow:['flow.google.com','labs.google']},
- URLS:{chatgpt:'https://chatgpt.com/',claude:'https://claude.ai/new',grok:'https://grok.com/imagine',arena:'https://arena.ai/video',vidogrid:'https://vidogrid.ai/app/video-gen/grok'},
+ HOSTS:{chatgpt:['chatgpt.com'],claude:['claude.ai'],grok:['grok.com'],flow:['flow.google.com','labs.google']},
+ URLS:{chatgpt:'https://chatgpt.com/',claude:'https://claude.ai/new',grok:'https://grok.com/imagine'},
  EDITOR:['chatgpt','claude','grok'],
  // Pure: what the page shows -> Prêt / À régler (reason) / Pas d'accès.
  classify(info){
@@ -14,8 +14,6 @@ globalThis.FruchtReadiness={
   if(info.challenge)return fix('Vérification anti-robot à faire : résous-la toi-même dans l’onglet');
   if(info.host&&info.expectedHosts&&!info.expectedHosts.includes(info.host))return fix(/accounts\.google|auth|login/i.test(info.host)?'Connexion requise':'Page inattendue ('+info.host+') : connexion ou blocage');
   if(info.signIn)return fix('Connexion requise');
-  // Vidogrid shows no « Sign in » button: its sign-in page or a page without credits means not signed in.
-  if(info.name==='vidogrid'&&info.loggedOut)return fix('Connexion requise : clique « Continue with Google » toi-même');
   if(info.kind==='flow'){
    if(!info.email)return fix('Connexion Google requise : aucun compte lu sur la page');
    if(info.expectedEmail&&info.email!==info.expectedEmail)return fix('Autre compte Google ouvert à cette place : clique « Détecter mes comptes »');
@@ -33,11 +31,11 @@ globalThis.FruchtReadiness={
   const labels=[...doc.querySelectorAll('button,a,[role="button"]')].filter(b=>b.getClientRects().length).map(b=>[b.getAttribute('aria-label'),b.innerText].filter(Boolean).join(' ').replace(/\s+/g,' ').trim());
   const signIn=labels.some(l=>/^(log in|sign in|se connecter|connexion|anmelden|einloggen)$/i.test(l));
   return {editor:visibleEditor,signIn:name==='flow'?false:signIn&&!site.connected,challenge:!!globalThis.FruchtComposer?.challenge(doc),
-   loggedOut:name==='vidogrid'&&site.connected===false,email:name==='flow'?(globalThis.FruchtFlowSession?.identity(doc)||null):(site.email||null),text:String(doc.body?.innerText||'').trim().length>0,
+   email:name==='flow'?(globalThis.FruchtFlowSession?.identity(doc)||null):(site.email||null),text:String(doc.body?.innerText||'').trim().length>0,
    ready:['interactive','complete'].includes(doc.readyState)};
  },
  hostOf(url){try{return new URL(url).hostname;}catch{return '';}},
- // Real page 06/11/2026: arena.ai (Next.js / React 19) opened in a background tab stays an empty skeleton (body text
+ // Real page 06/11/2026: a Next.js / React 19 site (then arena.ai) opened in a background tab stays an empty skeleton (body text
  // empty, « Page vide ou bloquée ») because React reveals its streamed content on requestAnimationFrame, which Chrome
  // never fires in a hidden tab. In the page's own world, while the tab is hidden, animation frames become short timers
  // and the content already received is shown. Display only: nothing is typed, clicked or sent.

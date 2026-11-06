@@ -268,7 +268,8 @@ class HTTPTests(unittest.TestCase):
         new=s.STATE['jobs'][0]
         self.assertEqual(new['config']['flow_model'],'gemini_omni_flash')
         self.assertEqual(new['config']['flow_cost'],12);self.assertEqual(new['config']['flow_resolution'],'720p')
-        self.assertEqual(new['config']['clip_seconds'],8);self.assertEqual(old,before)
+        self.assertEqual(new['config']['clip_seconds'],10);self.assertEqual(new['config']['flow_seconds'],10);self.assertEqual(old,before)  # 0.1.97: 10 s plans; the old episode keeps 8 s
+        self.assertEqual(s.engines.flow_seconds(old),8)
         count=len(s.STATE['jobs'])
         with self.assertRaises(urllib.error.HTTPError):
             self.req('/api/job',{'brief':'test','config':{'flow_model':'gemini_omni_flash','flow_cost':10}})

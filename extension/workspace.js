@@ -1,6 +1,6 @@
 // One dedicated window for the studio and every provider tab (P5-1).
 // Clicking the extension icon opens (or refocuses) this window; ChatGPT, Claude, Flow, TikTok,
-// Grok and Arena tabs are created inside it, and tabs found elsewhere are moved into it.
+// Grok tabs are created inside it, and tabs found elsewhere are moved into it.
 globalThis.FruchtWorkspace={
  STUDIO:'http://127.0.0.1:8840/',
  settingsUrl(chrome){return chrome.runtime.getURL('popup.html');},

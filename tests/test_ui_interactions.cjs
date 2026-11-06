@@ -106,7 +106,7 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   // 7 bis. Interface (0.1.95): no account or script AI menu on the episode (Mes comptes and the rotation choose);
   // « Ce qui se passe » always shown, technical lines only in « Tout le journal »; delete is a quiet link.
   assert.ok(await evaluate(`!document.querySelector('#jobProfile')&&!document.querySelector('#jobProvider')`),'no account menu on the episode');
-  assert.ok(await evaluate(`(()=>{const p=document.querySelector('.journal');return !!p&&p.querySelector('h3').innerText==='Ce qui se passe'&&!p.closest('details')&&p.querySelectorAll('.journal-lines li').length<=4&&![...p.querySelectorAll('.journal-lines li')].some(l=>/Tâche préparée|Connecteur en cours/.test(l.innerText))})()`),'journal shown, short and readable');
+  await waitFor(()=>evaluate(`(()=>{const p=document.querySelector('.journal');return !!p&&p.querySelector('h3').innerText==='Ce qui se passe'&&!p.closest('details')&&p.querySelectorAll('.journal-lines li').length<=4&&![...p.querySelectorAll('.journal-lines li')].some(l=>/Tâche préparée|Connecteur en cours/.test(l.innerText))})()`),5000,'journal shown, short and readable');
   assert.ok(await evaluate(`!!document.querySelector('.episode-title [data-delete-job]')`),'delete link next to the title');
   // 8. P5-07: add a Grok account from Connexions (address only).
   await evaluate(`document.querySelector('nav [data-page="connections"]').click()`);
@@ -139,7 +139,7 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   // 10. Interface: the guide lists every new feature; the creation form hides Flow-only fields for Grok.
   await evaluate(`document.querySelector('[data-page="guide"]').click()`);
   const guideText=await waitFor(()=>evaluate(`document.querySelector('.guide-new')?.innerText`),10000,'guide');
-  for(const word of ['Fenêtre FruchtDrama','Trois moteurs vidéo','Changement de compte','File de nuit','Séries et publication','Assistance'])assert.ok(guideText.includes(word),word);
+  for(const word of ['Fenêtre FruchtDrama','Deux moteurs vidéo','Changement de compte','File de nuit','Séries et publication','Assistance'])assert.ok(guideText.includes(word),word);
   assert.match(guideText,/version 0\.1\.\d+/);
   // 10 bis. Full-page creation like the Atelier: fixed durations, engine choice, ten stories first.
   await evaluate(`document.querySelector('nav [data-action="new"]').click()`);
@@ -149,13 +149,17 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   await evaluate(`document.querySelector('[data-choice="engine"][data-value="flow"]').click()`);
   assert.ok(await evaluate(`!document.querySelector('#createForm .flow-settings').hidden`),'Flow settings back');
   await evaluate(`document.querySelector('[data-choice="duration"][data-value="180"]').click()`);
-  assert.ok(await evaluate(`document.querySelector('#createForm').innerText.includes('23 plans de 8 s')`),'3 min = 23 clips of 8 s');
+  assert.ok(await evaluate(`document.querySelector('#createForm').innerText.includes('19 plans de 10 s')`),'3 min = 19 clips of 10 s (0.1.97)');
   await evaluate(`document.querySelector('[data-choice="duration"][data-value="60"]').click()`);
   await evaluate(`document.querySelector('#createForm').requestSubmit()`);
   const ideasJob=await waitFor(async()=>(await (await fetch(base+'/api/state')).json()).jobs.find(j=>j.stage==='ideas'),10000,'dix histoires demandées');
-  assert.equal(ideasJob.config.scene_count,8);assert.equal(ideasJob.config.duration,60);
+  assert.equal(ideasJob.config.scene_count,7);assert.equal(ideasJob.config.duration,60);
   await waitFor(()=>evaluate(`[...document.querySelectorAll('.ideas,.notice')].some(n=>n.innerText.includes('dix histoires'))`),10000,'page épisode : attente des histoires');
-  assert.match(await waitFor(()=>evaluate(`document.querySelector('.run-clock')?.textContent`),5000,'chrono'),/^(\d+ h \d\d|\d+ min \d\d) de travail · en général \d+ à \d+ min$/,'running clock with the usual time');
+  // 0.1.97: no FruchtDrama window here, so the step does not move: said « Bloqué » in red, never « Fabrication » with a clock.
+  await waitFor(()=>evaluate(`!!document.querySelector('.stop-banner.blocked')&&document.querySelector('.run-bar.blocked .run-head b')?.innerText==='Bloqué'&&!document.querySelector('.run-clock')`),5000,'bandeau Bloqué');
+  assert.ok(await evaluate(`document.querySelector('.stop-banner').innerText.includes('Aucune fenêtre FruchtDrama')`),'the reason is said');
+  assert.ok(await evaluate(`document.querySelector('#runWidget button.blocked')?.innerText.includes('Bloqué')`),'the side menu says Bloqué too');
+  assert.match(await evaluate(`runClock(state.jobs.find(j=>j.stage==='ideas'))`),/^(\d+ h \d\d|\d+ min \d\d) de travail · en général \d+ à \d+ min$/,'running clock with the usual time');
   // 10 ter. Atelier lots 1-2: quality, format, characters, subtitles, cost confirmation, montage settings, backups.
   await evaluate(`document.querySelector('nav [data-action="new"]').click()`);
   await waitFor(()=>evaluate(`!!document.querySelector('#createForm.create-page')`),5000,'page Créer bis');
@@ -252,11 +256,11 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   await evaluate(`(()=>{const d=new DataTransfer();d.setData('text/plain','regarde https://www.tiktok.com/@x/video/77 !');document.body.dispatchEvent(new ClipboardEvent('paste',{clipboardData:d,bubbles:true}));return true})()`);
   assert.equal(await waitFor(()=>evaluate(`document.querySelector('#createForm [name=source_url]')?.value`),5000,'collage'),'https://www.tiktok.com/@x/video/77');
   assert.ok(await evaluate(`[...document.querySelectorAll('nav small')].map(x=>x.textContent).join('|').includes('vidéo(s) relevée(s)')`),'live nav subtitles');
-  // 12 a. Atelier-like site cards: six sites plus file access, Re-check queues a request, default language follows into the form.
+  // 12 a. Atelier-like site cards: five sites plus file access (Arena removed in 0.1.97), Re-check queues a request, default language follows into the form.
   await evaluate(`document.querySelector('[data-page="connections"]').click()`);
   // 0.1.74: Mes comptes keeps technical settings folded in « Avancé », opened here as the owner would.
   await sleep(400);await evaluate(`document.querySelector('[data-fold="advanced"]:not([open])>summary')?.click()`);
-  await waitFor(()=>evaluate(`document.querySelectorAll('.site-card').length===7`),10000,'cartes des sites');
+  await waitFor(()=>evaluate(`document.querySelectorAll('.site-card').length===6`),10000,'cartes des sites');
   assert.ok(await evaluate(`document.querySelector('.files-card').innerText.includes('Accès à tes fichiers')`),'file access card');
   // 12 a bis. Lot 4: guided account change in three steps, checks with three levels.
   await evaluate(`document.querySelector('[data-switch-help="chatgpt"]').click()`);
@@ -290,9 +294,9 @@ async function waitFor(fn,timeout=20000,label='condition'){const end=Date.now()+
   await evaluate(`document.querySelector('[data-account-tab="limits"]').click()`);
   await waitFor(()=>evaluate(`[...document.querySelectorAll('table.accounts')].some(t=>t.innerText.includes('flow.qa@x.com'))`),10000,'compte Flow affiché');
   // 12 bis. Unified accounts: one address, several services, one row; hidden studio key.
-  await evaluate(`(()=>{const f=document.querySelector('#accountForm');f.email.value='Moi.QA@x.com';f.balance.value='40';[...f.querySelectorAll('[name=services]')].forEach(c=>c.checked=['chatgpt','flow','grok','arena'].includes(c.value));f.requestSubmit();return true})()`);
+  await evaluate(`(()=>{const f=document.querySelector('#accountForm');f.email.value='Moi.QA@x.com';f.balance.value='40';[...f.querySelectorAll('[name=services]')].forEach(c=>c.checked=['chatgpt','flow','grok'].includes(c.value));f.requestSubmit();return true})()`);
   const unified=await waitFor(async()=>(await (await fetch(base+'/api/state')).json()).accounts.find(a=>a.email==='moi.qa@x.com'),10000,'compte unifié ajouté');
-  assert.deepEqual(unified.order,['chatgpt','flow','grok','arena']);assert.equal(unified.services.flow.balance,40);
+  assert.deepEqual(unified.order,['chatgpt','flow','grok']);assert.equal(unified.services.flow.balance,40);
   await evaluate(`document.querySelector('.more-accounts').open=true`);
   assert.ok(await evaluate(`!!document.querySelector('[data-bridge-action="scan_flow"]')`),'Détecter mes comptes');
   assert.ok(await evaluate(`/Retirer tous les comptes \\(\\d+\\)/.test(document.querySelector('[data-delete-all-accounts]')?.textContent||'')`),'bouton retirer tous les comptes');

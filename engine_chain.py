@@ -1,44 +1,37 @@
-"""Bascule de moteur par clip (0.1.93). Pure functions on one scene; the server decides what is ready.
+"""Bascule de moteur par clip. Pure functions on one scene; the server decides what is ready.
 
-Owner, 06/11/2026, after an hour lost on a Flow clip that failed again and again: « Un essai par cas. Flow en
-priorité ; ça ne marche pas → un essai sur Arena ; ça ne marche pas → un essai sur Vidogrid ; en dernier recours →
-Grok lui-même. Si rien ne marche, modifier un peu la scène pour que le moteur l'accepte. »
+0.1.93 (owner, 06/11/2026): « Un essai par cas » — each clip tries the engines in order, one try each.
+0.1.97 (owner, 06/11/2026 evening): « On n'a plus que Flow et Grok. Pour chaque scène : un premier essai sur Flow. Si le
+clip n'est pas généré, bascule DIRECTEMENT sur Grok. Si après un essai Flow et un essai Grok il y a un problème,
+rapporte directement l'erreur dans le studio et CONTINUE. » No softened round, no validation before Grok: after one try
+on each engine the clip is set aside with the reason of each engine, and the other clips go on.
 
-Round 0: one try per engine, in the chosen order, engines without a ready account skipped.
-Round 1: the video prompt is softened (refusal.py vocabulary, video frame) and ONE more try is made on the first
-ready engine (Flow when it can pay). After that the clip waits for the owner, with the reason given by each engine.
 A try is recorded only when the engine itself was asked (or its page could not be used); an account change inside
-Flow (another Google account) is not a new try.
+Flow (another Google account) is not a new try. An uncertain Flow submission counts as Flow's try.
 """
 import re
 
-import refusal
-
-DEFAULT = ('flow', 'arena', 'vidogrid', 'grok')
-LABELS = {'flow': 'Flow', 'arena': 'Arena', 'vidogrid': 'Vidogrid', 'grok': 'Grok'}
-FINAL_ROUND = 1
+DEFAULT = ('flow', 'grok')
+LABELS = {'flow': 'Flow', 'grok': 'Grok'}
 VERBS = {'refusal': 'a refusé', 'quota': 'est à sa limite', 'timeout': 'n’a pas rendu le clip à temps',
          'login': 'demande une connexion', 'challenge': 'demande une vérification anti-robot',
-         'credits': 'n’a plus de crédits', 'interface': 'a échoué', 'restart': 'a été interrompu', 'other': 'a échoué'}
+         'credits': 'n’a plus de crédits', 'interface': 'a échoué', 'restart': 'a été interrompu',
+         'uncertain': 'n’a pas confirmé l’envoi', 'unavailable': 'n’a aucun compte prêt', 'other': 'a échoué'}
 
-VIDEO_FRAME = ('All-audiences family animation clip. Keep exactly the characters, place and visual style of the attached image. '
-               'Nothing violent and nothing suggestive: tense moments are shown by looks, gestures and reactions, never by '
-               'hitting, weapons or blood.\n')
-VIDEO_LEAVE_OUT = ('\nIf a detail of this scene could be refused by your video rules, leave it out or show it differently, '
-                   'and animate everything else. Generate the clip directly, no question.')
-# Words that video filters refuse more often than image filters (fights, arrests, threats).
-VIDEO_WORDS = (
-    (r'\b(?:punch(?:es|ed|ing)?|hit(?:s|ting)?|slap(?:s|ped|ping)?|strik(?:e|es|ing)|beat(?:s|ing)? up)\b', 'confronts'),
-    (r'\b(?:fight(?:s|ing)?|brawl(?:s|ing)?)\b', 'argument'), (r'\b(?:explod(?:e|es|ing)|explosion)\b', 'burst of light'),
-    (r'\b(?:arrest(?:s|ed|ing)?|handcuff(?:s|ed)?)\b', 'stops'), (r'\b(?:threat(?:en|ens|ening)?)\b', 'warn'),
-    (r'\b(?:cogne|frappe|gifle)\b', 'défie'), (r'\b(?:schlägt|Schlag)\b', 'stellt sich'),
-)
+
+def label(engine):
+    return LABELS.get(engine, str(engine).capitalize())
 
 
 def order(settings, cfg=None):
-    """Engines in the owner's order. An episode made for one engine (« Moteur des clips ») tries it first."""
+    """Engines in the owner's order. An episode made for Grok (« Moteur des clips ») tries it first.
+    Engines removed in 0.1.97 (Arena, Vidogrid) found in old settings are ignored."""
     raw = (cfg or {}).get('engine_chain') or (settings or {}).get('engine_chain') or DEFAULT
-    out = [e for e in dict.fromkeys(raw if isinstance(raw, (list, tuple)) else DEFAULT) if e in DEFAULT] or list(DEFAULT)
+    raw = list(dict.fromkeys(raw if isinstance(raw, (list, tuple)) else DEFAULT))
+    out = [e for e in raw if e in DEFAULT]
+    if len(out) < len(raw) or not out:
+        # An order saved before 0.1.97 (with Arena or Vidogrid): Flow and Grok both stay in the chain.
+        out += [e for e in DEFAULT if e not in out]
     first = (cfg or {}).get('video_engine')
     if first in DEFAULT and first != 'flow' and first != out[0]:  # 'flow' is the default of every episode, not a choice
         out = [first] + [e for e in out if e != first]
@@ -58,21 +51,13 @@ def validate(value):
     return out
 
 
-def round_of(scene):
-    return int(scene.get('engine_round') or 0)
-
-
-def tried(scene, round_=None):
-    r = round_of(scene) if round_ is None else round_
-    return [t['engine'] for t in scene.get('engine_tries') or [] if int(t.get('round') or 0) == r]
+def tried(scene):
+    return [t['engine'] for t in scene.get('engine_tries') or []]
 
 
 def pick(scene, chain, ready):
-    """Engine for the next try of this clip in its current round, or None when the round is over."""
-    r = round_of(scene)
-    done = tried(scene, r)
-    if r >= FINAL_ROUND and done:
-        return None
+    """Engine for the next try of this clip, or None when every engine was tried or none is ready."""
+    done = tried(scene)
     return next((e for e in chain if e not in done and ready(e)), None)
 
 
@@ -80,7 +65,7 @@ def short(reason, limit=110):
     """The provider's message, first sentence, without technical diagnostics."""
     text = ' '.join(str(reason or '').split())
     text = re.split(r' Diagnostic| Vu : |\{', text)[0]
-    for prefix in ('Flow a refusé ce clip : ', 'Google Flow : ', 'Flow : ', 'Grok Imagine : ', 'LMArena vidéo : ', 'Vidogrid : '):
+    for prefix in ('Flow a refusé ce clip : ', 'Google Flow : ', 'Flow : ', 'Grok Imagine : '):
         if text.startswith(prefix):
             text = text[len(prefix):]
     first = re.split(r'(?<=[.!?])\s', text)[0].rstrip('.')
@@ -88,44 +73,34 @@ def short(reason, limit=110):
 
 
 def record(scene, engine, kind, reason, at):
-    entry = {'engine': engine, 'round': round_of(scene), 'kind': kind, 'reason': short(reason), 'at': at}
+    entry = {'engine': engine, 'kind': kind, 'reason': short(reason), 'at': at}
     scene.setdefault('engine_tries', []).append(entry)
     return entry
 
 
 def advance(scene, chain, ready):
-    """Next engine after a failed try: the next one of this round, else the softened round, else None."""
-    nxt = pick(scene, chain, ready)
-    if nxt or round_of(scene) >= FINAL_ROUND:
-        return nxt
-    scene['engine_round'] = FINAL_ROUND
+    """Next engine after a failed try, or None: the clip is set aside."""
     return pick(scene, chain, ready)
 
 
-def line(index, engine, kind, reason, nxt, softened=False):
-    """« Clip 3 : Flow a refusé (raison) → essai sur Arena. »"""
-    text = f'Clip {index + 1} : {LABELS.get(engine, engine)} {VERBS.get(kind, VERBS["other"])}'
+def line(index, engine, kind, reason, nxt):
+    """« Clip 3 : Flow a refusé (raison) → essai sur Grok. »"""
+    text = f'Clip {index + 1} : {label(engine)} {VERBS.get(kind, VERBS["other"])}'
     if reason:
         text += f' ({short(reason)})'
-    if nxt:
-        text += (' → prompt adouci, nouvel essai sur ' if softened else ' → essai sur ') + LABELS.get(nxt, nxt) + '.'
-    else:
-        text += '.'
+    text += (' → essai sur ' + label(nxt) + '.') if nxt else '.'
     return text
 
 
 def summary(scene):
-    """Reason given by each engine, for « Action requise »."""
-    return '; '.join(f"{LABELS.get(t['engine'], t['engine'])}{' (prompt adouci)' if t.get('round') else ''} : {t.get('reason') or VERBS.get(t.get('kind'), 'échec')}"
-                     for t in scene.get('engine_tries') or [])
+    """« Flow (raison) puis Grok (raison) »: the reason given by each engine."""
+    return ' puis '.join(f"{label(t['engine'])} ({t.get('reason') or VERBS.get(t.get('kind'), 'échec')})"
+                         for t in scene.get('engine_tries') or [])
 
 
-def soften(prompt):
-    """Video prompt reworded once, like refusal.py does for images (level 2), with a video frame."""
-    text = str(prompt)
-    for pattern, repl in refusal.LEVEL1 + refusal.LEVEL2 + VIDEO_WORDS:
-        text = re.sub(pattern, repl, text, flags=re.I)
-    return VIDEO_FRAME + text + VIDEO_LEAVE_OUT
+def failure(index, scene):
+    """The alert of a clip set aside (owner wording)."""
+    return f'Clip {index + 1} : {summary(scene) or "aucun moteur prêt"} — clip à refaire. Les autres clips continuent.'
 
 
 def reset(scene):

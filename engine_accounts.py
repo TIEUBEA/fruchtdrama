@@ -1,4 +1,4 @@
-"""Grok / Arena accounts (P5-07/P5-08). Pure functions on the state; no credential is ever stored.
+"""Grok accounts (P5-07/P5-08). Pure functions on the state; no credential is ever stored.
 
 A site keeps one signed-in session per Chrome profile, so changing account is guided: the owner
 signs in to the next account in the FruchtDrama window, the connector checks the identity shown.
