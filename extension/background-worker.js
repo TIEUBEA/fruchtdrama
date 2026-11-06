@@ -4,14 +4,14 @@ const BASE='http://127.0.0.1:8840';
 // activeTask (chat; also any task saved by 0.1.88 and older) and activeVideoTask (video).
 // 0.1.91, parallel clips: a second video lane (activeVideoTask2) takes another Flow clip on another Google account, in its
 // own tab; the studio never gives two lanes the same account.
-const LANE_KEY={chat:'activeTask',video:'activeVideoTask',video2:'activeVideoTask2'};
+const LANE_KEY={chat:'activeTask',video:'activeVideoTask',video2:'activeVideoTask2',video3:'activeVideoTask3',video4:'activeVideoTask4'};
 const VIDEO_KINDS=['flow_video','flow_collect','engine_video'];
 function laneOf(task){return VIDEO_KINDS.includes(task?.kind)?'video':'chat';}
 function keyOf(active){return active?.key||LANE_KEY.chat;}
 async function saveActive(active,extra={}){await chrome.storage.local.set({[keyOf(active)]:active,...extra});}
 async function loadActive(active){const key=keyOf(active);return (await chrome.storage.local.get(key))[key];}
 async function dropActive(active){await chrome.storage.local.remove(keyOf(active));}
-const busy={chat:false,video:false,video2:false};
+const busy={chat:false,video:false,video2:false,video3:false,video4:false};
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function call(path,body){
  const cfg=await chrome.storage.local.get('token');
@@ -406,9 +406,9 @@ async function prepare(){
  let cfg=await chrome.storage.local.get(null);
  if(!cfg.client||!cfg.token){try{if(await autoPair())cfg=await chrome.storage.local.get(null);}catch(e){recordBackgroundError(e);}}
  if(!cfg.client||!cfg.token)return false;
- if(cfg.enabled&&!busy.chat&&!busy.video&&!busy.video2&&!Object.values(LANE_KEY).some(k=>cfg[k])){
-  busy.chat=busy.video=busy.video2=true;
-  try{await handleRequests(cfg);}catch(e){recordBackgroundError(e);}finally{busy.chat=busy.video=busy.video2=false;}
+ if(cfg.enabled&&!Object.values(busy).some(Boolean)&&!Object.values(LANE_KEY).some(k=>cfg[k])){
+  for(const k in busy)busy[k]=true;
+  try{await handleRequests(cfg);}catch(e){recordBackgroundError(e);}finally{for(const k in busy)busy[k]=false;}
  }else if(cfg.enabled){try{await handleRequests(cfg,true);}catch(e){recordBackgroundError(e);}}
  return true;
 }
@@ -417,7 +417,7 @@ async function poll(){
  preparing=true;let ok=false;
  try{ok=await prepare();}finally{preparing=false;}
  // The second clip lane looks after the first one: it sees whether a clip really works there now.
- if(ok)await Promise.all([runLane('chat'),runLane('video').then(()=>runLane('video2'))]);
+ if(ok)await Promise.all([runLane('chat'),runLane('video').then(()=>runLane('video2')).then(()=>runLane('video3')).then(()=>runLane('video4'))]);
  if(ok)await soon();
 }
 // The 30 s alarm alone made every board wait up to 30 s to be seen, then up to 30 s more before the next one left
@@ -490,10 +490,10 @@ async function runLane(lane){
  try{
   cfg=await chrome.storage.local.get(null);
   if(!cfg.client||!cfg.token)return;
-  if(lane==='video2'){
-   // Second clip lane: never a balance reading or a recovery here (they could touch the first lane's tab).
+  if(/^video[234]$/.test(lane)){
+   // Extra clip lanes (2 to 4, one Flow account each): never a balance reading or a recovery here.
    if(laneOf(cfg.activeTask?.task)==='video')return;
-   if(cfg.activeVideoTask2){await checkActive(cfg.activeVideoTask2);return;}
+   if(cfg[key]){await checkActive(cfg[key]);return;}
    // Only while the first lane works on a clip: then the studio may give a clip of another account.
    if(!cfg.enabled||cfg.role==='creation'||!cfg.activeVideoTask)return;
   }else if(lane==='video'){
@@ -645,7 +645,7 @@ async function registerFlow(owned=false){
  const cfg=await chrome.storage.local.get(null);
  if(!cfg.client||!cfg.token)throw Error('Appairez d’abord la passerelle au studio.');
  // The Flow tab is the video lane's: nothing followed in either lane, no pass in progress.
- if(cfg.activeTask||cfg.activeVideoTask||cfg.activeVideoTask2||((busy.chat||busy.video||busy.video2)&&!owned))throw Error('Attendez la fin de la tâche en cours avant de mémoriser ce compte.');
+ if(Object.values(LANE_KEY).some(k=>cfg[k])||(Object.values(busy).some(Boolean)&&!owned))throw Error('Attendez la fin de la tâche en cours avant de mémoriser ce compte.');
  if(cfg.role==='creation')throw Error('Ce navigateur est réservé à votre IA ; utilisez la passerelle Flow.');
  const tab=await FruchtWorkspace.latest(chrome,FLOW_PROJECT);
  if(!FruchtFlowSession.project(tab?.url))throw Error('Ouvrez, dans la fenêtre FruchtDrama, le projet Flow du compte à mémoriser, puis cliquez ici.');
@@ -671,7 +671,11 @@ async function selfUpdate(){
   if(!disk.version||!chrome.runtime.getManifest||!newer(disk.version,chrome.runtime.getManifest().version))return;
   const cfg=await chrome.storage.local.get(Object.values(LANE_KEY));
   if(Object.values(LANE_KEY).some(k=>cfg[k])||busy.chat||busy.video)return;
-  await chrome.storage.local.set({status:'Nouvelle version '+disk.version+' : rechargement automatique.'});
+  // Never twice for the same version: when the folder the browser loads is not updated yet, reloading again and again
+  // stopped all work (06/11/2026 17:44, « Connecteur à configurer » for an hour).
+  const tried=(await chrome.storage.local.get('reloadedFor')).reloadedFor;
+  if(tried===disk.version)return;
+  await chrome.storage.local.set({reloadedFor:disk.version,status:'Nouvelle version '+disk.version+' : rechargement automatique.'});
   chrome.runtime.reload();
  }catch{}
 }
