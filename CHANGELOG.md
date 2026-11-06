@@ -6,6 +6,24 @@ correspondante (P0-xx, P1-x, P2-xx) détaillée dans `docs/sudf/`. Guide pour re
 version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, version par version).
 
 
+## 0.1.90 (06/11/2026)
+Gestion des comptes et changement automatique, sans attente ni clic évitables (demande du propriétaire).
+
+**Corrigé**
+- Reprise d'un épisode alors que la fenêtre FruchtDrama était en ligne : « Ouverture automatique de Chrome et du compte Flow enregistré », puis « Ouverture Flow impossible (Chrome introuvable…) » et « Action requise » (cas réel 06/11). Cause : après la réinstallation de l'extension, l'ancien appairage n'avait jamais été désactivé (il tenait une tâche au moment du nouvel appairage) ; le studio comptait deux fenêtres « actives », laissait les comptes Flow sur l'ancienne et préparait le clip pour elle ; la fenêtre en ligne le refusait et le studio cherchait à ouvrir Chrome. Maintenant, quand plusieurs fenêtres sont actives, seules celles qui ont donné signe de vie depuis 3 min comptent ; les comptes Flow, les clips en file et les lectures de solde en file suivent la fenêtre en ligne (`rebind_flow_routes`). Un clip déjà parti garde sa fenêtre.
+- Rien n'est jamais lancé tant qu'une fenêtre FruchtDrama répond. Sans aucune fenêtre ouverte, Chrome démarre une seule fois **en arrière-plan, sans fenêtre** (`--no-startup-window`), sous Windows, macOS et Linux (`/opt/google/chrome/chrome`, `google-chrome`, `chromium`) ; l'extension reprend le clip dans sa fenêtre sans premier plan. Si Chrome ne démarre pas, l'épisode n'est plus mis en « Action requise » : le clip attend et part dès que la fenêtre est ouverte. Une lecture de solde en arrière-plan n'ouvre jamais Chrome.
+- Texte ou planche tenu par une fenêtre disparue (extension réinstallée) : redemandé tout seul par la fenêtre en ligne, au lieu d'attendre « Relancer cette étape ». Voie texte et images seulement : un clip déjà envoyé n'est jamais renvoyé sans le propriétaire.
+- Heures en UTC dans les messages (« reprise automatique vers 14:12 UTC ») : toutes en heure locale, avec l'attente restante (« 15:12 (dans 28 min) », « demain 08:05 »). Aussi dans Mes comptes (limite Grok / Arena).
+
+**Amélioré**
+- Compte Flow vide au moment de partir : le clip passe au compte suivant dans la même demande, sans attente ni clic (avant : « Crédits insuffisants » puis reprise au tour suivant). Le journal dit lequel : « Passage automatique au compte Flow x@gmail.com (50 crédits) : y@gmail.com vide ». Plus aucun compte : l'épisode dit quand le premier compte se recharge, en heure locale.
+- Limite d'images ChatGPT : l'heure annoncée par ChatGPT est lue aussi quand c'est une heure (« try again after 3:47 PM », « après 15 h 47 », « um 15:47 ») et pas seulement une durée. Sans heure annoncée, le studio réessaie au bout de 30 min au plus (avant : jusqu'à 6 h d'estimation) ; un essai pendant la limite ne coûte rien. Le journal et le bandeau disent si l'heure est annoncée ou estimée, et que les clips des planches déjà dessinées continuent pendant l'attente.
+- **Mes comptes** : en tête, l'état de la fenêtre FruchtDrama (en ligne, ou aucune fenêtre ouverte avec le dernier contact). Les cartes ChatGPT et Claude montrent leur limite et l'heure du nouvel essai. Comptes Google Flow : le **changement de compte automatique** se règle ici (il n'était que dans Avancé, et la phrase « le studio passe seul au suivant » s'affichait même désactivé) ; nombre de comptes qui peuvent payer un clip ; un compte sans accès à Flow n'est plus marqué « Prêt » ; le compte utilisé par l'épisode en cours est marqué « En cours ». Avancé utilise les mêmes états (avant : « Solde bas » sous 5 crédits, « Actif » pour un compte vide).
+
+**Reste impossible ou risqué (non fait)**
+- Autre compte ChatGPT automatiquement : un profil Chrome n'a qu'une session ChatGPT ; changer de compte exige que le propriétaire se connecte lui-même (aucun mot de passe saisi par le studio). Le bandeau garde « Changer de compte ChatGPT ».
+- Autre fournisseur d'images : aucun autre n'existe dans le code (Claude ne dessine pas ; Flow et Grok savent dessiner mais aucun connecteur d'images n'est écrit ni essayé : ce serait un nouveau connecteur à tester sur un vrai compte).
+
 ## 0.1.89 (06/11/2026)
 **Corrigé**
 - Extension rechargée pendant une tâche : la nouvelle fenêtre restait désactivée et plus rien n'avançait (cas réel 06/11, 25 min perdues). Dès que l'ancienne fenêtre est hors ligne depuis 3 min, la nouvelle reprend le travail et ses comptes Flow.

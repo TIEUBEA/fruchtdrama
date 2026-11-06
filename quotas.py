@@ -8,6 +8,9 @@ import datetime as dt
 WINDOW = 6 * 3600
 TOLERANCE = 60
 DEFAULT_WAIT = 30 * 60
+# Without a delay announced by the service, the next try comes after this at most (owner 06/11/2026: no
+# avoidable wait). A try while still at the limit costs nothing: the service answers with its limit again.
+PROBE = 30 * 60
 SERVICES = {'chatgpt_image': 'ChatGPT images', 'chatgpt_text': 'ChatGPT texte', 'claude_text': 'Claude texte'}
 
 
@@ -48,10 +51,11 @@ def status(state, name, now):
             retry_at = last[3]
         else:
             window = [t for t in passes if last[0] - WINDOW < t <= last[0]]
-            retry_at = min(window) + WINDOW if window else last[0] + DEFAULT_WAIT
+            retry_at = min(min(window) + WINDOW, last[0] + PROBE) if window else last[0] + DEFAULT_WAIT
         blocked = now < retry_at
     return {'service': name, 'label': SERVICES.get(name, name), 'used': used, 'capacity': capacity,
-            'remaining': max(capacity - used, 0) if capacity is not None else None, 'blocked': blocked, 'retry_at': retry_at if blocked else None}
+            'remaining': max(capacity - used, 0) if capacity is not None else None, 'blocked': blocked, 'retry_at': retry_at if blocked else None,
+            'announced': bool(blocked and last and last[3])}
 
 
 def forget(state, name):

@@ -41,7 +41,7 @@ globalThis.FruchtComposer = {
   return patterns.some(p=>p.test(text))?text:null;
  },
  // Renewal delay announced by the provider, in seconds (P2-04): "resets in 22 hours and 16 minutes".
- retryAfter(text){
+ retryAfter(text,now=new Date()){
   const value=String(text||'');
   const units=[[/(\d+)\s*(?:hours?|heures?|h\b|Stunden?|Std\.?)/i,3600],[/(\d+)\s*(?:minutes?|min\b|Minuten?)/i,60],[/(\d+)\s*(?:days?|jours?|Tagen?|Tage)/i,86400]];
   // Every anchor is tried: an unrelated "Try again" earlier on the page must not hide the real delay.
@@ -49,6 +49,13 @@ globalThis.FruchtComposer = {
    const zone=value.slice(Math.max(0,m.index-60),m.index+160);let total=0;
    for(const [re,unit] of units){const n=zone.match(re);if(n)total+=Number(n[1])*unit;}
    if(total>0)return total;
+  }
+  // Or an hour (« try again after 3:47 PM », « réessayez après 15 h 47 », « um 15:47 Uhr »): seconds until then, local time.
+  for(const m of value.matchAll(/(?:after|at|après|à|vers|um|ab|nach)\s+(\d{1,2})\s*(?::|h|\.)\s*(\d{2})\s*(a\.?m\.?|p\.?m\.?)?/gi)){
+   let h=Number(m[1]);const min=Number(m[2]),half=(m[3]||'').toLowerCase()[0];
+   if(half==='p'&&h<12)h+=12;if(half==='a'&&h===12)h=0;if(h>23||min>59)continue;
+   const at=new Date(now.getTime());at.setHours(h,min,0,0);if(at<=now)at.setDate(at.getDate()+1);
+   return Math.round((at-now)/1000);
   }
   return null;
  },

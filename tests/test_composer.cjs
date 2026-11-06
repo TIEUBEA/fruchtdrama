@@ -41,6 +41,12 @@ assert.equal(helper.retryAfter('Try again. ... Limite atteinte : vous pourrez r�
 assert.equal(helper.retryAfter('Limit erreicht. Bitte versuche es in 45 Minuten erneut.'),45*60,'German word order: delay just before the anchor');
 assert.equal(helper.retryAfter('Limit erreicht. Erneut möglich in 45 Minuten.'),45*60);
 assert.equal(helper.retryAfter('Usage limit reached.'),null);
+// 0.1.90: an announced hour, read in the computer's local time (no more 30 min guessed when ChatGPT says when).
+const at=(h,m)=>{const d=new Date(2026,10,6,h,m,0,0);return d;};
+assert.equal(helper.retryAfter("You've hit the image limit. Please try again after 3:47 PM.",at(15,17)),30*60);
+assert.equal(helper.retryAfter('Limite atteinte. Réessayez après 15 h 47.',at(15,40)),7*60);
+assert.equal(helper.retryAfter('Limit erreicht. Wieder verfügbar um 08:05 Uhr.',at(23,5)),9*3600,'tomorrow morning');
+assert.equal(helper.retryAfter('You can create more images when the limit resets in 12 minutes, after 3:47 PM.',at(15,17)),12*60,'a delay wins over an hour');
 console.log('Refus de contenu (nouvelle réponse seulement, FR/DE/EN) et délai de renouvellement vérifiés.');
 // Real check 02/11/2026: signed-out ChatGPT shows an editor; Cloudflare interstitial "Just a moment...".
 const btn=t=>element({innerText:t});

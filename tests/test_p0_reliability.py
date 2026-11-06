@@ -181,6 +181,8 @@ class DispatchTests(Base):
         s.STATE['clients']['browser'] = {'id': 'browser', 'role': 'flow', 'seen': '2000-01-01T00:00:00+00:00'}
         s.STATE['profiles'].append({'id': 'p', 'label': 'A', 'balance': 0, 'auto_enabled': True, 'flow_email': 'a@example.com',
                                     'flow_client': 'browser', 'flow_url': 'https://flow.google.com/project/abc'})
+        # 0.1.90: only a production waiting for credits may start Chrome; a background reading never does.
+        s.STATE['jobs'].append({'id': 'waiting', 'stage': 'clips', 'status': 'waiting_credit', 'events': [], 'config': {'flow_cost': 12}})
         original = s.flow_accounts.launch; locked = []
 
         def failing(profile):

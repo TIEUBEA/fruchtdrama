@@ -138,7 +138,7 @@ def view(state, now, clip_cost=12):
                 walled = engine_accounts.walled(account, now)
                 st, text = session(engine)
                 services[engine] = {'state': 'wall' if walled else 'live' if st == 'live' else 'ok', 'account': account['id'],
-                                    'text': 'Limite jusqu’à ' + engine_accounts.stamp(account['wall']['until'])[11:16] + ' UTC' if walled else 'Connecté' if st == 'live' else 'Disponible'}
+                                    'text': 'Limite jusqu’à ' + engine_accounts.local(account['wall']['until']) if walled else 'Connecté' if st == 'live' else 'Disponible'}
         label = identity.get('label') or next((a['label'] for a in state['engine_accounts'] if a['email'] == email), email)
         rows.append({'email': email, 'label': label, 'services': services,
                      'order': [s for s in SERVICES if s in services]})

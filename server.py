@@ -24,7 +24,7 @@ import power
 import maintenance
 import series
 import licence
-VERSION='0.1.89'
+VERSION='0.1.90'
 OFFICIAL_ORIGIN='chrome-extension://bhdmibhibonmaamgcbpmbhedhohfongj'  # extension/manifest.json "key"
 import sys
 import traceback
@@ -167,7 +167,55 @@ def take_over(c):
     if alive:return False
     for x in STATE['clients'].values():
         if x is not c and x.get('auto'):x['disabled']=True
-    c['disabled']=False;flow_accounts.follow_active_browser(STATE);return True
+    c['disabled']=False;flow_accounts.follow_active_browser(STATE);rebind_flow_routes();return True
+
+def clock(ts,moment=None):
+    """Local time for the owner (« 15:42 », « demain 08:10 »), never UTC."""
+    moment=moment or time.time();at=dt.datetime.fromtimestamp(ts);day=(at.date()-dt.datetime.fromtimestamp(moment).date()).days
+    return ('demain ' if day==1 else at.strftime('%d/%m ') if day>1 else '')+at.strftime('%H:%M')
+def clock_in(ts,moment=None):
+    """« 15:42 (dans 28 min) »: when it comes back, said in local time with the remaining wait."""
+    moment=moment or time.time();left=max(0,int((ts-moment+59)//60))
+    return clock(ts,moment)+(' (dans '+(f'{left//60} h {left%60:02d}' if left>=60 else f'{left} min')+')' if left else '')
+
+def client_online(c,limit=None):
+    return bool(c) and not c.get('disabled') and time.time()-flow_credits.seconds(c.get('seen'))<(limit or STALL_ONLINE)
+
+def rebind_flow_routes():
+    """Queued Flow work follows its account to the browser that now holds it (real case 06/11/2026).
+
+    A queued clip and a queued balance check carried the pairing of the moment they were prepared: after the
+    extension was reinstalled the new FruchtDrama window, online in the same Chrome, never accepted them and
+    the studio tried to open Chrome instead. Claimed work keeps its browser: it may already be in Flow."""
+    flow_accounts.follow_active_browser(STATE);moved=0
+    for t in STATE['tasks']:
+        route=(t.get('payload') or {}).get('flow_route')
+        if t.get('status')!='queued' or t.get('kind') not in ('flow_video','flow_collect') or not route:continue
+        p=profile_by(t.get('profile'))
+        if p and p.get('flow_client') and route.get('client')!=p['flow_client']:
+            route['client']=p['flow_client'];t.pop('browser_opened',None);moved+=1
+    for p in STATE['profiles']:
+        probe=p.get('credit_probe')
+        if probe and probe.get('status')=='queued' and p.get('flow_client') and probe.get('client')!=p['flow_client']:
+            probe['client']=p['flow_client'];probe['target']={**probe.get('target',{}),'client':p['flow_client']};probe.pop('browser_opened',None);moved+=1
+    return moved
+
+def release_dead_chat(c):
+    """Texts and boards claimed by a FruchtDrama window that is gone (reinstalled extension: new pairing, the old one
+    never answers again) are asked again by the window that works now, instead of « Relancer cette étape ».
+    Chat lane only: no Flow credit is ever at stake; clips keep the owner's check."""
+    if not c.get('auto') or c.get('disabled'):return 0
+    released=0
+    for t in STATE['tasks']:
+        if t['status']!='claimed' or lane_of(t)!='chat' or t.get('client')==c['id']:continue
+        old=STATE['clients'].get(t.get('client'))
+        if old and (not old.get('auto') or client_online(old)):continue
+        j=job_by(t['job'])
+        if not j:continue
+        t['status']='failed';t['error']='Fenêtre FruchtDrama disparue : étape redemandée par la nouvelle fenêtre.';released+=1
+        event(j,'La fenêtre qui faisait « '+t['slot']+' » ne répond plus : la fenêtre FruchtDrama en ligne la reprend (aucun crédit Flow).')
+        if j.get('status')=='running':schedule(j)
+    return released
 
 def event_all(text):
     for j in STATE['jobs']:
@@ -265,22 +313,29 @@ def refill_check(at=None):
     STATE['refill_requested']=at;save();return True
 
 def flow_dispatch_tick():
-    """Wake only the one browser needed for the next queued Flow clip."""
+    """Wake only the one browser needed for the next queued Flow clip.
+
+    A FruchtDrama window that answers is never doubled (real case 06/11/2026): queued work follows the accounts
+    to it (rebind_flow_routes) and nothing is launched. Chrome is started, in the background and without a
+    window, only when no FruchtDrama window answers at all and a production needs it."""
     pending=None
     with LOCK:
         if not STATE.get('settings',{}).get('flow_auto'):return
         if any(t['kind'] in ('flow_video','flow_collect') and t['status']=='claimed' for t in STATE['tasks']):return
+        if rebind_flow_routes():save()
         for j in STATE['jobs']:
             if j['stage']=='clips' and j['status']=='waiting_credit':
                 if flow_accounts.choose(STATE,j.get('flow_profile'),j['config']['flow_cost']):j['status']='running'
             if j['status']=='running':schedule(j)
         refill_check()
+        window=any(client_online(c) and c.get('role','all') in ('all','flow') for c in STATE['clients'].values())
         task=next((t for t in STATE['tasks'] if t['kind']=='flow_video' and t['status']=='queued' and job_by(t['job'])['status']=='running'),None)
         if not task:
             p=flow_credits.prepare(STATE,time.time())
             if not p:return
             probe=p['credit_probe'];client=STATE['clients'].get(probe['client'],{})
-            if time.time()-flow_credits.seconds(client.get('seen'))<75:save();return
+            # A balance check never opens anything while a window answers, nor for a background reading.
+            if window or probe.get('background') or client_online(client):save();return
             if probe.get('browser_opened'):return
             probe['browser_opened']=now();pending=copy.deepcopy(p);save()
         else:
@@ -295,23 +350,21 @@ def flow_dispatch_tick():
                         live['credit_error']='Ouverture Flow impossible : '+str(e);live['credit_probe']['status']='failed';live['credit_next_check']=flow_credits.stamp(time.time()+900);save()
             return
         if not target or not p:return
-        client=STATE['clients'].get(target['client'],{})
-        try:online=time.time()-dt.datetime.fromisoformat(client.get('seen','')).timestamp()<75
-        except ValueError:online=False
-        if online:return
-        if task.get('browser_opened'):
-            if time.time()-dt.datetime.fromisoformat(task['browser_opened']).timestamp()>180:
-                j=job_by(task['job']);j['status']='attention';event(j,'Navigateur ouvert mais passerelle absente. Vérifiez le profil Chrome enregistré, la connexion Google et l’extension.')
-                j['last_error']={'kind':'interface','slot':task.get('slot'),'task':task.get('id'),'at':now()};save()
+        if client_online(STATE['clients'].get(target['client'])):return
+        j=job_by(task['job'])
+        if window:
+            # A window answers but this account is held by another, silent browser (several browsers paired):
+            # said once, nothing opened; the task goes as soon as that browser answers or the accounts are detected again.
+            if not task.get('route_wait'):
+                task['route_wait']=now();event(j,'Le compte Flow '+target.get('email','')+' est mémorisé par une autre fenêtre FruchtDrama, hors ligne : ouvre-la, ou clique « Détecter mes comptes » (Mes comptes) dans la fenêtre en ligne.');save()
             return
-        task['browser_opened']=now();pending=copy.deepcopy(p);event(job_by(task['job']),'Ouverture automatique de Chrome et du compte Flow enregistré.');save()
+        if task.get('browser_opened'):return  # once per task; the episode keeps waiting, the bandeau « Bloqué » says why
+        task['browser_opened']=now();pending=copy.deepcopy(p);event(j,'Aucune fenêtre FruchtDrama ouverte : Chrome démarre en arrière-plan, la fenêtre reprendra le clip sans passer au premier plan.');save()
     try:flow_accounts.launch(pending)
     except Exception as e:
         with LOCK:
-            j=job_by(task['job']);j['status']='attention'
-            who=(task['payload'].get('flow_route') or {}).get('email','ce compte')
-            event(j,'Ouverture Flow impossible ('+str(e)+'). Le compte '+who+' a été mémorisé par un navigateur hors ligne : dans la fenêtre FruchtDrama, ouvrez un projet Flow de ce compte puis Mes comptes › Navigateur › Mémoriser le compte Flow ouvert, ou choisissez un autre compte Flow pour cet épisode.')
-            j['last_error']={'kind':'interface','slot':task.get('slot'),'task':task.get('id'),'at':now()};save()
+            # Nothing to resume by hand: the clip stays queued and leaves as soon as a FruchtDrama window opens.
+            event(job_by(task['job']),'Chrome non démarré ('+str(e)+'). Le clip attend : il part dès que la fenêtre FruchtDrama est ouverte.');save()
 
 LAST_ERRORS={}
 def log_error(context,error,interval=60):
@@ -824,7 +877,7 @@ def add_task(j, kind, payload, slot):
         if q['blocked']:
             # P2-07: nothing is sent while the service is at its limit; the production resumes by itself.
             j['status']='waiting_quota';j['wait_until']=q['retry_at'];j['quota_lane']=lane_of({'kind':kind,'slot':slot})
-            event(j,q['label']+' à sa limite : reprise automatique vers '+quotas.stamp(q['retry_at'])[11:16]+' UTC.');return
+            event(j,q['label']+' à sa limite'+(' (délai annoncé par le service)' if q.get('announced') else '')+' : nouvel essai automatique à '+clock_in(q['retry_at'])+'.'+(' Les clips des planches déjà dessinées continuent.' if kind=='chat_image' and j.get('stage')=='images' else ''));return
     if kind=='chat_text' and payload.get('provider')=='claude':
         # The extension selects this model and effort in claude.ai before sending (older episodes: defaults).
         payload={**payload,**{k:j.get('config',{}).get(k) or CLAUDE_DEFAULTS[k] for k in CLAUDE_DEFAULTS}}
@@ -1062,7 +1115,7 @@ def schedule_clip(j,i,early=False):
                 if early:return False
                 # P5-08: every registered account is at its limit: wait for the first renewal.
                 j['status']='waiting_quota';j['wait_until']=engine_accounts.next_free(STATE,engine,moment)
-                event(j,'Tous les comptes '+engines.ENGINES[engine]['label']+' sont à leur limite. Reprise automatique vers '+engine_accounts.stamp(j['wait_until'])[11:16]+' UTC, ou ajoutez un compte.');return True
+                event(j,'Tous les comptes '+engines.ENGINES[engine]['label']+' sont à leur limite. Reprise automatique vers '+clock_in(j['wait_until'])+', ou ajoutez un compte.');return True
             if j.get('engine_account') and account['id']!=j['engine_account']:
                 if early:return False
                 previous=engine_accounts.by_id(STATE,j['engine_account'])
@@ -1079,9 +1132,15 @@ def schedule_clip(j,i,early=False):
     cost=j['config']['flow_cost'];p=flow_accounts.choose(STATE,j.get('flow_profile'),cost)
     if not p or p['balance']<cost:
         if early:return False
-        j['status']='waiting_credit'; event(j,'Solde insuffisant ou profil Flow absent. Choisis un profil et vérifie son solde.'); return True
+        j['status']='waiting_credit'
+        back=min([x['refill_at'] for x in STATE['profiles'] if x.get('refill_at') and x.get('auto_enabled')],default=None)
+        if STATE.get('settings',{}).get('flow_auto') and any(flow_accounts.route(x) for x in STATE['profiles']):
+            event(j,f'Plus aucun compte Flow avec {cost} crédits : le clip part tout seul dès qu’un compte est rechargé'+(' (premier vers '+clock_in(back)+')' if back else '')+' ou ajouté. Clips reçus conservés.')
+        else:event(j,'Solde insuffisant ou profil Flow absent. Choisis un profil et vérifie son solde.')
+        return True
     if p['id']!=j.get('flow_profile'):
-        j['flow_profile']=p['id'];event(j,'Passage automatique au prochain compte Flow enregistré ; clips reçus conservés.')
+        previous=profile_by(j.get('flow_profile'))
+        j['flow_profile']=p['id'];event(j,'Passage automatique au compte Flow '+(p.get('flow_email') or p.get('label') or '')+f" ({p['balance']} crédits)"+(' : '+(previous.get('flow_email') or previous.get('label') or '')+(' sans accès à Flow' if previous.get('blocked')=='unavailable' else ' vide') if previous else '')+' ; clips reçus conservés.')
     cast='\n'.join(c['id']+': '+c['appearance']+' Voice: '+c['voice'] for c in j['characters'])
     dialog=dialogue_lines(j,s)
     language=j['config'].get('language','Deutsch (de-DE)')
@@ -1470,7 +1529,7 @@ def accept_task_result(t,result):
                 event(j,'Limite atteinte sur ce compte pendant les planches : les planches continuent, les clips attendront la fin des planches.');schedule(j)
             else:
                 j['status']='waiting_quota';j['wait_until']=moment+(errors.retry_after(result) or engine_accounts.DEFAULT_WALL)
-                event(j,'Limite atteinte sur ce compte. Reprise automatique vers '+engine_accounts.stamp(j['wait_until'])[11:16]+' UTC. Enregistrez d’autres comptes dans Connexions pour changer de compte.')
+                event(j,'Limite atteinte sur ce compte. Reprise automatique vers '+clock_in(j['wait_until'])+'. Enregistrez d’autres comptes dans Connexions pour changer de compte.')
             return
         if t.get('kind')=='flow_video' and result.get('generation_submitted') is False and result.get('flow_blocked') in ('credits','unavailable') and t.get('payload',{}).get('flow_route'):
             # No credits, or no Flow access at all for this Google account: skip it, switch to the next one.
@@ -1800,6 +1859,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     if c.get('disabled') and c.get('auto') and take_over(c):event_all('Fenêtre FruchtDrama rechargée : elle reprend le travail de l’ancienne, hors ligne.')
                     # A gateway switched off by the owner never receives work (several browsers paired).
                     if c.get('disabled') or not LICENCE.allowed():save();return self.send_json(None)
+                    # The working window takes what an old, gone pairing was holding or was meant to do (06/11/2026).
+                    rebind_flow_routes();release_dead_chat(c)
                     for j in STATE['jobs']:
                         schedule(j)
                     for t in STATE['tasks']:
@@ -1812,7 +1873,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             if (not p or p['balance']<cost) and j['stage']=='images':
                                 # Clip sent ahead during the boards: no wait now, the boards go on; the clips stage waits for credits.
                                 t['status']='cancelled';j['early_clips_off']=True;event(j,'Clip anticipé annulé avant envoi : solde Flow insuffisant. Les planches continuent ; les clips attendront la fin des planches.');continue
-                            if not p or p['balance']<cost: t['status']='cancelled'; j['status']='waiting_credit'; continue
+                            if not p or p['balance']<cost:
+                                # The balance moved since the clip was prepared: next account at once, no 3 s round trip, no click.
+                                t['status']='cancelled';j['status']='running';schedule(j);continue
                             if t['payload'].get('dry_run'):
                                 # A dry run never sends: nothing to reserve (P1-4).
                                 t['status']='claimed'; t['client']=client; t['claimed']=now(); event(j,'Essai à blanc : préparation de '+t['slot']+' dans Flow, sans envoi.'); save(); return self.send_json(t)

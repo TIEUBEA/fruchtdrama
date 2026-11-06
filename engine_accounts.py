@@ -14,6 +14,11 @@ def stamp(ts):
     return dt.datetime.fromtimestamp(ts, dt.timezone.utc).isoformat()
 
 
+def local(ts):
+    """Hour shown to the owner: local time of this computer, never UTC."""
+    return dt.datetime.fromtimestamp(ts).strftime('%H:%M')
+
+
 def accounts(state, engine):
     return [a for a in state.setdefault('engine_accounts', []) if a['engine'] == engine]
 

@@ -19,8 +19,11 @@ class JournalTests(unittest.TestCase):
         quotas.note_wall(st, 'chatgpt_image', 3500)
         q = quotas.status(st, 'chatgpt_image', 3600)
         self.assertEqual((q['capacity'], q['used'], q['remaining']), (3, 3, 0))
-        self.assertTrue(q['blocked']); self.assertEqual(q['retry_at'], 1000 + quotas.WINDOW, 'oldest pass + 6 h')
-        self.assertFalse(quotas.status(st, 'chatgpt_image', 1000 + quotas.WINDOW)['blocked'])
+        self.assertTrue(q['blocked']); self.assertEqual(q['retry_at'], 3500 + quotas.PROBE, 'unannounced: tried again after 30 min, not oldest pass + 6 h')
+        self.assertFalse(q['announced'])
+        self.assertFalse(quotas.status(st, 'chatgpt_image', 3500 + quotas.PROBE)['blocked'])
+        st['quotas']['walls'][-1][0] = 1000 + quotas.WINDOW - 60
+        self.assertEqual(quotas.status(st, 'chatgpt_image', 1000 + quotas.WINDOW - 30)['retry_at'], 1000 + quotas.WINDOW, 'oldest pass + 6 h when it comes sooner')
         self.assertFalse(quotas.status(st, 'chatgpt_text', 3600)['blocked'], 'services are independent')
 
     def test_announced_delay_wins_default_and_dedup(self):
@@ -28,6 +31,7 @@ class JournalTests(unittest.TestCase):
         quotas.note_wall(st, 'chatgpt_image', 100, retry_after=7200); quotas.note_wall(st, 'chatgpt_image', 130, retry_after=5)
         self.assertEqual(len(st['quotas']['walls']), 1, 'same wall within a minute')
         self.assertEqual(quotas.status(st, 'chatgpt_image', 200)['retry_at'], 7300)
+        self.assertTrue(quotas.status(st, 'chatgpt_image', 200)['announced'], 'announced delay kept, never shortened')
         st2 = {}; quotas.note_wall(st2, 'claude_text', 100)
         self.assertEqual(quotas.status(st2, 'claude_text', 200)['retry_at'], 100 + quotas.DEFAULT_WAIT)
 
