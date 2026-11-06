@@ -2342,6 +2342,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         j=job_by(t['job'])
                         if t['status']!='queued' or not (j['status']=='running' or (j['status']=='waiting_quota' and j.get('quota_lane')=='chat' and lane_of(t)=='video')): continue
                         if not client_accepts(c,t) or (lane and lane_of(t)!=lane): continue
+                        # 0.1.102: texts run in parallel, images one at a time per window (06/11/2026 22:11: two boards sent
+                        # at once both failed with « champ de pièce jointe indisponible »).
+                        if t['kind'] in ('chat_image','chat_image_collect') and any(o['status']=='claimed' and o.get('client')==client and o['kind'] in ('chat_image','chat_image_collect') for o in STATE['tasks']):continue
                         if lane_of(t)=='video':
                             # Several video tasks per window (parallel clips), each in its own tab: at most the setting, one Grok.
                             mine=[o for o in STATE['tasks'] if o['status']=='claimed' and lane_of(o)=='video' and o.get('client')==client]
@@ -3067,8 +3070,8 @@ def recover_after_restart():
         tasks={t['id']:t for t in STATE['tasks']}
         for j in STATE['jobs']:
             err=j.get('last_error') or {}
-            if j.get('status')=='attention' and err.get('kind')=='restart' and lane_of(tasks.get(err.get('task')) or {})=='chat':
-                j['status']='running';j['last_error']=None;event(j,'Reprise automatique après le redémarrage du studio.');schedule(j)
+            if j.get('status')=='attention' and (err.get('kind')=='restart' or (err.get('kind')=='interface' and 'champ de pièce jointe' in ' '.join(e.get('text','') for e in j.get('events',[])[-2:]))) and lane_of(tasks.get(err.get('task')) or {})=='chat':
+                j['status']='running';j['last_error']=None;j['chat_retries']={};event(j,'Reprise automatique après le redémarrage du studio.');schedule(j)
         for j in STATE['jobs']:
             if j.get('status')=='waiting_source':threading.Thread(target=prepare_source,args=(j['id'],),daemon=True).start()
         for j in STATE['jobs']:
