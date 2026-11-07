@@ -27,7 +27,7 @@ import maintenance
 import series
 import licence
 import readiness
-VERSION='0.1.105'
+VERSION='0.1.106'
 OFFICIAL_ORIGIN='chrome-extension://bhdmibhibonmaamgcbpmbhedhohfongj'  # extension/manifest.json "key"
 import sys
 import traceback
@@ -196,7 +196,7 @@ def gate_blockers(j,setup=True):
     """Known reasons not to start this production now (first step: accounts added; then nothing known « À régler »)."""
     eligible=lambda p:flow_accounts.eligible(STATE,p)
     out=readiness.setup_missing(STATE) if setup else []
-    return out+readiness.blockers(STATE,j['config'],j.get('stage','research'),int(j['config'].get('flow_cost',12)),time.time(),eligible,j.get('flow_profile'))
+    return out+readiness.blockers(STATE,j['config'],j.get('stage','research'),flow_cost_of(j),time.time(),eligible,j.get('flow_profile'))
 
 def window_online():
     return any(client_online(c) and c.get('role','all') in ('all','flow') for c in STATE['clients'].values())
@@ -213,7 +213,7 @@ def request_readiness(sites,profiles,background=False,job=None):
 
 def start_check(j):
     """Before a production starts: read what is not known recently. True when it may start right away."""
-    need=readiness.checks_needed(STATE,j['config'],j.get('stage','research'),int(j['config'].get('flow_cost',12)),time.time(),lambda p:flow_accounts.eligible(STATE,p))
+    need=readiness.checks_needed(STATE,j['config'],j.get('stage','research'),flow_cost_of(j),time.time(),lambda p:flow_accounts.eligible(STATE,p))
     if not (need['sites'] or need['profiles']) or not window_online():return True
     j['accounts_check']={'at':now(),'id':request_readiness(need['sites'],need['profiles'],job=j['id'])}
     names=[readiness.SITE_LABELS[n] for n in need['sites']]+(['compte(s) Google Flow'] if need['profiles'] else [])
@@ -489,7 +489,7 @@ def flow_dispatch_tick():
         if rebind_flow_routes():save()
         for j in STATE['jobs']:
             if j['stage']=='clips' and j['status']=='waiting_credit':
-                if flow_accounts.choose(STATE,j.get('flow_profile'),j['config']['flow_cost']):j['status']='running'
+                if flow_accounts.choose(STATE,j.get('flow_profile'),flow_cost_of(j)):j['status']='running'
             if j['status']=='running':schedule(j)
         refill_check()
         window=any(client_online(c) and c.get('role','all') in ('all','flow') for c in STATE['clients'].values())
@@ -976,6 +976,21 @@ PLANS (règles de mise en scène) :
 - detail et tenue ne parlent JAMAIS de taille (interdits : énorme, gros, géant, immense, obèse, big, huge, giant…) : le moteur vidéo grossirait tout le personnage. Décris la forme, la couleur, la matière.
 '''
 
+OMNI_COST={4:7,6:10,8:12,10:15}  # Flow Omni 1.1 Flash 720p, read on the page 07/11/2026: the cost follows the clip length
+
+def flow_cost_of(j):
+    """Credits one Flow clip of this episode costs. 0.1.106: a 10 s Omni clip costs 15, not 12 (every clip was refused
+    « coût affiché différent du budget prévu »)."""
+    cfg=j.get('config') or {}
+    # Only the old default (12, the 8 s price) follows the length; another budget set on purpose is kept.
+    if cfg.get('flow_model','gemini_omni_flash')=='gemini_omni_flash' and int(cfg.get('flow_cost',12))==12:return OMNI_COST.get(int(engines.flow_seconds(j)),12)
+    return int(cfg.get('flow_cost',12))
+
+def flow_resolution_of(j):
+    """Omni offers 360p and 720p only (1080p asked was never found): 720p; the montage exports 1080p anyway."""
+    cfg=j.get('config') or {}
+    return '720p' if cfg.get('flow_model','gemini_omni_flash')=='gemini_omni_flash' else cfg.get('flow_resolution','720p')
+
 def is_identical(j):
     return ((j.get('selected') or {}).get('source')=='owner_link' and j['config'].get('recreate')=='identical')
 
@@ -1366,7 +1381,7 @@ def current_account(j,engine):
 
 def flow_can_pay(j):
     """A Flow account can pay this clip now or after the clip it works on (busy accounts count: the clip waits its turn)."""
-    return bool(flow_accounts.choose(STATE,j.get('flow_profile'),int(j['config'].get('flow_cost',12))))
+    return bool(flow_accounts.choose(STATE,j.get('flow_profile'),flow_cost_of(j)))
 
 def engine_ready(j,engine,moment=None):
     """This engine may take a clip of this episode: an account known ready, never one « À régler » or at its limit.
@@ -1482,7 +1497,7 @@ def schedule_engine_clip(j,i,engine,early=False,parallel=False):
 def schedule_flow_clip(j,i,early=False,parallel=False):
     s=j['scenes'][i]
     flow_accounts.follow_active_browser(STATE)
-    cost=j['config']['flow_cost'];busy=busy_flow_profiles()
+    cost=flow_cost_of(j);busy=busy_flow_profiles()
     if parallel:
         p=flow_accounts.choose(STATE,None,cost,exclude=busy)
         if not p or p['balance']<cost or not flow_accounts.route(p):return False
@@ -1509,7 +1524,7 @@ def schedule_flow_clip(j,i,early=False,parallel=False):
     if p['id']!=j.get('flow_profile') and not parallel:
         previous=profile_by(j.get('flow_profile'))
         j['flow_profile']=p['id'];account_usage.number_flow(STATE);event(j,account_usage.switch_line(previous,p))
-    payload={'prompt':clip_prompt(j,i,'flow'),'attachments':[asset_url(j,flow_reference(j,s['image']))],'cost':cost,'balance':p['balance'],'seconds':engines.flow_seconds(j),**({'model':j['config']['flow_model'],'resolution':j['config'].get('flow_resolution','720p')} if j['config'].get('flow_model') else {})}
+    payload={'prompt':clip_prompt(j,i,'flow'),'attachments':[asset_url(j,flow_reference(j,s['image']))],'cost':cost,'balance':p['balance'],'seconds':engines.flow_seconds(j),**({'model':j['config']['flow_model'],'resolution':flow_resolution_of(j)} if j['config'].get('flow_model') else {})}
     if j['config'].get('dry_run'):payload['dry_run']=True
     target=flow_accounts.route(p) if STATE.get('settings',{}).get('flow_auto') else None
     if target:

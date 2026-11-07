@@ -5,6 +5,12 @@ correspondante (P0-xx, P1-x, P2-xx) détaillée dans `docs/sudf/`. Guide pour re
 `docs/sudf/REPRISE.md`. **Mode d'emploi détaillé** (installer, lancer, utiliser), mis à jour à chaque
 version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, version par version).
 
+## 0.1.106 (07/11/2026)
+
+**Corrigé**
+- Flow : « coût affiché différent du budget prévu » sur chaque clip. Un clip Omni de 10 s coûte 15 crédits, pas 12. Les coûts ont été relevés sur la page Flow : 4 s = 7, 6 s = 10, 8 s = 12, 10 s = 15. Le budget suit maintenant la durée du clip, et les soldes nécessaires aussi.
+- Résolution : Omni ne propose que 360p et 720p. Le 1080p demandé n'existait pas : c'est maintenant 720p, et la vidéo finale reste exportée en 1080p.
+
 ## 0.1.105 (07/11/2026)
 
 **Corrigé**

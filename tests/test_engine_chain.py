@@ -140,6 +140,12 @@ class ChainScheduleTests(unittest.TestCase):
         self.assertIn('sans bagarre', t['payload']['prompt'])
         self.assertFalse([a for a in j['alerts'] if 'clip(s) en échec' in a['text'] or a['text'].startswith('Clip 1 : ')])
 
+    def test_flow_cost_follows_the_clip_length(self):
+        # 0.1.106: Flow shows 15 credits for a 10 s Omni clip; the budget 12 refused every clip.
+        self.assertEqual(s.flow_cost_of({'config': {'flow_seconds': 10, 'flow_cost': 12}}), 15)
+        self.assertEqual(s.flow_cost_of({'config': {'flow_seconds': 8, 'flow_cost': 12, 'video_engine': 'flow'}}), 12)
+        self.assertEqual(s.flow_resolution_of({'config': {'flow_resolution': '1080p'}}), '720p')
+
     def test_tab_cut_by_extension_reload_is_not_a_try(self):
         # 0.1.102 (06/11/2026 23:13): clips « failed » while the extension reloaded itself.
         s.STATE = fresh(); j = clip_job(); s.schedule(j)
@@ -181,7 +187,7 @@ class ChainScheduleTests(unittest.TestCase):
         """Real case 06/11/2026: « Envoi Flow incertain pour la scène 1, 3, 4, 7, 16 », episode in Action requise."""
         j = clip_job(); s.schedule(j)
         fail(queued(j)[0], {'ok': False, 'error': 'Génération trop longue ou média non détecté.'})
-        self.assertEqual(s.STATE['profiles'][0]['balance'], 88, 'maybe charged: reservation kept')
+        self.assertEqual(s.STATE['profiles'][0]['balance'], 85, 'maybe charged: reservation kept (a 10 s Omni clip costs 15)')
         self.assertEqual(j['status'], 'running'); self.assertEqual(s.held_clips(j), set())
         self.assertFalse([a for a in j.get('alerts', []) if a['level'] == 'action'])
         self.assertIn('incertain', j['alerts'][-1]['text']); self.assertEqual(j['alerts'][-1]['level'], 'auto')
