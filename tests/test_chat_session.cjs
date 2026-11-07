@@ -3,7 +3,7 @@ function harness(){
  const store={client:'client'},tabs=new Map(),created=[],closed=[],events=[];let next=10,failClose=false;const responses=new Map();
  const chrome={storage:{local:{get:async keys=>keys===null?structuredClone(store):Array.isArray(keys)?Object.fromEntries(keys.map(k=>[k,store[k]])):{[keys]:store[keys]},set:async data=>Object.assign(store,data),remove:async key=>delete store[key]}},
  tabs:{get:async id=>{if(!tabs.has(id))throw Error('closed');return tabs.get(id);},create:async data=>{const tab={id:next++,...data};tabs.set(tab.id,tab);created.push(tab);events.push('create');return tab;},query:async()=>[...tabs.values()],remove:async ids=>{if(failClose)throw Error('temporary failure');for(const id of ids){closed.push(id);tabs.delete(id);events.push('close');}},sendMessage:async(id,m)=>responses.get(id)?.(m)||null},scripting:{executeScript:async()=>[]},runtime:{onMessage:{addListener:()=>{}},onInstalled:{addListener:()=>{}},onStartup:{addListener:()=>{}}},alarms:{onAlarm:{addListener:()=>{}}}};
- const ctx={URL,Date,setTimeout,chrome,fetch:async url=>{events.push('ack');return{ok:true,json:async()=>({task_status:'done'})};}};vm.createContext(ctx);
+ const ctx={URL,Date,setTimeout,chrome,fetch:async url=>{events.push('ack');return{ok:true,json:async()=>({task_status:'done'})};}};vm.createContext(ctx);ctx.FruchtWorkspace={createTab:(c,p)=>c.tabs.create({active:false,...p}),adopt:async(c,t)=>t,close:(c,ids)=>c.tabs.remove(ids)};
  vm.runInContext(fs.readFileSync(path.join(__dirname,'../extension/chat-session.js'),'utf8'),ctx);
  return {store,tabs,chrome,created,closed,events,responses,ctx,chats:ctx.FruchtChats,failClose:value=>failClose=value};
 }
@@ -11,6 +11,7 @@ const task=(job,kind='chat_text',provider='chatgpt')=>({id:job+'-'+kind,job,kind
 (async()=>{
  const h=harness(),cfg={client:'client'},t=task('A');
  const first=await h.chats.tabFor(t,cfg,h.chrome);
+ assert.equal(first.active,false,'the chat works in the background: the studio stays on screen');
  h.store.aiSessions={'A:chatgpt':{url:'https://chatgpt.com/c/old',tabId:first.id,client:'client'}};
  const second=await h.chats.tabFor(task('A','chat_image'),cfg,h.chrome);
  assert.equal(h.created.length,2);assert.equal(second.url,'https://chatgpt.com/','Each request opens a fresh chat even for the same production');

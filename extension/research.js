@@ -36,7 +36,9 @@ globalThis.FruchtResearch={
    const title=(card.innerText||a.getAttribute('aria-label')||a.innerText||'').slice(0,1500);
    const time=card.querySelector('time[datetime]'),raw=time?.getAttribute('datetime')||'';
    const date=/^\d{4}-\d{2}-\d{2}(?:T|$)/.test(raw)?raw.slice(0,10):'';
-   rows.push({url:'https://www.tiktok.com'+u.pathname,title,...this.metrics(card),date});
+   // Cover image of the card (Filon gallery). Only the displayed https URL is kept.
+   const img=[...card.querySelectorAll('img')].map(i=>i.currentSrc||i.src).find(s=>/^https:\/\//.test(s||''))||'';
+   rows.push({url:'https://www.tiktok.com'+u.pathname,title,...this.metrics(card),date,thumb:img.slice(0,2000)});
    if(rows.length>=30)break;
   }
   return rows;

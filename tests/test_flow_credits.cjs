@@ -19,3 +19,15 @@ assert.equal(c.parse(scope(['50 crédits Google\u00a0Flow'])).balance,50,'French
  const completedDoc={querySelectorAll:q=>q==='[role="dialog"]'?[panel]:[button]};
  assert.equal((await c.read(completedDoc,target)).balance,50);
 })().catch(e=>{console.error(e);process.exitCode=1;});
+
+(async()=>{
+ // Owner closed the FruchtDrama window: a background balance check never reopens it.
+ const calls=[];let created=0;
+ ctx.FruchtWorkspace={isOpen:async()=>false,createTab:async()=>{created++;return {id:1};},adopt:async t=>t};
+ const call=async(url,body)=>{calls.push([url,body]);return url.includes('credit-check')?{id:'p',profile:'x',target:{url:'https://flow.google.com/project/a',email:'a@example.com'},background:true}:{};};
+ const fakeChrome={tabs:{query:async()=>[]},storage:{local:{set:async()=>{}}}};
+ assert.equal(await c.check({role:'all',enabled:true,client:'cl'},fakeChrome,call),false);
+ assert.equal(created,0,'no tab, no window');
+ assert.match(calls[1][1].result.error,/fermée/);
+ console.log('Closed window: background balance check postponed, window not reopened.');
+})().catch(e=>{console.error(e);process.exitCode=1;});

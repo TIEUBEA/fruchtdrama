@@ -1,5 +1,6 @@
 """Editorial variety and observable similarity checks, not virality predictions."""
 import hashlib
+import engines
 import json
 import re
 import unicodedata
@@ -23,13 +24,17 @@ DIRECTIONS=[
     ('unexpected_alliance','Une scène de spectacle','deux adversaires','échec public imminent et alliance improbable','Leur coopération produit une surprise crédible'),
     ('scam_reversal','Un magasin de téléphones','acheteur et vendeur','arnaque révélée au moment critique','La victime reprend la maîtrise grâce à une preuve'),
 ]
+# Emotional engines of the fruit dramas that go viral in Le Filon (05/11/2026 review): a victim the viewer loves,
+# an antagonist the viewer hates, an injustice that gets worse, then a reversal where the victim wins.
 FAMILY_DIRECTIONS=[
-    ('family_letter','Une cuisine familiale au petit matin','mère et fille adulte','lettre jamais remise et confiance brisée','Une lettre révèle un choix passé et mène à une décision présente'),
-    ('family_photo','Une maison ancienne','grand-mère et petit-fils adulte','photographie qui contredit une histoire de famille','Un détail de la photo explique le secret et change leur relation'),
-    ('family_sacrifice','Un atelier familial','père et enfant adulte','sacrifice méconnu pris pour un abandon','Une preuve concrète révèle le prix du choix et permet une réparation'),
-    ('family_inheritance','Une maison à vider','deux sœurs adultes','objet hérité qui semble prouver un favoritisme','L’objet révèle une promesse et oblige à un choix équitable'),
-    ('family_reunion','Une petite gare','parent et enfant adulte','retrouvailles contrariées par un mensonge ancien','Un document explique l’absence sans effacer ses conséquences'),
-    ('family_promise','Un jardin après une réunion de famille','deux générations adultes','promesse rompue et souvenir conservé','Un geste concret répare une partie de la blessure, sans morale ajoutée'),
+    ('maid_humiliated','Une grande villa puis un petit logement modeste','patronne riche et femme de ménage mère seule','la patronne humilie sa femme de ménage qui cache sa misère pour nourrir sa fille','La vérité éclate devant tous : la patronne perd la face, la mère est enfin reconnue et aidée'),
+    ('cruel_stepmother','Une maison familiale puis l’école','belle-mère et enfant du premier mariage','la belle-mère maltraite l’enfant en cachette et le fait passer pour menteur','Le père découvre la preuve et choisit son enfant : la belle-mère est chassée'),
+    ('disguised_millionaire','Un restaurant chic puis la rue','milliardaire déguisé et serveuse méprisée','des clients et un gérant humilient une serveuse pauvre devant un inconnu modeste','L’inconnu révèle qui il est : le gérant est renvoyé, la serveuse obtient ce qu’elle mérite'),
+    ('betrayed_wife','Un mariage puis l’hôpital','épouse sacrifiée, mari ingrat et maîtresse','l’épouse a tout sacrifié pour son mari qui la trompe et la chasse quand elle tombe malade','Elle revient forte et riche : le mari ruiné supplie, elle refuse devant tout le monde'),
+    ('rejected_daughter','La maison de la mère puis un gala','mère qui préfère une fille à l’autre','la mère vend ou rejette sa fille « ratée » au profit de la favorite','La fille rejetée réussit et sauve la famille ; la favorite est démasquée'),
+    ('mocked_child','Une cour d’école puis un concours','enfant pauvre moqué et enfants riches','un enfant pauvre est humilié pour ses vêtements et son repas par des camarades et une maîtresse injuste','Son talent ou sa bonté éclate en public : les moqueurs ont honte, l’injustice est réparée'),
+    ('ungrateful_son','La maison de retraite puis un notaire','vieille mère et fils ingrat','le fils abandonne sa mère âgée pour garder sa maison et son argent','La mère révèle le testament : tout va à celle qui l’a aidée, le fils perd tout'),
+    ('false_accusation','Une boutique ou un bureau','employée honnête et collègue jalouse','une collègue jalouse accuse l’héroïne de vol et la fait renvoyer','La caméra ou un témoin prouve la vérité : la menteuse est démasquée et renvoyée'),
 ]
 
 FRUITS=['pear','kiwi','lemon','peach','blueberry','banana','plum','cherry','orange','pineapple']
@@ -60,12 +65,24 @@ def history_brief(j,jobs):
              'signature':x.get('script',{}).get('story_signature',{})} for x in recent(j,jobs)[:8]]
 
 
+# Story craft shared by every written episode (05/11/2026): the viral fruit dramas live on strong, readable emotion.
+STORY_CRAFT='''RÉCIT QUI CAPTIVE (règles prioritaires) :
+1. Une émotion forte et lisible sans le son : injustice, humiliation, trahison, sacrifice, peur pour un enfant, fierté rendue. Pas de discussion calme, pas de malentendu poli, pas de secret qui se règle par une conversation.
+2. Une victime que le public aime tout de suite (elle est gentille, elle se sacrifie, elle a un enfant ou un rêve) et un antagoniste que le public déteste (méprisant, cruel, injuste), clairement identifiés dès la scène 1 ou 2. Les enjeux sont concrets : argent, logement, travail, enfant, dignité.
+3. Structure : accroche (le moment le plus fort, déjà en cours) → l’injustice s’aggrave à chaque scène (la victime souffre davantage, le public enrage) → basculement (une preuve, un témoin, une identité révélée) → revanche ou justice visible : l’antagoniste paie devant les autres, la victime est reconnue. La fin procure un vrai soulagement ou un choc, jamais une morale tiède.
+4. Transitions : chaque scène se termine sur une tension qui appelle la suivante (menace, question, geste interrompu, regard choqué, porte qui s’ouvre) ; la scène suivante commence par la conséquence. Aucune scène ne répète une information déjà connue.
+5. Dialogues : oraux, courts, percutants, avec des mots simples et du sous-texte ; une réplique = une intention (attaquer, supplier, mentir, révéler). Pas d’explication de ce que l’image montre, pas de « je ne savais pas que… », pas de narrateur.
+6. Chaque scène montre une réaction émotionnelle visible (larmes, colère, choc, sourire triomphant) décrite dans image_prompt et video_prompt.
+7. La dernière réplique de l’épisode est l’appel de fin dit par un personnage à l’écran (ex. « Elle mérite son pardon ? Dis 1 pour oui, 2 pour non ! ») quand l’histoire n’en impose pas un autre.
+'''
+
+
 def instructions(j,jobs):
     creative=direction(j,jobs)
-    return retention_instructions(j)+hook_instructions(j)+'''DIRECTION ÉDITORIALE : '''+json.dumps(creative,ensure_ascii=False)+'''. Ce cadre oriente l’originalité ; invente les événements précis à partir des références étudiées. Ne recopie pas une intrigue existante.
-HISTORIQUE À NE PAS RECYCLER : '''+json.dumps(history_brief(j,jobs),ensure_ascii=False)+'''. Change réellement le conflit, le décor, la relation, l’objet central et le mécanisme de révélation, pas seulement les prénoms ou le fruit. Évite le couple fraise/mangue, l’appartement chaleureux, la valise ou le placard, la fausse rupture et le cadeau romantique secret lorsqu’ils reprennent les épisodes précédents. Choisis des voix et personnalités adaptées, et conserve les mêmes personnages seulement à l’intérieur de cet épisode.
-Compare CINQ concepts originaux AVANT de développer le scénario. Pour chacun, donne titre, accroche parlée de 12 mots maximum, conflit, décor, retournement et fin. Évalue de 0 à 5 : hook, clarity, emotion, novelty. Ces notes sont ton appréciation éditoriale, jamais des statistiques TikTok ni une prédiction de vues. Sélectionne le score pondéré le plus élevé : 3*hook + 2*clarity + 2*emotion + 3*novelty. En cas d’égalité, choisis la plus forte novelty.
-Développe uniquement le gagnant. Son titre doit être le titre final et son accroche doit être exactement la première réplique. Dans les deux premières secondes, montrer un problème concret déjà en cours ; pas de présentation ni de longue explication. Chaque scène apporte un indice ou une aggravation et fait avancer l’action. Un spectateur doit comprendre l’enjeu sans le son. Le retournement doit découler d’un indice visible, sans magie improvisée. Fin claire et variée : conséquence, victoire coûteuse, justice, réconciliation méritée ou surprise ; ne termine pas toujours par un cadeau ou une morale. Pas de demande artificielle de likes/abonnement.
+    return retention_instructions(j)+hook_instructions(j)+STORY_CRAFT+'''DIRECTION ÉDITORIALE : '''+json.dumps(creative,ensure_ascii=False)+'''. C’est le moteur émotionnel conseillé ; invente les événements précis, les personnages et les lieux. Ne recopie pas une intrigue existante mot pour mot.
+HISTORIQUE (pour ne pas refaire le même épisode) : '''+json.dumps(history_brief(j,jobs),ensure_ascii=False)+'''. Ne reprends pas le même duo, le même objet central et la même révélation qu’un épisode récent ; le type d’émotion (injustice, revanche) peut revenir, c’est ce qui plaît.
+Compare CINQ concepts AVANT de développer le scénario. Pour chacun, donne titre, accroche parlée de 12 mots maximum, conflit, décor, retournement et fin. Évalue de 0 à 5 : hook, clarity, emotion, novelty. Ces notes sont ton appréciation éditoriale, jamais des statistiques TikTok ni une prédiction de vues. Sélectionne le score pondéré le plus élevé : 3*hook + 2*clarity + 3*emotion + 1*novelty. En cas d’égalité, choisis la plus forte emotion.
+Développe uniquement le gagnant. Son titre doit être le titre final et son accroche doit être exactement la première réplique. Dans les deux premières secondes, montrer un problème concret déjà en cours ; pas de présentation ni de longue explication. Un spectateur doit comprendre l’enjeu sans le son. Le retournement doit découler d’un indice visible, sans magie improvisée.
 Ajoute creative_selection et story_signature au JSON. La signature décrit en anglais court la relation, le décor, l’objet central et le mécanisme du retournement pour détecter les répétitions même entre langues.'''
 
 
@@ -75,20 +92,18 @@ def retention_instructions(j):
     return opening+'\n'+"""MISE EN SCÈNE POUR LA RÉTENTION (hypothèse à tester, aucune garantie de vues) :
 Une seule phrase immédiatement compréhensible, commencer à parler dès la première seconde sans accélérer artificiellement la diction. Pas de salutations, présentation, narrateur, logo, titre d'introduction ni fondu noir.
 L'image de la scène 1 est déjà le début de l'action : gros plan ou plan poitrine sur le visage qui réagit, avec l'objet ou le geste du conflit lisible. Évite le plan d'ensemble et les personnages entiers éloignés. Décris cette composition dans image_prompt ET video_prompt ; le clip doit pouvoir démarrer exactement depuis cette image.
-0–2 secondes : accusation, urgence ou découverte concrète avec réaction visible. 2–4 secondes : une réponse ou un geste change la situation. 4–8 secondes : un indice ou une décision ouvre la suite, sans attendre immobile. Conserve un mouvement de caméra continu par clip, sans demander des coupes impossibles dans le même plan.
-Au maximum 20 mots parlés par scène de 8 secondes, deux répliques au maximum, une seule personne parle à la fois. Dialogues naturels dans la langue choisie ; aucun échange ne répète une information connue. Les gestes et les réactions occupent le temps restant, pas de pause d'introduction.
+0–2 secondes : accusation, urgence ou découverte concrète avec réaction visible. 2–4 secondes : une réponse ou un geste change la situation. 4–"""+str(engines.spec(j)['seconds'])+""" secondes : un indice ou une décision ouvre la suite, sans attendre immobile. Conserve un mouvement de caméra continu par clip, sans demander des coupes impossibles dans le même plan.
+Au maximum """+str(engines.word_limit(j))+" mots parlés par scène de "+str(engines.spec(j)['seconds'])+""" secondes, deux répliques au maximum, une seule personne parle à la fois. Dialogues naturels dans la langue choisie ; aucun échange ne répète une information connue. Les gestes et les réactions occupent le temps restant, pas de pause d'introduction.
 Chaque nouvelle scène commence par une action ou une information nouvelle. Utilise si utile une alternance de cadrages entre les scènes ; conserve les identités, positions et accessoires cohérents. Révélation et conséquence visibles dans la dernière scène : histoire complète dans la durée sélectionnée, sans rallonge ni faux suspense pour une partie 2.
 """
 
 
 def hook_instructions(j):
     if j.get('hook_version')!=1:return ''
-    return """ACCROCHE DE DRAME ÉMOTIONNEL :
-Privilégie un secret concret ou une blessure familiale : lettre retenue, photo troublante, promesse, sacrifice méconnu, séparation ou injustice. Le brief explicite de l’utilisateur prime si une autre relation ou un autre thème est demandé.
-Ouvre au milieu d’un geste inhabituel ou d’une confrontation, puis une question, un reproche, une découverte ou une interdiction naturelle. Ne commence pas toutes les histoires par « pourquoi », ni toujours par une accusation. Varie les constructions et les ressorts parmi les CINQ concepts et par rapport à l’historique.
-Le spectateur doit comprendre qui est blessé et ce qui semble anormal, mais ignorer encore l’explication. Aucun vague « tu ne vas pas croire », promesse de choc, présentation de personnages ou demande de regarder jusqu’à la fin.
-Dans la première image, montre clairement l’objet ou le geste dont parle la phrase. La réplique et la mise en scène doivent se répondre dès le début, sans tout expliquer ni dévoiler la résolution. Ne copie pas une formule d’exemple ou une intrigue existante ; invente une accroche propre à CET épisode.
-Ajoute opening_plan au JSON : visible_detail (objet/geste en une courte expression dans la langue choisie, repris EXACTEMENT dans image_prompt ET video_prompt de la scène 1), question (ce que le public ignore), payoff_scene (numéro de scène de 1 à N), payoff (explication concrète donnée dans cette scène). La scène indiquée doit réellement résoudre la question ; aucun mystère abandonné ni promesse absente de l’histoire. Les clés restent en anglais, les valeurs textuelles dans la langue de création.
+    return """ACCROCHE :
+La première réplique est le moment le plus fort, déjà en cours : une humiliation, une accusation injuste, une menace, une trahison découverte, un choc. Elle est dite par un personnage à l’écran dans les 2 premières secondes, avec l’objet ou le geste du conflit visible dans la première image. Exemples de forces (ne pas les recopier) : un chiffre concret, un ordre cruel, une phrase qui blesse, une révélation brutale.
+Le spectateur comprend immédiatement qui souffre et qui est injuste, mais ignore comment cela va tourner. Pas de « tu ne vas pas croire », pas de présentation, pas de question molle.
+Ajoute opening_plan au JSON : visible_detail (objet/geste en une courte expression dans la langue choisie, repris EXACTEMENT dans image_prompt ET video_prompt de la scène 1), question (ce que le public veut savoir), payoff_scene (numéro de scène de 1 à N), payoff (réponse concrète donnée dans cette scène). La scène indiquée doit réellement répondre à la question.
 """
 
 
@@ -105,38 +120,66 @@ def grams(text):
     return set(zip(words,words[1:],words[2:]))
 
 
+def trim_words(text,n):
+    words=str(text).split()
+    if len(words)<=n:return text
+    return ' '.join(words[:n]).rstrip(',;:—-')+('' if words[n-1][-1:] in '.!?…' else '.')
+
+
+def fit_dialogue(s,limit,max_lines=2):
+    """0.1.102 (owner 06/11/2026: « retirer les actions pas très importantes »): a scene one or two words too long, or
+    with a third line, is shortened here instead of a 5-7 min rewrite by the AI. Lines past the second are dropped,
+    then the longest line loses its last words until the scene fits. Returns the scenes changed (1-based)."""
+    changed=[]
+    for i,scene in enumerate(s.get('scenes') or []):
+        lines=scene.get('dialogue')
+        if not isinstance(lines,list) or not lines or not all(isinstance(x,dict) and isinstance(x.get('text'),str) for x in lines):continue
+        before=[x['text'] for x in lines]
+        if len(lines)>max_lines:lines[:]=lines[:max_lines]
+        while sum(len(x['text'].split()) for x in lines)>limit:
+            longest=max(lines,key=lambda x:len(x['text'].split()))
+            excess=sum(len(x['text'].split()) for x in lines)-limit
+            longest['text']=trim_words(longest['text'],max(1,len(longest['text'].split())-excess))
+            if len(longest['text'].split())<=1 and sum(len(x['text'].split()) for x in lines)>limit:break
+        cast=scene.get('characters')
+        if isinstance(cast,list):
+            for x in lines:
+                if x.get('speaker') and x['speaker'] not in cast:cast.append(x['speaker'])
+        if [x['text'] for x in lines]!=before:changed.append(i+1)
+    return changed
+
+
+def relax(s,j):
+    """Form defects fixed in place instead of a refusal (0.1.102): hook too long, visible detail too long or missing
+    from the first prompts. Only real defects (repeated story, missing parts) still refuse the script."""
+    try:first=s['scenes'][0]['dialogue'][0]
+    except (KeyError,IndexError,TypeError):return
+    if not isinstance(first,dict) or not isinstance(first.get('text'),str):return
+    first['text']=trim_words(first['text'],8 if j.get('retention_version')==1 and j.get('hook_version')!=1 else 12)
+    plan=s.get('opening_plan')
+    if isinstance(plan,dict) and isinstance(plan.get('visible_detail'),str) and plan['visible_detail'].strip():
+        plan['visible_detail']=' '.join(plan['visible_detail'].split()[:8])
+        scene=s['scenes'][0];detail=normalize(plan['visible_detail'])
+        for k in ('image_prompt','video_prompt'):
+            if isinstance(scene.get(k),str) and ' '+detail+' ' not in ' '+normalize(scene[k])+' ':scene[k]=scene[k].rstrip()+' '+plan['visible_detail'].strip()+'.'
+        if type(plan.get('payoff_scene')) is not int or not 1<=plan['payoff_scene']<=len(s['scenes']):plan['payoff_scene']=len(s['scenes'])
+
+
 def validate(s,j,jobs):
     if j.get('editorial_version')!=2:return
+    relax(s,j)
     selection=s.get('creative_selection',{})
-    if not isinstance(selection,dict):raise Rejection('La comparaison des concepts doit être un objet creative_selection.')
-    concepts=selection.get('candidates',[]);index=selection.get('selected_index')
-    if not isinstance(concepts,list) or len(concepts)!=5 or type(index) is not int or not 0<=index<5:
-        raise Rejection('Comparer cinq concepts et préciser selected_index de 0 à 4 avant le scénario.')
-    scored=[]
-    for c in concepts:
-        if not isinstance(c,dict) or not all(isinstance(c.get(k),str) and c[k].strip() for k in ('title','hook','conflict','setting','twist','ending')):
-            raise Rejection('Chaque concept doit préciser titre, accroche, conflit, décor, retournement et fin.')
-        scores=c.get('scores',{})
-        if not isinstance(scores,dict) or any(type(scores.get(k)) not in (int,float) or not 0<=scores[k]<=5 for k in ('hook','clarity','emotion','novelty')):
-            raise Rejection('Les notes éditoriales doivent être comprises entre 0 et 5.')
-        scored.append((3*scores['hook']+2*scores['clarity']+2*scores['emotion']+3*scores['novelty'],scores['novelty']))
-    if len({normalize(c['hook']) for c in concepts})<5:raise Rejection('Les cinq concepts doivent avoir des accroches distinctes.')
-    if scored[index]!=max(scored):raise Rejection('Développer le concept au meilleur score pondéré annoncé, en privilégiant la nouveauté en cas d’égalité.')
-    winner=concepts[index];first=s['scenes'][0]['dialogue'][0]['text']
-    if normalize(winner['title'])!=normalize(s['title']) or normalize(winner['hook'])!=normalize(first):
-        raise Rejection('Le titre et la première réplique doivent correspondre au concept sélectionné.')
-    if j.get('retention_version')==1:
-        if j.get('hook_version')!=1 and len(first.split())>8:raise Rejection('Raccourcir la première réplique à 8 mots maximum pour entrer immédiatement dans le conflit.')
-        for scene in s['scenes']:
-            lines=scene.get('dialogue',[])
-            if len(lines)>2 or sum(len(line['text'].split()) for line in lines)>20:
-                raise Rejection('Limiter chaque scène à deux répliques et 20 mots parlés maximum ; remplacer les répétitions par des actions visibles.')
-    if len(first.split())>12:raise Rejection('Raccourcir l’accroche à 12 mots maximum.')
+    # 0.1.102: the five-concept comparison is the AI's own working; its form never refuses a script any more.
+    first=s['scenes'][0]['dialogue'][0]['text']
+    # 0.1.102: hook and scene lengths are shortened in place (relax, fit_dialogue), never a refusal.
+    if j.get('retention_version')==1:fit_dialogue(s,engines.word_limit(j))
     if j.get('hook_version')==1:validate_opening(s)
     signature=s.get('story_signature',{})
     keys=('relationship','setting','central_object','twist_mechanism')
-    if not isinstance(signature,dict) or not all(isinstance(signature.get(k),str) and signature[k].strip() for k in keys):
-        raise Rejection('Compléter la signature narrative : relation, décor, objet et mécanisme du retournement.')
+    if not isinstance(signature,dict):signature=s['story_signature']={}
+    for k in keys:
+        # 0.1.102: a missing part is filled from the title instead of a rewrite.
+        if not (isinstance(signature.get(k),str) and signature[k].strip()):signature[k]=str(s.get('title') or 'épisode')+' · '+k
     new=grams(story_text(s));opening=normalize(first)
     for old in recent(j,jobs):
         previous=old['script'];other=grams(story_text(previous));overlap=len(new&other)/max(1,min(len(new),len(other)))
@@ -168,5 +211,7 @@ def queries(j,jobs):
     language=j['config'].get('language','Deutsch (de-DE)')
     terms={'Deutsch (de-DE)':['KI Früchte Geschichten deutsch Drama','Früchte Geschichte deutsch ungerecht','KI Früchte deutsch überraschung'],
            'Français (fr-FR)':['histoires fruits IA français drame','fruits IA histoire injustice français','fruits parlants histoire retournement français'],
-           'English (en-US)':['AI fruit drama stories English','AI fruit story unfair accusation','talking fruit story plot twist English']}[language]
+           'English (en-US)':['AI fruit drama stories English','AI fruit story unfair accusation','talking fruit story plot twist English'],
+           'Español (es-ES)':['historias de frutas IA drama español','frutas IA historia injusticia','frutas que hablan giro inesperado'],
+           'Português (pt-BR)':['histórias de frutas IA drama português','frutas IA história injustiça','frutas falantes reviravolta']}[language]
     return [j['config']['query']+' '+creative['id'].replace('_',' '),*terms]

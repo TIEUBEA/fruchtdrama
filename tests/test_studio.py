@@ -4,6 +4,7 @@ TEMP=tempfile.TemporaryDirectory()
 os.environ['FRUCHT_DATA']=TEMP.name
 SPEC=importlib.util.spec_from_file_location('studio',pathlib.Path(__file__).parents[1]/'server.py')
 s=importlib.util.module_from_spec(SPEC); SPEC.loader.exec_module(s)
+from tests import accounts_ready; accounts_ready.install(s)  # 0.1.91: accounts ready before starting
 
 def script(n=4):
     return {'title':'Omas Reise','cover_title':'MUSS OMA GEHEN?','description':'Eine originelle KI-Geschichte.','characters':[{'id':'orange','name':'Oma','appearance':'Orange, cremefarbener Cardigan','voice':'Warme ältere Stimme','image_prompt':'Figurenreferenz, Orange'}], 'scenes':[{'characters':['orange'],'meaning':'Ein Koffer steht neben Oma.','image_prompt':'Oma mit Koffer','video_prompt':'Ein ruhiger Plan.','dialogue':[{'speaker':'orange','text':'Wir fahren heute gemeinsam ans Meer.'}]} for _ in range(n)]}
@@ -56,7 +57,7 @@ class StudioTests(unittest.TestCase):
 
     def test_cover_result_keeps_existing_clips_and_starts_montage(self):
         from PIL import Image
-        j=job();s.store_script(j,script());s.STATE['tasks']=[];j['cover_style']='dramatic_v2';j['stage']='cover';scene_images(j)
+        j=job();s.store_script(j,script());s.STATE['tasks']=[];j['cover_style']='dramatic_v2';j['stage']='cover';scene_images(j);j['config']['cover_controls']='none'
         for i,scene in enumerate(j['scenes']):scene['clip']=f'clip{i}.mp4'
         original=copy.deepcopy(j['scenes']);Image.new('RGB',(64,128),'yellow').save(s.job_dir(j)/'generated-cover.png')
         t={'id':s.uid(),'job':j['id'],'slot':'cover','kind':'chat_image','status':'claimed'};s.STATE['tasks'].append(t)
@@ -169,9 +170,29 @@ class StudioTests(unittest.TestCase):
                 p={'id':'flow','label':'Flow','balance':50};s.STATE['profiles'].append(p);j['flow_profile']='flow';s.schedule(j)
                 self.assertIn('Spoken language ONLY: '+language,s.STATE['tasks'][-1]['payload']['prompt'])
 
-    def test_creation_language_rejects_values_outside_the_three_choices(self):
-        for language in ('','Español (es-ES)','arbitrary input'):
-            with self.assertRaisesRegex(ValueError,'Deutsch, Français ou English'):s.creation_language(language)
+    def test_creation_language_accepts_the_five_atelier_languages_only(self):
+        for language in ('Français (fr-FR)','English (en-US)','Español (es-ES)','Português (pt-BR)','Deutsch (de-DE)'):self.assertEqual(s.creation_language(language),language)
+        for language in ('','Italiano (it-IT)','arbitrary input'):
+            with self.assertRaisesRegex(ValueError,'Français, English, Español, Português ou Deutsch'):s.creation_language(language)
+
+    def test_cover_is_checked_once_then_redrawn_once_like_the_atelier(self):
+        from PIL import Image
+        j=job();j['config']['cover_controls']='fix';s.store_script(j,script());s.STATE['tasks']=[];j['cover_style']='dramatic_v2';j['stage']='cover';scene_images(j)
+        for i,scene in enumerate(j['scenes']):scene['clip']=f'clip{i}.mp4'
+        Image.new('RGB',(64,128),'yellow').save(s.job_dir(j)/'c1.png');j['cover_file']='c1.png';j['cover']='x'
+        previous=s.start_render;s.start_render=lambda id:None
+        try:
+            s.schedule(j);t=s.STATE['tasks'][-1];self.assertEqual((t['slot'],t['payload']['response_kind']),('cover_review','cover_review'))
+            self.assertEqual(j['stage'],'cover','montage waits for the cover check')
+            t['status']='claimed';s.accept_task_result(t,{'ok':True,'text':json.dumps({'production_id':j['id'],'generation_task_id':t['id'],'ok':False,'problem':'Titre coupé à droite.'})})
+            self.assertNotIn('cover_file',j);self.assertIn('Titre coupé',j['corrections']['cover']);self.assertTrue(j['cover_fixed'])
+            redraw=s.STATE['tasks'][-1];self.assertEqual(redraw['slot'],'cover');self.assertIn('Titre coupé',redraw['payload']['prompt'])
+            Image.new('RGB',(64,128),'red').save(s.job_dir(j)/'c2.png');redraw['status']='claimed';s.accept_task_result(redraw,{'ok':True,'file':'c2.png'})
+            t2=s.STATE['tasks'][-1];self.assertEqual(t2['slot'],'cover_review')
+            t2['status']='claimed';s.accept_task_result(t2,{'ok':True,'text':json.dumps({'production_id':j['id'],'generation_task_id':t2['id'],'ok':False,'problem':'Encore coupé.'})})
+            self.assertEqual(j['cover_file'],'c2.png','redrawn once only, then reported');self.assertEqual(j['stage'],'edit')
+            self.assertEqual(j['alerts'][-1]['level'],'auto')
+        finally:s.start_render=previous
     def test_state_roundtrip(self):
         j=job();s.save();r=s.read_state();self.assertEqual(r['jobs'][0]['id'],j['id'])
     def test_flow_browser_never_receives_ai_tasks(self):
@@ -247,7 +268,8 @@ class HTTPTests(unittest.TestCase):
         new=s.STATE['jobs'][0]
         self.assertEqual(new['config']['flow_model'],'gemini_omni_flash')
         self.assertEqual(new['config']['flow_cost'],12);self.assertEqual(new['config']['flow_resolution'],'720p')
-        self.assertEqual(new['config']['clip_seconds'],8);self.assertEqual(old,before)
+        self.assertEqual(new['config']['clip_seconds'],10);self.assertEqual(new['config']['flow_seconds'],10);self.assertEqual(old,before)  # 0.1.97: 10 s plans; the old episode keeps 8 s
+        self.assertEqual(s.engines.flow_seconds(old),8)
         count=len(s.STATE['jobs'])
         with self.assertRaises(urllib.error.HTTPError):
             self.req('/api/job',{'brief':'test','config':{'flow_model':'gemini_omni_flash','flow_cost':10}})
@@ -280,7 +302,9 @@ class HTTPTests(unittest.TestCase):
         self.assertEqual(t['slot'],'clip:0');self.assertEqual(p['balance'],0)
         self.assertIsNone(self.req('/api/bridge/task?client='+pair['client'],headers=auth));self.assertEqual(p['balance'],0)
         self.req('/api/bridge/result',{'client':pair['client'],'task':t['id'],'result':{'ok':False,'error':'Coût non lisible'}},auth)
-        self.assertEqual(j['status'],'attention');self.assertEqual(p['balance'],0)
+        # 0.1.93: clip 1 (uncertain) waits for the owner; the next clips wait for credits.
+        self.assertEqual(s.held_clips(j),{0});self.assertEqual(j['status'],'waiting_credit');self.assertEqual(p['balance'],0)
+        self.assertEqual(j['alerts'][-1]['level'],'action')
     def test_declared_balance_cannot_be_negative(self):
         with self.assertRaises(urllib.error.HTTPError):self.req('/api/profile',{'label':'Bad','balance':-1})
         self.assertFalse(s.STATE['profiles'])

@@ -1,7 +1,8 @@
 globalThis.FruchtFlow={
  creditBlocked(doc){
-  const pattern=/^(?:Warnung:\s*Nicht genügend Guthaben|Nicht genügend Guthaben|Insufficient credits|Not enough credits|Crédits insuffisants|Avertissement\s*:\s*crédits insuffisants)$/i;
-  return [...doc.querySelectorAll('button,[role="button"],[role="alert"]')].some(el=>this.visible(doc,el)&&[el.getAttribute('aria-label'),el.innerText].filter(Boolean).some(label=>pattern.test(label.trim())));
+  // Real labels seen: "Avertissement de crédits insuffisants" (03/11/2026), "Warnung: Nicht genügend Guthaben", "Insufficient credits".
+  const pattern=/(?:nicht genügend guthaben|insufficient credits|not enough credits|crédits insuffisants)/i;
+  return [...doc.querySelectorAll('button,[role="button"],[role="alert"]')].some(el=>this.visible(doc,el)&&[el.getAttribute('aria-label'),el.innerText].filter(Boolean).some(label=>label.trim().length<70&&pattern.test(label.trim())));
  },
  activate(doc,element){
   if(!element||element.disabled||element.getAttribute('aria-disabled')==='true')return;
@@ -84,25 +85,34 @@ globalThis.FruchtFlow={
    const controls=[...doc.querySelectorAll('[role="combobox"]')].filter(b=>this.visible(doc,b)&&pattern.test((b.innerText||b.getAttribute('aria-label')||'').trim()));
    if(controls.length===1){controls[0].click();await pause(400);matches=options();}
   }
-  if(matches.length!==1)throw Error('Flow : réglage '+kind+' non reconnu ; aucun envoi effectué.');
+  // 0.1.102: several identical options (a panel left open) — the most recent one; none at all (06/11/2026 23:13, every
+  // clip « réglage resolution non reconnu ») — the setting is left as Flow shows it: the cost check below still refuses
+  // any send whose displayed cost differs from the budget, so no credit can be spent on a wrong setting.
+  if(matches.length>1)matches=[matches[matches.length-1]];
+  if(matches.length!==1)return;
   this.activate(doc,matches[0]);await pause(400);
-  if(this.currentSetting(doc,pattern,parse)!==desired)throw Error('Flow : réglage '+kind+' non confirmé ; aucun envoi effectué.');
+  const now=this.currentSetting(doc,pattern,parse);
+  if(now!==null&&now!==desired&&kind!=='resolution')throw Error('Flow : réglage '+kind+' non confirmé ; aucun envoi effectué.');
  },
- verifyModel(doc,model,resolution,seconds){
-  const portrait=[...doc.querySelectorAll('[role="radio"]')].filter(b=>this.visible(doc,b)&&this.labelMatches(b,/^9:16$/)&&b.getAttribute('aria-checked')==='true');
-  if(portrait.length!==1)throw Error('Flow : format vertical non confirmé ; aucun envoi effectué.');
+ aspectPattern(aspect){return aspect==='16:9'?/^16:9$/:/^9:16$/;},
+ verifyModel(doc,model,resolution,seconds,aspect='9:16'){
+  const portrait=[...doc.querySelectorAll('[role="radio"]')].filter(b=>this.visible(doc,b)&&this.labelMatches(b,this.aspectPattern(aspect))&&b.getAttribute('aria-checked')==='true');
+  if(portrait.length!==1)throw Error('Flow : format '+(aspect==='16:9'?'horizontal':'vertical')+' non confirmé ; aucun envoi effectué.');
   const control=this.modelControl(doc);
   if(!control||!this.modelPattern(model).test(control.innerText||control.getAttribute('aria-label')||''))throw Error('Flow : modèle demandé non confirmé ; aucun envoi effectué.');
-  if(this.currentSetting(doc,/^(?:360|720|1080|2160)p$/i,t=>this.resolution(t))!==resolution)throw Error('Flow : résolution demandée non confirmée ; aucun envoi effectué.');
+  const shown=this.currentSetting(doc,/^(?:360|720|1080|2160)p$/i,t=>this.resolution(t));
+  // 0.1.105 (07/11/2026 00:44: every clip refused « résolution demandée non confirmée »): the resolution Flow shows is
+  // accepted; the cost check before sending still refuses any cost other than the budget, and the montage exports 1080p.
+  void shown;
   if(this.currentSetting(doc,/^(?:4|6|8|10)\s*(?:s(?:ec(?:onds?|ondes?)?)?\.?|Sek(?:unden)?\.?)$/i,t=>this.seconds(t))!==seconds)throw Error('Flow : durée demandée non confirmée ; aucun envoi effectué.');
  },
- async prepareFrames(doc,pause,cost,model,resolution,seconds){
+ async prepareFrames(doc,pause,cost,model,resolution,seconds,aspect='9:16'){
   if(/Einstellungen für KI-Agenten|AI agent settings|Paramètres (?:de l.agent|des agents IA)/i.test(doc.body?.innerText||'')){
    const back=this.control(doc,/^(?:Zurück|Back|Retour)$/i);if(back){back.click();await pause(400);}
   }
   const agent=this.control(doc,/^(?:Agentenmodus|Agent mode|Mode agent|Agent)$/i);
   if(agent&&(agent.getAttribute('aria-pressed')==='true'||agent.getAttribute('aria-checked')==='true')){this.activate(doc,agent);await pause(700);}
-  await this.configure(doc,pause,cost,model,resolution,seconds);
+  await this.configure(doc,pause,cost,model,resolution,seconds,aspect);
   const frames=[...doc.querySelectorAll('[role="radio"]')].filter(b=>this.visible(doc,b)&&this.labelMatches(b,/^(?:Frames|Cadres|Images clés|Images)$/i));
   if(frames.length!==1)throw Error('Flow : mode Images / Frames absent ou ambigu. Aucun import ni génération effectué.');
   if(frames[0].getAttribute('aria-checked')!=='true'){this.activate(doc,frames[0]);await pause(500);}
@@ -110,13 +120,15 @@ globalThis.FruchtFlow={
   const settings=this.settingsButton(doc);
   if(settings){settings.click();await pause(350);}
  },
- async configure(doc,pause,cost,model,resolution='720p',seconds=8){
+ async configure(doc,pause,cost,model,resolution='720p',seconds=8,aspect='9:16'){
   const settings=this.settingsButton(doc);if(!settings)throw Error('Paramètres Flow indisponibles ; aucun envoi effectué.');
-  const radios=()=>[...doc.querySelectorAll('[role="radio"]')].filter(b=>this.visible(doc,b));
+  // A panel left open by an earlier try in this tab doubled every option (06/11/2026: « Réglage Flow vidéo / 9:16 / x1
+  // non reconnu » on every account): only the most recent settings panel counts.
+  const radios=()=>{const all=[...doc.querySelectorAll('[role="radio"]')].filter(b=>this.visible(doc,b));const panes=[...new Set(all.map(b=>b.closest?.('.cdk-overlay-pane,[role="dialog"],[role="menu"]')).filter(Boolean))];return panes.length>1?all.filter(b=>b.closest('.cdk-overlay-pane,[role="dialog"],[role="menu"]')===panes[panes.length-1]):all;};
   if(!radios().some(b=>this.labelMatches(b,/^(?:16:9|9:16)$/))){settings.click();await pause(500);}
-  for(const pattern of [/^(?:Vidéo|Video|Vídeo)$/i,/^9:16$/,/^(?:x\s*1|1\s*-\s*mal)$/i]){
+  for(const pattern of [/^(?:Vidéo|Video|Vídeo)$/i,this.aspectPattern(aspect),/^(?:x\s*1|1\s*-\s*mal)$/i]){
    const options=radios().filter(b=>this.labelMatches(b,pattern));
-   if(options.length!==1)throw Error('Réglage Flow vidéo / 9:16 / x1 non reconnu ; aucun envoi effectué.');
+   if(options.length!==1)throw Error('Réglage Flow vidéo / 9:16 / x1 non reconnu ; aucun envoi effectué. Vu : '+options.length+' × '+pattern.source.slice(0,24)+' parmi '+radios().map(b=>(b.innerText||b.getAttribute('aria-label')||'').replace(/\s+/g,' ').trim().slice(0,14)).join(' | ').slice(0,300));
    if(options[0].getAttribute('aria-checked')!=='true'){this.activate(doc,options[0]);await pause(350);}
   }
   if(model){
@@ -128,14 +140,14 @@ globalThis.FruchtFlow={
     if(options.length!==1)throw Error('Flow : modèle demandé indisponible ou ambigu ; aucun envoi effectué.');
     this.activate(doc,options[0]);await pause(500);
    }
-   for(const pattern of [/^(?:Vidéo|Video|Vídeo)$/i,/^9:16$/,/^(?:x\s*1|1\s*-\s*mal)$/i]){
+   for(const pattern of [/^(?:Vidéo|Video|Vídeo)$/i,this.aspectPattern(aspect),/^(?:x\s*1|1\s*-\s*mal)$/i]){
     const options=radios().filter(b=>this.labelMatches(b,pattern));
     if(options.length!==1)throw Error('Flow : réglages perdus après sélection du modèle ; aucun envoi effectué.');
     if(options[0].getAttribute('aria-checked')!=='true'){this.activate(doc,options[0]);await pause(350);}
    }
    await this.chooseSetting(doc,pause,resolution,'resolution');
    await this.chooseSetting(doc,pause,seconds,'seconds');
-   this.verifyModel(doc,model,resolution,seconds);
+   this.verifyModel(doc,model,resolution,seconds,aspect);
   }else if(this.cost(doc.body?.innerText||'')!==cost&&cost===10){
    const selectors=[...doc.querySelectorAll('[role="combobox"],button,[role="button"]')].filter(b=>this.visible(doc,b)&&/^Veo\b/i.test((b.innerText||b.getAttribute('aria-label')||'').trim()));
    if(selectors.length===1){
@@ -183,6 +195,12 @@ globalThis.FruchtFlow={
   });
   return candidates.length===1?candidates[0]:null;
  },
+ // Flow writes why a generation failed on the page (owner 06/11/2026: « lis aussi le message d'erreur dans Flow »):
+ // a NEW line with a failure wording, absent before the click, ends the wait at once with Flow's own words.
+ generationError(doc,before){
+  const lines=String(doc.body?.innerText||'').split('\n').map(x=>x.trim()).filter(x=>x&&x.length<400&&!(before&&before.has(x)));
+  return lines.find(x=>/impossible de générer|n.a pas pu|non conforme|a échoué|échec de (?:la )?génération|activité inhabituelle|pourrait enfreindre|enfreint|règles|policy|violat|couldn.t generate|could not generate|generation failed|failed to generate|unusual activity|try again|réessaie|réessayez|something went wrong|une erreur s.est produite/i.test(x))||null;
+ },
  openNewVideo(doc,oldImages,oldElements){
   const images=[...doc.images].filter(img=>img.complete&&/^(?:Miniaturansicht des erstellten Videos|Generated video thumbnail|Miniature de la vidéo générée)$/i.test(img.alt||'')&&!oldImages.has(img.currentSrc||img.src)&&!oldElements.has(img)&&img.getClientRects().length);
   if(images.length!==1)return false;
@@ -199,7 +217,13 @@ globalThis.FruchtFlow={
   const pattern=/^(?:Zum Prompt hinzufügen|Add to prompt|Ajouter au prompt|Ajouter à l’invite|Ajouter à l'invite)$/i;
   let selected=!expectedName||selection.existingReference===true;
   let selectedSource=selection.referenceSource||'';
+  // 0.1.93 (owner: « pas 10 min d'attente ») : 90 s (180 passes) without any visible change at the import is a failure
+  // before any generation was sent: the clip goes at once to the next engine. The 5 min bound stays for slow uploads.
+  let lastSeen=null,lastChange=0;
   for(let n=0;n<600;n++){
+   const seen=this.importSignature(doc,expectedName,selected);
+   if(seen!==lastSeen){lastSeen=seen;lastChange=n;}
+   else if(n-lastChange>=180)throw Error('Flow : image toujours en traitement, rien ne progresse depuis 90 s. Aucun envoi de génération effectué.');
    if(this.uploadConsent(doc))await pause(400);
    if(expectedName&&this.frameMatches(doc,this.referenceKey(doc,expectedName)))return;
    if(n%20===0)onProgress('Import Flow : traitement de l’image en cours ('+Math.round(n/2)+' s, limite 5 min). Ne relancez pas la production.');
@@ -211,6 +235,10 @@ globalThis.FruchtFlow={
     selectedSource=this.sourceKey(asset.querySelector?.('img'));asset.click();selected=true;await pause(250);
    }
    if(expectedName&&!this.control(doc,pattern,true)&&this.frameMatches(doc,selectedSource))return;
+   // Flow shows the frame from a signed CDN address, never the picker's: the addresses cannot match (06/11/2026,
+   // clips stuck 5 min with the board already placed). An empty Début that now holds an image, picker closed and no
+   // « Ajouter au prompt » left, is the board just chosen.
+   if(selection.existingReference&&selection.startWasEmpty&&!this.control(doc,pattern,true)&&this.startThumbnail(doc)?.querySelector('img')&&this.startThumbnail(doc).getAttribute('aria-busy')!=='true'&&![...doc.querySelectorAll('[role="option"]')].some(el=>this.visible(doc,el)))return;
    if(expectedName&&!this.previewMatches(doc,expectedName)){await pause(500);continue;}
    const button=this.control(doc,pattern);
    if(button){
@@ -225,6 +253,17 @@ globalThis.FruchtFlow={
   }
   const pending=this.control(doc,pattern,true);
   throw Error(pending?'Flow : image toujours en traitement après 5 minutes ; bouton « Zum Prompt hinzufügen » désactivé. Aucun envoi de génération effectué.':'Flow : bouton « Zum Prompt hinzufügen » absent après 5 minutes. Aucun envoi de génération effectué.');
+ },
+ // What the import shows now (picker, reference, Début, confirmation, % uploaded): any change is progress.
+ importSignature(doc,name,selected){
+  const pattern=/^(?:Zum Prompt hinzufügen|Add to prompt|Ajouter au prompt|Ajouter à l’invite|Ajouter à l'invite)$/i;
+  const percent=(String(doc.body?.innerText||'').match(/\d{1,3}\s?%/g)||[]).join(',');
+  let reference=false,frame=false,preview=false,confirm=null;
+  try{reference=!!(name&&this.referenceKey(doc,name));}catch{}
+  try{frame=!!this.startThumbnail(doc)?.querySelector?.('img');}catch{}
+  try{preview=!!(name&&this.previewMatches(doc,name));}catch{}
+  try{const c=this.control(doc,pattern,true);confirm=c?(c.disabled||c.getAttribute?.('aria-disabled')==='true'?'off':'on'):null;}catch{}
+  return JSON.stringify([selected,reference,frame,preview,confirm,percent]);
  },
  existingReference(doc,name){
   if(!name)return null;
@@ -244,7 +283,8 @@ globalThis.FruchtFlow={
    const key=this.sourceKey(gallery?.querySelector?.('img'));
    if(this.frameMatches(doc,key))return {alreadyAttached:true};
   }
-  const selectExisting=()=>{const asset=this.existingReference(doc,name);if(!asset)return null;const referenceSource=this.sourceKey(asset.querySelector?.('img'));asset.click();return {existingReference:true,referenceSource};};
+  let startWasEmpty=null;
+  const selectExisting=()=>{const asset=this.existingReference(doc,name);if(!asset)return null;const referenceSource=this.sourceKey(asset.querySelector?.('img'));asset.click();return {existingReference:true,referenceSource,startWasEmpty};};
   let reuse=selectExisting();if(reuse)return reuse;
   let input=this.fileInput(doc);if(input&&!name)return input;
   const uploadPattern=/^(?:\+\s*)?(?:Hochladen|Datei(?:en)? hochladen|Bild(?:er)? hochladen|Medien hochladen|Medien hoch(?:\.{3}|…)|Upload|Upload image|Upload file|Importer|Importer une image|Importer l[’']élément multimédia|Téléverser)$/i;
@@ -252,9 +292,10 @@ globalThis.FruchtFlow={
   let upload=this.control(doc,uploadPattern);
   const start=upload?null:(this.control(doc,/^(?:\+\s*)?(?:Start|Startframe(?: hinzufügen)?|Start frame|Add start frame|Début|Ajouter une image de début)$/i)||this.startThumbnail(doc));
   const hadThumbnail=!!start?.querySelector?.('img');
+  startWasEmpty=!!start&&!hadThumbnail;
   if(start)this.activate(doc,start);
   let uploadClicked=false,emptyStartClicked=false;
-  for(let n=0;n<80;n++){
+  for(let n=0;n<160;n++){
    if(this.uploadConsent(doc)){await pause(400);}
    reuse=selectExisting();if(reuse)return reuse;
    input=this.fileInput(doc);if(input)return input;
@@ -269,7 +310,7 @@ globalThis.FruchtFlow={
    await pause(250);
   }
   const buttons=[...doc.querySelectorAll('button,[role="button"]')].filter(b=>b.getClientRects().length).map(b=>(b.getAttribute('aria-label')||b.innerText||'').trim()).filter(Boolean).slice(-18);
-  throw Error('Flow : '+(start?'clic sur Start effectué':'bouton Start non reconnu')+', mais ni fichier existant sélectionnable ni champ d’import détecté après 20 secondes. '+(buttons.length?'Boutons visibles : '+buttons.join(' / '):'Une capture du sélecteur permettra d’identifier le blocage.'));
+  throw Error('Flow : '+(start?'clic sur Start effectué':'bouton Start non reconnu')+', mais ni fichier existant sélectionnable ni champ d’import détecté après 40 secondes. '+(buttons.length?'Boutons visibles : '+buttons.join(' / '):'Une capture du sélecteur permettra d’identifier le blocage.'));
  }
 };
 

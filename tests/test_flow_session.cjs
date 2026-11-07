@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs'),path=require('node:path');
 const ctx={URL,chrome:{runtime:{onMessage:{addListener:()=>{}}}}};
-vm.createContext(ctx);vm.runInContext(fs.readFileSync(path.join(__dirname,'../extension/flow-session.js'),'utf8'),ctx);
+vm.createContext(ctx);ctx.FruchtWorkspace={createTab:(c,p)=>c.tabs.create(p),adopt:async(c,t)=>t};vm.runInContext(fs.readFileSync(path.join(__dirname,'../extension/flow-session.js'),'utf8'),ctx);
 const session=ctx.FruchtFlowSession;
 const url='https://flow.google.com/u/3/project/production';
 const target={url,email:'owner@example.com',client:'browser'};
@@ -36,6 +36,10 @@ assert.equal(session.project(url+'/edit/video'),url);
  store.flowProjects={'job:profile':url};
  const cached=await session.prepareProject(task,{id:2},chrome,async()=>{});
  assert.equal(cached.url,url);assert.equal(created.length,1,'Reuse the production project on recovery');
+ const realUpdate=chrome.tabs.update;chrome.tabs.update=async id=>({id,url:session.home(url)});
+ const pendingNavigation=await session.prepareProject(task,{id:2},chrome,async()=>{});
+ assert.equal(pendingNavigation.url,url,'A tab still on its previous URL must report the remembered project');
+ assert.equal(pendingNavigation.id,2);chrome.tabs.update=realUpdate;
  delete store.flowProjects;let newProjectSent=0,requested=false;
  chrome.scripting={executeScript:async()=>[]};
  chrome.tabs.get=async()=>({id:2,url:requested?'https://flow.google.com/u/3/project/new':session.home(url)});
@@ -43,5 +47,9 @@ assert.equal(session.project(url+'/edit/video'),url);
  const fresh=await session.prepareProject(task,{id:2},chrome,async()=>{});
  assert.equal(fresh.url,'https://flow.google.com/u/3/project/new');assert.equal(newProjectSent,1);
  assert.equal(store.flowProjects['job:profile'],fresh.url,'Remember a created project before delivery to the studio');
+ // Google account without Flow access (real page 03/11/2026): stop at once, flagged for the account switch.
+ delete store.flowProjects;newProjectSent=0;chrome.tabs.get=async()=>({id:2,url:'https://flow.google.com/u/1/unavailable'});let pauses=0;
+ await assert.rejects(session.prepareProject(task,{id:2},chrome,async()=>{pauses++;}),e=>e.flowBlocked==='unavailable'&&/pas accès|pas d’accès/.test(e.message));
+ assert.equal(newProjectSent,0,'no project requested');assert.ok(pauses<2,'no 90 s wait');
  console.log('Sessions Flow : identité, comptes distincts, FR/DE/EN, nouveau projet unique, onglet à la demande et reprise sans duplication vérifiés.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

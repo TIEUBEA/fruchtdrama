@@ -37,11 +37,14 @@ globalThis.FruchtFlowSession={
  async prepareProject(task,tab,chrome,pause){
   const target=task.payload.flow_route,key=task.job+':'+task.profile;
   const saved=(await chrome.storage.local.get('flowProjects')).flowProjects||{};
-  if(saved[key]&&this.home(saved[key])===this.home(target.url))return chrome.tabs.update(tab.id,{url:saved[key],active:true});
-  const home=this.home(target.url);await chrome.tabs.update(tab.id,{url:home,active:true});
+  // chrome.tabs.update may still report the previous URL while navigating: return the remembered project.
+  if(saved[key]&&this.home(saved[key])===this.home(target.url))return {...await chrome.tabs.update(tab.id,{url:saved[key]}),url:saved[key]};
+  const home=this.home(target.url);await chrome.tabs.update(tab.id,{url:home});
   let requested=false,lastError='';
   for(let i=0;i<180;i++){
    const current=await chrome.tabs.get(tab.id);
+   // Real page seen 03/11/2026: flow.google.com/u/1/unavailable (« Il semble que vous n'avez pas accès à Flow »).
+   if(/\/unavailable(?:[/?#]|$)/.test(current.url||'')){const e=Error('Ce compte Google n’a pas accès à Flow (page « pas d’accès à Flow ») ; aucun projet créé, aucun crédit dépensé.');e.flowBlocked='unavailable';throw e;}
    const project=this.project(current.url);
    if(requested&&project&&this.home(project)===home){
     saved[key]=project;await chrome.storage.local.set({flowProjects:saved});return current;
@@ -63,11 +66,13 @@ globalThis.FruchtFlowSession={
   const tabs=await chrome.tabs.query({url:['https://labs.google/*','https://flow.google.com/*']});
   let tab=tabs.find(t=>this.project(t.url)===url);
   if(!tab){
-   const saved=(await chrome.storage.local.get('flowTab')).flowTab;
-   // Reuse only the tab previously owned by this connector.
-   const owned=tabs.find(t=>t.id===saved);
-   tab=owned?await chrome.tabs.update(owned.id,{url,active:true}):await chrome.tabs.create({url,active:true});
+   const saved=(await chrome.storage.local.get('flowTab')).flowTab,store=await chrome.storage.local.get(['activeVideoTask','activeVideoTask2','activeVideoTask3','activeVideoTask4']);
+   // Reuse only the tab previously owned by this connector, never one where the other clip lane works (parallel clips).
+   const working=[store.activeVideoTask?.tabId,store.activeVideoTask2?.tabId,store.activeVideoTask3?.tabId,store.activeVideoTask4?.tabId].filter(Number.isInteger);
+   const owned=tabs.find(t=>t.id===saved&&!working.includes(t.id));
+   tab=owned?await chrome.tabs.update(owned.id,{url}):await globalThis.FruchtWorkspace.createTab(chrome,{url,active:false});
   }
+  tab=await globalThis.FruchtWorkspace.adopt(chrome,tab);
   await chrome.storage.local.set({flowTab:tab.id});return tab;
  }
 };

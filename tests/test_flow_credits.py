@@ -7,7 +7,7 @@ class CreditTests(unittest.TestCase):
  def test_no_time_based_credit_reset(self):
   s=state();c.prepare(s,1000);c.prepare(s,1000+86400);self.assertEqual(s['profiles'][0]['balance'],0)
  def test_single_claim_and_identity(self):
-  s=state();self.assertIsNone(c.claim(s,'other',1000));lease=c.claim(s,'client',1001);self.assertIsNotNone(lease);self.assertIsNone(c.claim(s,'client',1002))
+  s=state();self.assertIsNone(c.claim(s,'other',1000));lease=c.claim(s,'client',1001);self.assertIsNotNone(lease);self.assertIn('background',lease);self.assertIsNone(c.claim(s,'client',1002))
   with self.assertRaises(ValueError):c.report(s,'other',{**lease,'result':{}},1003)
  def test_real_balance_unblocks_and_remembers_reset(self):
   s=state();lease=c.claim(s,'client',1000)

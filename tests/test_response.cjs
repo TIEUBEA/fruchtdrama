@@ -40,5 +40,11 @@ const qualityReply={production_id:'job',generation_task_id:'task',quality_review
 assert.ok(reader.parse(JSON.stringify(qualityReply),1,'job','task','quality_review'));
 assert.equal(reader.parse(JSON.stringify(qualityReply),1,'job','other','quality_review'),null);
 assert.equal(reader.parse(JSON.stringify(qualityReply),2,'job','task','quality_review'),null);
+// Board check before the clips (lot 4): read only the verdict bound to this task, one per board.
+const boardReply={production_id:'job',generation_task_id:'task',board_review:{boards:[{index:0,status:'pass',detail:'ok'},{index:1,status:'issue',detail:'personnage en trop'}]}};
+assert.ok(reader.parse('Example {"production_id":"job"} then '+JSON.stringify(boardReply),2,'job','task','board_review'),'board verdict read after the example');
+assert.equal(reader.parse(JSON.stringify(boardReply),2,'job','other','board_review'),null,'other task refused');
+assert.equal(reader.parse(JSON.stringify(boardReply),3,'job','task','board_review'),null,'missing board refused');
+assert.equal(reader.parse(JSON.stringify({...boardReply,board_review:{boards:[{index:0,status:'maybe',detail:'x'},{index:1,status:'pass',detail:'ok'}]}}),2,'job','task','board_review'),null,'unknown status refused');
 assert.equal(reader.parse(JSON.stringify(qualityReply),1,'job','task'),null);
 assert.equal(reader.parse(JSON.stringify({...qualityReply,quality_review:{...qualityReply.quality_review,continuity:{status:'perfect',detail:'Unknown'}}}),1,'job','task','quality_review'),null);

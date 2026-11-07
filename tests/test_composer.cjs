@@ -24,3 +24,37 @@ const challenge=element({title:'reCAPTCHA challenge',getBoundingClientRect:()=>(
 assert.equal(helper.challenge({body:{innerText:''},querySelectorAll:()=>[challenge]}),true);
 assert.equal(helper.challenge({body:{innerText:'Verify you are human'},querySelectorAll:()=>[]}),true);
 console.log('4 contrôles de défi réussis : pied de page, badge passif, véritable widget et demande explicite.');
+// P2-03: content refusal, only in a NEW short assistant reply.
+const reply=t=>element({innerText:t});
+const old=reply("I can't create that image because it violates our content policies.");
+const fresh=reply("I can't create that image because it violates our content policies.");
+const docOf=list=>({querySelectorAll:q=>q==='[data-message-author-role="assistant"]'?list:[]});
+assert.equal(helper.refusal(docOf([old]),new Set([old])),null,'an old refusal from a previous attempt is ignored');
+assert.match(helper.refusal(docOf([old,fresh]),new Set([old])),/can't create/);
+for(const t of ['Je ne peux pas créer cette image, elle enfreint nos règles.','Ich kann dieses Bild nicht erstellen, da es gegen unsere Inhaltsrichtlinien verstößt.','I’m unable to generate that image.'])
+ assert.ok(helper.refusal(docOf([reply(t)]),new Set()),t);
+assert.equal(helper.refusal(docOf([reply('Here is your image of Oma Orange in the kitchen.')]),new Set()),null,'normal reply');
+assert.equal(helper.refusal(docOf([reply('x'.repeat(700)+' content policy')]),new Set()),null,'long reply never read as a refusal');
+// P2-04: renewal delay.
+assert.equal(helper.retryAfter("You've hit the plus plan limit for image generations requests. You can create more images when the limit resets in 22 hours and 16 minutes."),22*3600+16*60);
+assert.equal(helper.retryAfter('Try again. ... Limite atteinte : vous pourrez réessayer, le quota se renouvelle dans 3 heures.'),3*3600);
+assert.equal(helper.retryAfter('Limit erreicht. Bitte versuche es in 45 Minuten erneut.'),45*60,'German word order: delay just before the anchor');
+assert.equal(helper.retryAfter('Limit erreicht. Erneut möglich in 45 Minuten.'),45*60);
+assert.equal(helper.retryAfter('Usage limit reached.'),null);
+// 0.1.90: an announced hour, read in the computer's local time (no more 30 min guessed when ChatGPT says when).
+const at=(h,m)=>{const d=new Date(2026,10,6,h,m,0,0);return d;};
+assert.equal(helper.retryAfter("You've hit the image limit. Please try again after 3:47 PM.",at(15,17)),30*60);
+assert.equal(helper.retryAfter('Limite atteinte. Réessayez après 15 h 47.',at(15,40)),7*60);
+assert.equal(helper.retryAfter('Limit erreicht. Wieder verfügbar um 08:05 Uhr.',at(23,5)),9*3600,'tomorrow morning');
+assert.equal(helper.retryAfter('You can create more images when the limit resets in 12 minutes, after 3:47 PM.',at(15,17)),12*60,'a delay wins over an hour');
+console.log('Refus de contenu (nouvelle réponse seulement, FR/DE/EN) et délai de renouvellement vérifiés.');
+// Real check 02/11/2026: signed-out ChatGPT shows an editor; Cloudflare interstitial "Just a moment...".
+const btn=t=>element({innerText:t});
+const docB=list=>({querySelectorAll:()=>list.map(btn)});
+assert.equal(helper.loggedOut(docB(['Log in Log in','Sign up for free Sign up for free','Open sidebar'])),true,'signed-out ChatGPT (real labels)');
+assert.equal(helper.loggedOut(docB(['Se connecter','S’inscrire gratuitement'])),true);
+assert.equal(helper.loggedOut(docB(['Open sidebar','New chat','Share'])),false,'signed-in page');
+assert.equal(helper.loggedOut(docB(['Log in to Notion'])),false,'unrelated link');
+assert.equal(helper.challenge({title:'Just a moment...',body:{innerText:''},querySelectorAll:()=>[]}),true,'Cloudflare interstitial');
+assert.equal(helper.challenge({title:'ChatGPT',body:{innerText:'Hello'},querySelectorAll:()=>[]}),false);
+console.log('Constats réels : ChatGPT déconnecté et page Cloudflare reconnus.');

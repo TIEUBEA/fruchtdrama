@@ -1,1 +1,1 @@
-importScripts('recovery.js','download-policy.js','flow-session.js','chat-session.js','flow-credits.js','background-worker.js');
+importScripts('workspace.js','studio-start.js','engine-video.js','sites.js','recovery.js','download-policy.js','flow-session.js','chat-session.js','flow-credits.js','flow-scan.js','readiness.js','background-worker.js');
