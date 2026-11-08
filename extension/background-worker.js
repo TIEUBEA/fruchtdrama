@@ -25,7 +25,7 @@ async function ready(id,task,targetUrl){
  for(let i=0;i<180;i++){
   const tab=await chrome.tabs.get(id);let host;
   try{host=new URL(tab.url).hostname;}catch{}
-  if(expected.includes(host)&&(!targetUrl||tab.url===targetUrl)){
+  if(expected.includes(host)&&(!targetUrl||tab.url===targetUrl)&&!(task.kind==='engine_video'&&tab.status==='loading')){
    // Arena (React 19) stays an empty skeleton in a background tab until its content is revealed (06/11/2026).
    if(task.kind==='engine_video'&&globalThis.FruchtReadiness)await FruchtReadiness.reveal(chrome,id);
    // Sites may keep loading trackers after the editor is already usable.
@@ -69,6 +69,45 @@ async function loadAttachments(paths){
  }
  return files;
 }
+async function groupReviewSheets(files){
+ const references=files.filter(f=>!/^quality-scene-\d+\.jpg$/.test(f.name));
+ const scenes=files.filter(f=>/^quality-scene-\d+\.jpg$/.test(f.name));
+ if(scenes.length<2||typeof OffscreenCanvas==='undefined')return {files,grouped:false};
+ const groups=[];
+ for(let start=0;start<scenes.length;start+=3){
+  const batch=scenes.slice(start,start+3),canvas=new OffscreenCanvas(1000,360*batch.length);
+  const ctx=canvas.getContext('2d');
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);
+  for(const [i,file] of batch.entries()){
+   const bytes=Uint8Array.from(atob(file.data),c=>c.charCodeAt(0));
+   const bitmap=await createImageBitmap(new Blob([bytes],{type:file.mime||'image/jpeg'}));
+   const scale=Math.min(1000/bitmap.width,326/bitmap.height);
+   ctx.fillStyle='#111';ctx.font='20px sans-serif';ctx.fillText('Scene index '+Number(file.name.match(/\d+/)[0]),12,360*i+25);
+   ctx.drawImage(bitmap,0,360*i+34,bitmap.width*scale,bitmap.height*scale);
+   bitmap.close();
+  }
+  const blob=await canvas.convertToBlob({type:'image/jpeg',quality:.9});
+  const bytes=new Uint8Array(await blob.arrayBuffer());
+  let binary='';for(let i=0;i<bytes.length;i+=16384)binary+=String.fromCharCode(...bytes.subarray(i,i+16384));
+  groups.push({name:'quality-group-'+(start/3+1)+'.jpg',mime:'image/jpeg',data:btoa(binary)});
+ }
+ return {files:[...references,...groups],grouped:true};
+}
+async function compactCoverReview(file){
+ if(typeof OffscreenCanvas==='undefined')return file;
+ const bytes=Uint8Array.from(atob(file.data),c=>c.charCodeAt(0));
+ const bitmap=await createImageBitmap(new Blob([bytes],{type:file.mime||'image/png'}));
+ try{
+  const scale=Math.min(1,1200/Math.max(bitmap.width,bitmap.height));
+  const canvas=new OffscreenCanvas(Math.round(bitmap.width*scale),Math.round(bitmap.height*scale));
+  canvas.getContext('2d',{alpha:false}).drawImage(bitmap,0,0,canvas.width,canvas.height);
+  const blob=await canvas.convertToBlob({type:'image/jpeg',quality:.9});
+  const compressed=new Uint8Array(await blob.arrayBuffer());
+  let binary='';
+  for(let i=0;i<compressed.length;i+=16384)binary+=String.fromCharCode(...compressed.subarray(i,i+16384));
+  return {name:'miniature-revue.jpg',mime:'image/jpeg',data:btoa(binary)};
+ }finally{bitmap.close();}
+}
 function allowedMedia(url){try{const u=new URL(url);return u.protocol==='https:'&&['chatgpt.com','oaiusercontent.com','googleusercontent.com','googlevideo.com','labs.google','flow.google.com','vidogrid.ai'].some(d=>u.hostname===d||u.hostname.endsWith('.'+d));}catch{return false;}}
 async function receiveMedia(task,result){
  let bytes,mime=result.mime;
@@ -87,10 +126,13 @@ async function receiveMedia(task,result){
 async function finish(active,result){
  // Persist a completed reply before delivery. A temporary local-server outage
  // must never cause another prompt to be sent.
- await saveActive({...active,pendingResult:result});
+ // Binary data can exceed chrome.storage.local's quota after base64 encoding.
+ // The runner retains the completed media in its tab until delivery succeeds.
+ if(!result.base64)await saveActive({...active,pendingResult:result});
  if(result.ok&&(result.url||result.base64))result=await receiveMedia(active.task,result);
  await saveActive({...active,pendingResult:result});
  const ack=await call('/api/bridge/result',{task:active.task.id,client:active.client,result});
+ await protectPendingFlow(active,result);
  if(ack.task_status==='done'&&result.ok&&globalThis.FruchtChats)await FruchtChats.queueClose(active,chrome);
  const data=await chrome.storage.local.get('scenarioTabs');const tabs=data.scenarioTabs||{};
  if(tabs[active.task.job])tabs[active.task.job].pending=false;
@@ -99,6 +141,15 @@ async function finish(active,result){
  await chrome.storage.local.set({status:ack.task_status==='failed'?'À vérifier : '+(ack.error||'Scénario refusé par le studio'):result.ok?'Terminé : '+active.task.slot:'À vérifier : '+result.error});
  // Chat tabs are closed by the chat lane only (never two closings of the same list at once).
  if(globalThis.FruchtChats&&laneOf(active.task)==='chat')await FruchtChats.closeCompleted(chrome);
+}
+async function protectPendingFlow(active,result){
+ if(!active||!['flow_video','flow_collect'].includes(active.task.kind))return;
+ const saved=(await chrome.storage.local.get('flowRecoveryTabs')).flowRecoveryTabs||{};
+ if(result.ok){for(const [id,row] of Object.entries(saved))if(row.job===active.task.job&&row.slot===active.task.slot)delete saved[id];}
+ else if(result.generation_submitted!==false&&!result.flow_failed&&!(active.task.payload||{}).dry_run){
+  saved[active.task.id]={tabId:active.tabId,job:active.task.job,slot:active.task.slot};
+ }
+ await chrome.storage.local.set({flowRecoveryTabs:saved});
 }
 async function clearBinding(active){
  const data=await chrome.storage.local.get('scenarioTabs');const tabs=data.scenarioTabs||{};
@@ -126,6 +177,9 @@ async function checkActive(active){
  }
  if(FruchtRecovery.isScenario(active.task)||['quality_review','board_review','cover_review'].includes(active.task.slot)){
   try{
+   // ChatGPT's streamed React response can remain unrendered in a hidden tab.
+   // Reveal already-received content without focus, reload, or sending another prompt.
+   if(active.task.payload.provider!=='claude'&&globalThis.FruchtReadiness)await FruchtReadiness.reveal(chrome,active.tabId);
    await chrome.scripting.executeScript({target:{tabId:active.tabId},files:['response.js']});
    const probe=await chrome.tabs.sendMessage(active.tabId,{type:'frucht-scenario-probe',job:active.expectedJob||active.task.job,task:active.expectedTask||active.task.id,scenes:active.task.payload.scene_count,response_kind:active.task.payload.response_kind});
    if(probe?.text){
@@ -138,6 +192,9 @@ async function checkActive(active){
      await call('/api/bridge/progress',{task:active.task.id,client:active.client,message:'Lecture du scénario : '+diagnostic});
      active.scenarioDiagnostic=diagnostic;await saveActive(active);
     }
+   }
+   if(!probe?.text&&['quality_review','board_review','cover_review'].includes(active.task.slot)&&Date.now()-active.startedAt>10*60000){
+    await finish(active,{ok:false,error_kind:'timeout',error:'Réponse du contrôle non récupérée après 10 minutes. Le contrôle reste non validé. Vérifiez la conversation existante avant de relancer ; aucun nouveau prompt envoyé.'});return;
    }
   }catch{}
  }
@@ -173,9 +230,15 @@ async function checkActive(active){
   }
   if(FruchtRecovery.mayCollect(active,context,Date.now())){await collectBound(active,context);return;}
   if(await recoverFlowPreparation(active))return;
+  if(await recoverEnginePreparation(active))return;
   throw Error('Suivi interrompu : récupération du clip à vérifier avant toute nouvelle génération.');
  }
- if(status.submitted&&!active.submitted){active.submitted=true;await saveActive(active);}
+ if(status.submitted&&!active.submitted){
+  active.submitted=true;await saveActive(active);
+  if(active.task.kind==='engine_video'){
+   await call('/api/bridge/progress',{task:active.task.id,client:active.client,message:'Connecteur vidéo : génération envoyée, attente du résultat.'}).catch(recordBackgroundError);
+  }
+ }
  if(status.state==='completed'){
   // Flow Omni (06/11/2026) plays the clip without any <video> element: the finished clip is fetched by its own download.
   if(status.result?.flow_download&&active.task.kind==='flow_video'){
@@ -258,21 +321,39 @@ async function begin(task,tab,cfg,key=LANE_KEY[laneOf(task)]){
   if(!identity?.ok)throw Error('Compte Flow différent ou connexion expirée. Reconnectez le compte enregistré ; aucun envoi effectué.');
  }
  const inject=()=>chrome.scripting.executeScript({target:{tabId:tab.id},files:['composer.js','response.js','media.js','flow-controls.js','flow-session.js','research.js','chat-session.js','engine-video.js','claude-model.js','runner.js']});
- await inject();
  let previous;
- try{previous=await chrome.tabs.sendMessage(tab.id,{type:'frucht-status'});}catch{}
+ // A fresh Grok navigation can replace the document just after injection. Establish
+ // the receiver before loading/uploading the image; reconnect only before dispatch.
+ for(let attempt=0;attempt<3;attempt++){
+  await inject();
+  try{previous=await chrome.tabs.sendMessage(tab.id,{type:'frucht-status'});break;}
+  catch(e){
+   if(task.kind!=='engine_video')break;
+   if(!/Could not establish connection|Receiving end does not exist/i.test(e.message)||attempt===2)throw e;
+   await delay(750);await ready(tab.id,task,targetUrl);
+  }
+ }
+ // A lost acknowledgement must never dispatch this task twice.
+ if(previous?.task===task.id&&['running','completed'].includes(previous.state))return;
  if(previous?.state==='running'&&previous.task!==task.id){
   const old=await call('/api/bridge/status?client='+encodeURIComponent(cfg.client)+'&task='+encodeURIComponent(previous.task));
   if(old.task_status==='done'||(['cancelled','failed'].includes(old.task_status)&&previous.submitted!==true)){
    await chrome.tabs.reload(tab.id);await ready(tab.id,task);await inject();
   }else throw Error('Une génération précédente reste à vérifier dans cet onglet ; aucun nouveau prompt envoyé.');
  }
- const attachments=await loadAttachments(task.payload.attachments);
+ let attachments=await loadAttachments(task.payload.attachments);
+ let groupedReview=false;
+ if(task.slot==='quality_review'){
+  const grouped=await groupReviewSheets(attachments);
+  attachments=grouped.files;groupedReview=grouped.grouped;
+ }
+ if(task.slot==='cover_review'&&attachments.length===1)attachments=[await compactCoverReview(attachments[0])];
  // Flow no longer keeps an <input type=file> in the page: « Importer » makes a detached one and clicks it, which
  // opened Chrome's native file dialog that no extension can fill (06/11/2026: imports stuck for 5 min, clips failed).
  // In the page's own world, a click on a file input of this tab receives the board directly: no dialog at all.
  // Same for Vidogrid's « Select Files » (0.1.93).
- if(['flow_video','engine_video'].includes(task.kind)&&attachments?.length)await chrome.scripting.executeScript({target:{tabId:tab.id},world:'MAIN',args:[attachments.map(a=>({name:a.name,mime:a.mime,data:a.data}))],func:files=>{
+ let fileClickReady=false;
+ if(['flow_video','engine_video'].includes(task.kind)&&attachments?.length)fileClickReady=await chrome.scripting.executeScript({target:{tabId:tab.id},world:'MAIN',args:[attachments.map(a=>({name:a.name,mime:a.mime,data:a.data}))],func:files=>{
   window.__fruchtFiles=files;
   if(window.__fruchtClickPatched)return;window.__fruchtClickPatched=true;
   const original=HTMLInputElement.prototype.click;
@@ -283,15 +364,36 @@ async function begin(task,tab,cfg,key=LANE_KEY[laneOf(task)]){
    this.files=dt.files;window.__fruchtFiles=null;
    this.dispatchEvent(new Event('input',{bubbles:true}));this.dispatchEvent(new Event('change',{bubbles:true}));
   };
- }}).catch(()=>{});
- const active={task,key,tabId:tab.id,windowId:tab.windowId,client:cfg.client,startedAt:Date.now(),recoveryAttempts:0,submissionIntent:false,expectedJob:task.kind==='chat_text'?task.job:undefined,expectedTask:task.kind==='chat_text'?task.id:undefined};
+ }}).then(()=>true,()=>false);
+ const saved=(await chrome.storage.local.get(key))[key];
+ const same=saved?.task.id===task.id;
+ if(same&&(saved.submissionIntent===true||saved.submitted))throw Error('Envoi déjà commencé : récupération du clip à vérifier avant toute nouvelle génération.');
+ const active={task,key,tabId:tab.id,windowId:tab.windowId,client:cfg.client,startedAt:same?saved.startedAt:Date.now(),recoveryAttempts:same?saved.recoveryAttempts||0:0,submissionIntent:false,expectedJob:task.kind==='chat_text'?task.job:undefined,expectedTask:task.kind==='chat_text'?task.id:undefined};
  const data=await chrome.storage.local.get('scenarioTabs');const tabs=data.scenarioTabs||{};
  if(FruchtRecovery.isScenario(task)){tabs[task.job]={...active,pending:true};await chrome.storage.local.set({scenarioTabs:tabs});}
  await saveActive(active,{status:'En cours : '+task.slot});
  const executionTask=executionTaskFor(task);
+ if(groupedReview)executionTask.payload.prompt+='\nThe scene sheets are grouped into a few images after the character references. Read each row by its printed Scene index and return one verdict per scene index, including every index.';
+ if(task.kind==='engine_video'&&fileClickReady)executionTask.payload={...executionTask.payload,file_click_ready:true};
  const response=await chrome.tabs.sendMessage(tab.id,{type:'frucht-run',task:executionTask,attachments});
  if(!response?.accepted)throw Error(response?.error||'Le connecteur de l’onglet ne répond pas.');
+ if(task.kind==='engine_video'){
+  await call('/api/bridge/progress',{task:task.id,client:cfg.client,message:'Connecteur vidéo : onglet prêt, préparation de la planche en cours.'}).catch(recordBackgroundError);
+ }
  // The content script now works independently. No multi-minute message channel.
+}
+async function recoverEnginePreparation(active){
+ // The runner awaits persisted submission-intent before clicking Generate. Only
+ // an explicit false permits reconnecting the preparation on the SAME tab/task.
+ if(active.task.kind!=='engine_video'||active.submissionIntent!==false||active.submitted||(active.recoveryAttempts||0)>=2||Date.now()-active.startedAt>60000)return false;
+ const latest=await loadActive(active);
+ if(!latest||latest.task.id!==active.task.id||latest.submissionIntent!==false||latest.submitted)return false;
+ const tab=await chrome.tabs.get(active.tabId);
+ if(!FruchtEngines.owns(active.task.payload.engine,tab.url||''))return false;
+ const cfg=await chrome.storage.local.get(null);
+ await saveActive({...latest,recoveryAttempts:(latest.recoveryAttempts||0)+1});
+ await begin(active.task,tab,cfg,keyOf(active));
+ return true;
 }
 async function prepareNewFlowProject(task,tab,cfg,key=LANE_KEY.video){
  await saveActive({task,key,tabId:tab.id,windowId:tab.windowId,client:cfg.client,startedAt:Date.now(),submissionIntent:false,preparingProject:true},{status:'Ouverture automatique : nouveau projet Flow…'});
@@ -303,20 +405,42 @@ async function prepareNewFlowProject(task,tab,cfg,key=LANE_KEY.video){
 }
 // « Se connecter » (Mes comptes): the site opens in a tab of the FruchtDrama window (an open one is reused),
 // then the extension watches it. As soon as the owner is signed in, the card turns green, the tab it opened
-// closes and the studio is back on screen. Nothing is typed: the owner signs in by hand.
-async function openLogin(site){
+// The owner signs in in Chrome. An existing session can be registered immediately.
+async function openLogin(site,client){
  const hosts=FruchtSites.list[site].hosts,tabs=await chrome.tabs.query({});
- let tab=tabs.find(t=>{try{return hosts.includes(new URL(t.url||t.pendingUrl).hostname);}catch{return false;}}),opened=false;
- if(tab){tab=await FruchtWorkspace.adopt(chrome,tab);await chrome.tabs.update(tab.id,{active:true});}
- else{tab=await FruchtWorkspace.createTab(chrome,{url:FruchtSites.list[site].url,active:true});opened=true;}
+ let tab=tabs.find(t=>{try{return hosts.includes(new URL(t.url||t.pendingUrl).hostname);}catch{return false;}}),baseline=null;
+ if(tab){
+  tab=await FruchtWorkspace.adopt(chrome,tab);
+  try{baseline=await loginState(tab.id,site);}catch{}
+  await chrome.tabs.update(tab.id,{active:true});
+ }else{tab=await FruchtWorkspace.createTab(chrome,{url:FruchtSites.list[site].url,active:true});}
  await chrome.windows.update(tab.windowId,{focused:true}).catch(()=>{});
  const {pendingLogins={}}=await chrome.storage.local.get('pendingLogins');
- pendingLogins[site]={tabId:tab.id,opened,at:Date.now()};await chrome.storage.local.set({pendingLogins});
+ const connected=!!baseline?.connected&&!baseline.challenge;
+ pendingLogins[site]={tabId:tab.id,existing:connected,email:baseline?.email||null,at:Date.now()};
+ await chrome.storage.local.set({pendingLogins});
+ if(connected)await call('/api/bridge/sites',{client,sites:{[site]:baseline},partial:true});
+ return connected;
+}
+async function loginState(tabId,site){
+ await chrome.scripting.executeScript({target:{tabId},files:['composer.js','sites.js']});
+ const [r]=await chrome.scripting.executeScript({target:{tabId},func:n=>globalThis.FruchtSites.probe(n,document),args:[site]});
+ return r?.result;
 }
 // « Ajouter un compte » (no account left with credits): Google's own add-account page opens in the window.
 // The owner signs in by hand; once Google sends the tab on to Flow, the accounts are detected again by themselves.
 const ADD_GOOGLE='https://accounts.google.com/AddSession?continue='+encodeURIComponent('https://flow.google.com/');
 async function addGoogle(){
+ const {pendingGoogle}=await chrome.storage.local.get('pendingGoogle');
+ if(pendingGoogle&&Date.now()-pendingGoogle.at<30*60*1000){
+  let tab;
+  try{tab=await chrome.tabs.get(pendingGoogle.tabId);}catch{}
+  if(tab){
+   await chrome.tabs.update(tab.id,{active:true});
+   await chrome.windows.update(tab.windowId,{focused:true}).catch(()=>{});
+   return;
+  }
+ }
  const tab=await FruchtWorkspace.createTab(chrome,{url:ADD_GOOGLE,active:true});
  await chrome.windows.update(tab.windowId,{focused:true}).catch(()=>{});
  await chrome.storage.local.set({pendingGoogle:{tabId:tab.id,at:Date.now()}});
@@ -329,9 +453,13 @@ async function watchGoogle(onlyTab){
  let host='';try{host=new URL(tab.url||'').hostname;}catch{}
  if(!['flow.google.com','labs.google'].includes(host))return;  // still on Google's sign-in pages
  await chrome.storage.local.remove('pendingGoogle');
- await FruchtWorkspace.close(chrome,[tab.id]);
- let text;try{const accounts=await FruchtFlowScan.scan(chrome,FruchtWorkspace);const b=await call('/api/bridge/flow-scan',{client,accounts});text='Compte ajouté. '+b.message;}catch(e){text='Compte ajouté ; détection interrompue : '+e.message;}
- await call('/api/bridge/notice',{client,action:'scan_flow',ok:!/interrompue/.test(text),text});
+ let text,ok=false;
+ try{
+  const accounts=await FruchtFlowScan.scan(chrome,FruchtWorkspace);
+  const result=await call('/api/bridge/flow-scan',{client,accounts});
+  text=result.message;ok=result.detected??accounts.length>0;
+ }catch(e){text='Détection interrompue : '+e.message;}
+ await call('/api/bridge/notice',{client,action:'scan_flow',ok,text});
 }
 async function watchLogins(onlyTab){
  const {pendingLogins={},client}=await chrome.storage.local.get(['pendingLogins','client']);
@@ -344,16 +472,16 @@ async function watchLogins(onlyTab){
   if(!tab){delete pendingLogins[site];changed=true;continue;}  // closed by the owner: the next Revérifier tells
   let state;
   try{
-   await chrome.scripting.executeScript({target:{tabId:tab.id},files:['composer.js','sites.js']});
-   const [r]=await chrome.scripting.executeScript({target:{tabId:tab.id},func:n=>globalThis.FruchtSites.probe(n,document),args:[site]});
-   state=r?.result;
+   state=await loginState(tab.id,site);
   }catch{continue;}  // page still loading or on the provider's sign-in domain
-  if(!state?.connected)continue;
-  delete pendingLogins[site];changed=true;
+  if(!state?.connected||state.challenge){
+   if(state&&!state.challenge&&w.existing){w.existing=false;changed=true;}
+   continue;
+  }
+  if(w.existing&&(!state.email||state.email===w.email))continue;
   await call('/api/bridge/sites',{client,sites:{[site]:state},partial:true});
-  await call('/api/bridge/notice',{client,action:'login',ok:true,text:FruchtSites.label(site)+' connecté'+(state.email?' : '+state.email:'')+'.'}).catch(()=>{});
-  if(w.opened)await FruchtWorkspace.close(chrome,[tab.id]);
-  else{const studio=await FruchtWorkspace.studioTab(chrome,tab.windowId);if(studio)await chrome.tabs.update(studio.id,{active:true});}
+  delete pendingLogins[site];changed=true;
+  await call('/api/bridge/notice',{client,action:'login',ok:true,text:FruchtSites.label(site)+' connecté.'}).catch(()=>{});
  }
  if(changed)await chrome.storage.local.set({pendingLogins});
 }
@@ -363,8 +491,17 @@ async function handleRequests(cfg,light=false){
  // light: a task is running; only the owner's clicks that show a tab (Se connecter, Régler maintenant, Ajouter) are done now.
  const requests=await call('/api/bridge/requests?client='+encodeURIComponent(cfg.client)+(light?'&light=1':''));
  for(const r of requests||[]){
-  if(r.type==='open'&&FruchtSites.list[r.site])await openLogin(r.site);
-  if(r.type==='add_google')await addGoogle();
+  if(r.type==='open'&&FruchtSites.list[r.site]){
+   const connected=await openLogin(r.site,cfg.client);
+   const label=FruchtSites.label(r.site);
+   await call('/api/bridge/notice',{client:cfg.client,action:connected?'login':'open',ok:true,text:connected
+    ?label+' est déjà connecté. La session est disponible dans Mes comptes.'
+    :'Connecte-toi à '+label+' dans Chrome. FruchtDrama détectera la connexion automatiquement.'});
+  }
+  if(r.type==='add_google'){
+   await addGoogle();
+   await call('/api/bridge/notice',{client:cfg.client,action:'add_google',ok:true,text:'Google ouvert dans Chrome. Connecte-toi, puis laisse Flow s’ouvrir pour que le studio détecte le compte.'});
+  }
   if(r.type==='check'){const sites=await FruchtSites.check(chrome,FruchtWorkspace);await call('/api/bridge/sites',{client:cfg.client,sites});}
   // « Préparer mes comptes »: read only, background tabs; a check asked while the window is closed waits for it.
   if(r.type==='readiness'&&globalThis.FruchtReadiness){
@@ -376,10 +513,15 @@ async function handleRequests(cfg,light=false){
   // Former gateway-tab buttons, now clicked in the studio's Mes comptes page.
   if(r.type==='scan_flow'){
    if(r.background&&!await FruchtWorkspace.isOpen(chrome))continue;
-   let text;try{const accounts=await FruchtFlowScan.scan(chrome,FruchtWorkspace);const b=await call('/api/bridge/flow-scan',{client:cfg.client,accounts});text=b.message;}catch(e){text='Détection interrompue : '+e.message;}
-   await call('/api/bridge/notice',{client:cfg.client,action:'scan_flow',ok:!/interrompue/.test(text),text});
+   let text,ok=false;
+   try{
+    const accounts=await FruchtFlowScan.scan(chrome,FruchtWorkspace);
+    const result=await call('/api/bridge/flow-scan',{client:cfg.client,accounts,profile:r.profile});
+    text=result.message;ok=result.detected??accounts.length>0;
+   }catch(e){text='Détection interrompue : '+e.message;}
+   await call('/api/bridge/notice',{client:cfg.client,action:'scan_flow',ok,text});
    // « Vérifier » in Mes comptes › Google Flow: the accounts found are then each checked (next pass).
-   if(r.then_check)await call('/api/bridge/readiness-request',{client:cfg.client,background:false});
+   if(r.then_check&&(!r.profile||ok))await call('/api/bridge/readiness-request',{client:cfg.client,background:false,flow_only:!r.check_all,profile:r.profile});
   }
   if(['register_flow','tidy','recover'].includes(r.type)){
    let result;try{result=r.type==='register_flow'?await registerFlow(true):r.type==='tidy'?await tidyChats(true):await recover(r.job,true);}catch(e){result={ok:false,error:e.message};}
@@ -449,7 +591,7 @@ async function ensureFlowSlot(task,tab,cfg){
   await chrome.tabs.update(tab.id,{url:'https://flow.google.com/u/'+n+'/'});
   seen=await readFlowIdentity(tab.id);
   if(seen.email!==want)continue;
-  const url=target.url.replace(/\/u\/\d+\//,'/u/'+n+'/');
+  const parsed=new URL(target.url);parsed.pathname=parsed.pathname.replace(/^(?:\/u\/\d+)?\/project\//,'/u/'+n+'/project/');const url=parsed.href;
   await call('/api/bridge/flow-slot',{task:task.id,client:cfg.client,slot:n});
   target.url=url;await chrome.tabs.update(tab.id,{url});return tab;
  }
@@ -526,21 +668,26 @@ async function runLane(lane){
   // The task is followed under this lane's key, whatever its kind (an older studio may ignore lane).
   // A tab closed under the task before anything was sent (real case 06/11/2026 13:10 « No tab with id ») : open a
   // fresh one and try once more, instead of stopping the episode. Never after a submission.
+  let preparedTab;
   for(let attempt=0;;attempt++){
-   try{await begin(claimed,await tabForTask(claimed,cfg,key),cfg,key);break;}
+   try{preparedTab=preparedTab||await tabForTask(claimed,cfg,key);await begin(claimed,preparedTab,cfg,key);break;}
    catch(e){
     const saved=(await chrome.storage.local.get(key))[key];
+    if(attempt<3&&globalThis.FruchtReadiness?.tabBusy(e)&&!saved?.submitted&&saved?.submissionIntent!==true){preparedTab=null;await delay(750*(attempt+1));continue;}
+    if(claimed.kind==='engine_video'&&attempt<2&&/Could not establish connection|Receiving end does not exist/i.test(e.message)&&!saved?.submitted&&saved?.submissionIntent!==true){await delay(750);continue;}
     if(attempt>0||!/No tab with id|Tab .* not found|No tab with given id/i.test(e.message)||saved?.submitted||saved?.submissionIntent===true)throw e;
-    await chrome.storage.local.remove(['flowTab']);
+    preparedTab=null;await chrome.storage.local.remove(['flowTab']);
    }
   }
  }catch(e){
-  const active=cfg?.[key]||(await chrome.storage.local.get(key))[key];
+  const active=(await chrome.storage.local.get(key))[key]||cfg?.[key];
   const task=claimed||active?.task;
+  if(active&&task?.kind==='flow_video')await protectPendingFlow(active,{ok:false,generation_submitted:active.submissionIntent===false&&!active.submitted?false:undefined});
   if(/fetch|network|Failed to fetch|Studio inaccessible/i.test(e.message)&&active){
    await chrome.storage.local.set({status:'Studio momentanément inaccessible. Réponse conservée, nouvel essai automatique.'});return;
   }
-  if(task&&cfg?.client)try{await call('/api/bridge/result',{task:task.id,client:cfg.client,result:{ok:false,error:e.message,...(e.flowBlocked?{flow_blocked:e.flowBlocked}:{}),...(e.notReady?{not_ready:e.notReady}:{}),...(task.kind==='flow_video'&&((claimed&&!active)||(active?.submissionIntent===false&&!active.submitted))?{generation_submitted:false}:{})}});}catch{}
+  const beforeSend=(claimed&&!active)||(active?.task.id===task?.id&&active?.submissionIntent===false&&!active.submitted);
+  if(task&&cfg?.client)try{await call('/api/bridge/result',{task:task.id,client:cfg.client,result:{ok:false,error:e.message,...(e.flowBlocked?{flow_blocked:e.flowBlocked}:{}),...(e.notReady?{not_ready:e.notReady}:{}),...(beforeSend?{generation_submitted:false}:{})}});}catch{}
   if(active){const data=await chrome.storage.local.get('scenarioTabs');const tabs=data.scenarioTabs||{};if(tabs[active.task.job])tabs[active.task.job].pending=false;await chrome.storage.local.set({scenarioTabs:tabs});}
   await chrome.storage.local.remove(key);
   await chrome.storage.local.set({status:'À vérifier : '+e.message});
@@ -566,6 +713,9 @@ async function recoverExistingMedia(cfg){
 }
 async function recoverExistingVideo(cfg){
  const candidates=await call('/api/bridge/recoverable-videos?client='+encodeURIComponent(cfg.client));
+ const protectedTabs=(await chrome.storage.local.get('flowRecoveryTabs')).flowRecoveryTabs||{};
+ for(const id of Object.keys(protectedTabs))if(!candidates.some(t=>t.id===id))delete protectedTabs[id];
+ await chrome.storage.local.set({flowRecoveryTabs:protectedTabs});
  if(!candidates.length)return false;
  const tabs=await chrome.tabs.query({url:['https://flow.google.com/*','https://labs.google/*']});
  for(const old of candidates)for(const tab of tabs){
@@ -618,7 +768,12 @@ async function recover(job,owned=false){
  try{
   cfg=await chrome.storage.local.get(null);if(!cfg.client||!cfg.token)throw Error('Appairez d’abord l’extension.');
   if(cfg.activeTask)throw Error('Une tâche est déjà suivie. Attendez sa fin avant de récupérer une autre réponse.');
-  const tab=await FruchtWorkspace.latest(chrome,/^https:\/\/(chatgpt\.com|claude\.ai)\//);
+  // Prefer the tab bound to this production, never an unrelated newer conversation.
+  const bound=cfg.scenarioTabs?.[job];let tab;
+  if(bound?.client===cfg.client&&Number.isInteger(bound.tabId)){
+   try{const candidate=await chrome.tabs.get(bound.tabId);if(/^https:\/\/(chatgpt\.com|claude\.ai)\//.test(candidate.url||''))tab=candidate;}catch{}
+  }
+  if(!tab)tab=await FruchtWorkspace.latest(chrome,/^https:\/\/(chatgpt\.com|claude\.ai)\//);
   if(!tab)throw Error('Ouvrez d’abord, dans la fenêtre FruchtDrama, l’onglet qui contient la réponse terminée.');
   task=await call('/api/bridge/recover',{client:cfg.client,job});
   await begin(task,tab,cfg);return {ok:true,message:'Récupération lancée dans cet onglet. Aucun nouveau prompt envoyé.'};

@@ -3,27 +3,28 @@ const assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('nod
 const code=fs.readFileSync(path.join(__dirname,'../extension/engine-video.js'),'utf8');
 const el=(props={})=>({hidden:false,disabled:false,clicks:0,attrs:{},innerText:'',textContent:'',getAttribute(k){return this.attrs[k]??null;},
  getBoundingClientRect:()=>({width:60,height:30}),click(){this.clicks++;this.onclick?.();},dispatchEvent(){},...props});
-function page({engine='grok',loggedOut=false,account=null,videoAfter=3,after='',before='',pressed=false,buy=false,spent=false,newVideo=null,menu=false}={}){
+function page({engine='grok',loggedOut=false,account=null,videoAfter=3,after='',before='',pressed=false,buy=false,spent=false,newVideo=null,menu=false,removeLabel='Remove image',uploadOnly=false,pasteOnly=false}={}){
  const state={polls:0,sent:false,intent:0,filled:null,files:null};
  const mode=el({innerText:engine==='grok'?'Video':'Vidéo',attrs:{'aria-pressed':pressed?'true':'false',...(menu?{'aria-haspopup':'dialog'}:{})}});
  // Real labels (06/11/2026): Grok « Submit » (aria-label), Arena « Send message » (aria-label).
  const send=el({attrs:{'aria-label':engine==='grok'?'Submit':'Send message'},onclick(){state.sent=true;}});
  const gauge=el({attrs:{'aria-label':'100% credits used','data-credit-notice':'true'}});
- const remove=el({attrs:{'aria-label':'Remove image'}});
+ const remove=el({attrs:{'aria-label':removeLabel}});
  const upgrade=el({innerText:'Upgrade to SuperGrok'});
  const login=el({innerText:'Sign in'});
- const editor=el({tagName:'TEXTAREA'});
+ const editor=el({tagName:'TEXTAREA',dispatchEvent(event){if(pasteOnly&&event.type==='paste')state.files=event.clipboardData.files;}});
  const input=el({accept:'image/*',dispatchEvent(){state.files=this.files;}});
+ const upload=el({innerText:'Upload image',textContent:'Upload image',onclick(){state.files=['scene0.jpg'];}});
  const avatar=el({attrs:{alt:account||''}});
  const oldVideo={src:'https://cdn/old.mp4',currentSrc:'https://cdn/old.mp4',readyState:4,duration:6};
  const doc={
   get body(){return {innerText:before+(state.sent&&state.polls>=1?after:'')};},
   querySelectorAll(q){
-   if(q.startsWith('button'))return [...(loggedOut?[login]:[]),...(engine==='grok'&&state.files?[remove]:[]),mode,...(buy?[upgrade]:[]),...(spent&&state.filled?[gauge]:[]),send];
+   if(q.startsWith('button'))return [...(loggedOut?[login]:[]),...(engine==='grok'&&state.files?[remove]:[]),...(uploadOnly?[upload]:[]),mode,...(buy?[upgrade]:[]),...(spent&&state.filled?[gauge]:[]),send];
    if(q.startsWith('[data-credit-notice]'))return spent&&state.filled?[gauge]:[];
    if(q.startsWith('textarea'))return loggedOut?[]:[editor];
    if(q.startsWith('[contenteditable'))return [];
-   if(q==='input[type="file"]')return [input];
+   if(q==='input[type="file"]')return uploadOnly||pasteOnly?[]:[input];
    if(q==='video'){state.polls++;return state.sent&&state.polls>=videoAfter?[oldVideo,newVideo||{src:'blob:new',currentSrc:'blob:new',readyState:4,duration:6}]:[oldVideo];}
    if(q.includes('img[alt*="@"]'))return account?[avatar]:[];
    return [];
@@ -33,6 +34,7 @@ function page({engine='grok',loggedOut=false,account=null,videoAfter=3,after='',
  let t=0;
  const h={document:doc,sleep:async()=>{t+=1000;},now:()=>t,blocked(){},fail,atob:x=>x,
   fill:(e,v)=>{state.filled=v;},DataTransfer:class{constructor(){this.items={add:f=>this.files.push(f)};this.files=[];}},File:class{constructor(b,n){this.name=n;}},Event:class{},
+  ClipboardEvent:class{constructor(type,options){this.type=type;Object.assign(this,options);}},
   intent:async()=>{state.intent++;return true;},submitted:()=>{},videoPayload:async v=>({ok:true,src:v.src}),retryAfter:()=>7200};
  return {E:ctx.FruchtEngines,h,state,mode,send,upgrade};
 }
@@ -50,6 +52,15 @@ const img=[{name:'scene0.jpg',data:'abc',mime:'image/jpeg'}];
   assert.equal(dry.dry_run,true);assert.equal(dry.generation_submitted,false);assert.equal(d.send.clicks,0);assert.equal(d.state.intent,0);
  }
  // Arena: « Video ▾ » is the modality menu (aria-haspopup): never clicked, it only opens a list.
+ const german=page({removeLabel:'Bild entfernen'});
+ await german.E.run(task('grok'),img,german.h);
+ assert.equal(german.send.clicks,1,'localized attachment confirmation permits one generation');
+ const button=page({uploadOnly:true});
+ const dry=await button.E.run(task('grok',{file_click_ready:true,dry_run:true}),img,button.h);
+ assert.equal(dry.dry_run,true);assert.equal(button.send.clicks,0);
+ const paste=page({pasteOnly:true});
+ const pasteDry=await paste.E.run(task('grok',{dry_run:true}),img,paste.h);
+ assert.equal(pasteDry.dry_run,true);assert.equal(paste.state.files.length,1);assert.equal(paste.send.clicks,0);
  const arenaMenu=page({engine:'arena',menu:true});await arenaMenu.E.run(task('arena'),img,arenaMenu.h);assert.equal(arenaMenu.mode.clicks,0,'menu trigger untouched');assert.equal(arenaMenu.send.clicks,1);
  // Grok at its weekly limit: the composer shows « 100% credits used » once the prompt is in: nothing is sent.
  const spent=page({spent:true});const e7=await spent.E.run(task('grok'),img,spent.h).then(()=>null,e=>e);

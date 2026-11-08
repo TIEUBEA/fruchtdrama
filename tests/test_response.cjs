@@ -1,6 +1,9 @@
 const assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs'),path=require('node:path');
 const context={};vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../extension/response.js'),'utf8'),context);
 const reader=context.FruchtResponse;
+const adaptation={production_id:'job',generation_task_id:'task',scene_rewrite:{image_prompt:'A door and a desk',video_prompt:'Walk to the desk'}};
+assert.ok(reader.parse(JSON.stringify(adaptation),undefined,'job','task','flow_rewrite'));
+assert.equal(reader.parse(JSON.stringify(adaptation),undefined,'job','other','flow_rewrite'),null);
 const script={title:'Eine Reise',characters:[{id:'oma'}],scenes:Array.from({length:4},()=>({dialogue:[{speaker:'oma',text:'Wir fahren ans Meer.'}]}))};
 assert.equal(reader.parse(JSON.stringify(script),4).scenes.length,4);
 assert.equal(reader.parse(JSON.stringify(script).slice(0,-1),4),null,'An incomplete response is never accepted');

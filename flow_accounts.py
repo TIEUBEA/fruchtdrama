@@ -40,6 +40,12 @@ def account_home(value):
     return urllib.parse.urlunsplit(('https',u.hostname,prefix+'/', '', ''))
 
 
+def at_slot(value,slot):
+    u=urllib.parse.urlsplit(project_url(value))
+    path=re.sub(r'^(?:/u/\d+)?/project/',f'/u/{int(slot)}/project/',u.path)
+    return urllib.parse.urlunsplit(('https',u.hostname,path,'',''))
+
+
 def seen_ago(client, now):
     try:return now-dt.datetime.fromisoformat(client.get('seen') or '').timestamp()
     except (TypeError,ValueError):return None
@@ -61,9 +67,11 @@ def follow_active_browser(state, now=None, quiet=180):
     active = [c for c in clients.values() if c.get('auto') and not c.get('disabled') and c.get('role') in ('all', 'flow')]
     if len(active) > 1:
         active = [c for c in active if (seen_ago(c, now) if seen_ago(c, now) is not None else 1e9) < quiet]
-    if len(active) != 1:
+    if len(active) != 1 or active[0].get('role') != 'all':
         return 0
     def gone(bound):
+        if bound and bound.get('role') == 'flow':
+            return False
         if not bound or bound.get('disabled'):return True
         ago=seen_ago(bound, now)
         return bool(bound.get('auto')) and bound is not active[0] and (ago is None or ago >= quiet)
@@ -78,7 +86,18 @@ def follow_active_browser(state, now=None, quiet=180):
 def eligible(state, p):
     """Accounts detected in the window carry their slot; older registrations stay usable only if routed."""
     client = state.get('clients', {}).get(p.get('flow_client'), {})
-    return bool(route(p)) and client.get('role') in ('all', 'flow') and not client.get('disabled')
+    return bool(route(p)) and client.get('role') in ('all', 'flow') and not client.get('disabled') and not offline_route(state,p)
+
+
+def offline_route(state,p,now=None):
+    """Old silent pairings must not occupy parallel slots when a working window is available.
+    Never transfer another Chrome's accounts without detecting their identity there."""
+    now=time.time() if now is None else now
+    clients=state.get('clients',{});bound=clients.get(p.get('flow_client'),{})
+    ago=seen_ago(bound,now)
+    if not bound.get('seen') or (not bound.get('disabled') and ago is not None and ago<180):return False
+    return any(c is not bound and not c.get('disabled') and c.get('role') in ('all','flow')
+        and seen_ago(c,now) is not None and seen_ago(c,now)<180 for c in clients.values())
 
 
 def usable(p):

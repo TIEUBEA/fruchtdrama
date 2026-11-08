@@ -31,8 +31,20 @@ class FilonTests(unittest.TestCase):
         self.assertIsNone(s.filon_tick(), 'off by default')
         s.STATE['settings']['filon_auto'] = True
         self.assertIsNotNone(s.filon_tick()); self.assertIsNone(s.filon_tick(), 'not twice')
+        self.assertNotIn('filon_refreshed', s.STATE['settings'])
         s.STATE['jobs'][-1]['status'] = 'done'
         self.assertIsNone(s.filon_tick(time.time() + 3600)); self.assertIsNotNone(s.filon_tick(time.time() + 2 * 3600 + 5))
+
+    def test_empty_refresh_reports_failure_and_preserves_previous_relevé(self):
+        first = s.filon_refresh()
+        s.apply_research(first, ROWS)
+        previous_success = s.STATE['settings']['filon_refreshed']
+        second = s.filon_refresh()
+        s.apply_research(second, [])
+        self.assertEqual(second['status'], 'attention')
+        self.assertIn('aucun lien vidéo exploitable', second['events'][-1]['text'])
+        self.assertEqual(s.STATE['settings']['filon_refreshed'], previous_success)
+        self.assertEqual(len(first['candidates']), 5)
 
     def test_http(self):
         http = s.http.server.ThreadingHTTPServer(('127.0.0.1', 0), s.Handler); s.PORT = http.server_port; base = f'http://127.0.0.1:{s.PORT}'

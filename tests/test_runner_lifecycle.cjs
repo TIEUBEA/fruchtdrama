@@ -12,6 +12,13 @@ async function check(mode){
  await new Promise(resolve=>setImmediate(resolve));
  assert.equal(ctx.fruchtRunState.result.ok,true,'A notification failure must not change a completed result');
  assert.equal(ctx.fruchtRunState.result.text,'saved');
+ let repeats=0;ctx.countRepeat=()=>repeats++;
+ vm.runInContext('run=async()=>{countRepeat();return {ok:true};}',ctx);
+ let ack;listener({type:'frucht-run',task:{id:'task',kind:'chat_text'}},null,x=>ack=x);
+ assert.equal(ack.already_started,true);assert.equal(repeats,0,'A completed task is never regenerated after reconnection');
+ ctx.fruchtRunState={state:'running',task:'task'};
+ listener({type:'frucht-run',task:{id:'task',kind:'chat_text'}},null,x=>ack=x);
+ assert.equal(ack.accepted,true);assert.equal(repeats,0,'An in-flight task is acknowledged without a duplicate run');
  runtime.id=undefined;
  assert.throws(()=>vm.runInContext('requireLiveExtension()',ctx),/refresh this tab/);
 }

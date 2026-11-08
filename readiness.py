@@ -14,6 +14,7 @@ import datetime as dt
 import re
 
 import flow_refill
+import flow_accounts
 
 FRESH = 15 * 60          # a check older than this is done again before a production
 CHECK_TIMEOUT = 120      # a production never waits longer than this for a check that does not come back
@@ -67,7 +68,7 @@ def needs(cfg, stage):
     """Services a production still needs from this stage on."""
     cfg = cfg or {}
     sites = []
-    if stage in CHAT_STAGES:
+    if stage in CHAT_STAGES and stage != 'clips':
         sites.append('chatgpt')  # characters, boards and cover are always drawn by ChatGPT
         if cfg.get('provider') == 'claude' and stage in WRITE_STAGES:
             sites.append('claude')
@@ -91,7 +92,19 @@ def flow_registered(state):
 
 
 def flow_has_account(state):
-    return any(usable(p) and p.get('blocked') != 'unavailable' for p in flow_registered(state))
+    moment=dt.datetime.now(dt.timezone.utc).timestamp()
+    clients=state.get('clients') or {}
+    for profile in flow_registered(state):
+        if not usable(profile) or profile.get('blocked')=='unavailable' or profile.get('auto_enabled') is False:
+            continue
+        client_id=profile.get('flow_client')
+        if not client_id:
+            return True  # Older manually registered profiles have no bound gateway.
+        client=clients.get(client_id) or {}
+        age=flow_accounts.seen_ago(client,moment)
+        if not client.get('disabled') and age is not None and age<180:
+            return True
+    return False
 
 
 def setup_missing(state):

@@ -40,7 +40,7 @@ class ReinstalledExtension(unittest.TestCase):
 
     def queue_clip(self):
         # The clip was prepared while the old pairing still held the accounts.
-        with patch.object(flow_accounts, 'follow_active_browser', return_value=0), patch.object(s, 'flow_reference', return_value='r.jpg'):
+        with patch.object(flow_accounts, 'follow_active_browser', return_value=0), patch.object(flow_accounts,'offline_route',return_value=False), patch.object(s, 'flow_reference', return_value='r.jpg'):
             s.schedule(self.job)
         t = s.STATE['tasks'][-1]; self.assertEqual(t['payload']['flow_route']['client'], 'old'); return t
 
@@ -63,6 +63,46 @@ class ReinstalledExtension(unittest.TestCase):
         t = self.queue_clip(); t.update(status='claimed', client='old')
         s.rebind_flow_routes()
         self.assertEqual(t['payload']['flow_route']['client'], 'old', 'may already be in Flow: never moved')
+
+    def test_offline_manual_route_released_even_while_another_clip_runs(self):
+        t=self.queue_clip()
+        s.STATE['clients']['old'].pop('auto')
+        s.STATE['tasks'].append({'id':'busy','job':self.job['id'],'slot':'clip:9','kind':'flow_video','status':'claimed','client':'new','profile':'b'})
+        with patch.object(s,'save'),patch.object(flow_accounts,'launch') as launch:
+            s.flow_dispatch_tick()
+        self.assertEqual(t['status'],'cancelled')
+        self.assertNotIn('reservation',t)
+        self.assertEqual(t['payload']['flow_route']['client'],'old','identity must be detected before moving an account')
+        self.assertEqual(s.STATE['tasks'][-1]['status'],'claimed')
+        launch.assert_not_called()
+
+    def test_selection_skips_offline_manual_accounts(self):
+        s.STATE['clients']['old'].pop('auto')
+        s.STATE['profiles'][1]['flow_client']='new'
+        self.assertEqual(flow_accounts.choose(s.STATE,'a',12)['id'],'b')
+
+    def test_waiting_flow_clip_does_not_starve_later_engine(self):
+        self.job['scenes']=[{'image':'i.png','clip':None} for _ in range(4)]
+        running={'id':'busy','job':self.job['id'],'slot':'clip:0','kind':'flow_video','status':'claimed','client':'new','profile':'a'}
+        s.STATE['tasks']=[running]
+        attempted=[]
+        def schedule(j,i,**kwargs):
+            attempted.append(i)
+            if i==1:return False
+            s.STATE['tasks'].append({**running,'id':str(i),'slot':f'clip:{i}','status':'queued'})
+            return True
+        with patch.object(s,'video_slots',return_value=2),patch.object(s,'schedule_clip',side_effect=schedule):
+            s.schedule_clips(self.job)
+        self.assertEqual(attempted,[1,2])
+        self.assertEqual(len(s.video_tasks(self.job)),2,'parallel cap still enforced')
+
+    def test_online_browser_keeps_claimed_binding_after_server_restart(self):
+        t=self.queue_clip();t.update(status='claimed',client='new')
+        with patch.object(s.maintenance,'backup_state'),patch.object(s.maintenance,'purge'),patch.object(s,'repair_duplicate_scenes'),patch.object(s,'save'):
+            s.recover_after_restart()
+        self.assertEqual(t['status'],'claimed')
+        self.assertEqual(self.job['status'],'running')
+        self.assertEqual(len(s.STATE['tasks']),1)
 
     def test_queued_balance_check_follows_too(self):
         p = s.STATE['profiles'][0]
@@ -102,7 +142,8 @@ class NoWindow(unittest.TestCase):
         with patch.object(flow_accounts, 'launch') as launch:
             s.flow_dispatch_tick(); s.flow_dispatch_tick()
         launch.assert_not_called()
-        self.assertEqual(sum('mémorisé par une autre fenêtre' in e['text'] for e in self.job['events']), 1, 'said once')
+        self.assertEqual(sum('ancienne fenêtre Flow hors ligne' in e['text'] for e in self.job['events']), 1, 'non-submitted work released once')
+        self.assertEqual(s.STATE['tasks'][0]['status'],'cancelled')
 
     def test_background_balance_reading_never_starts_chrome(self):
         s.STATE['tasks'] = []; s.STATE['jobs'] = []; s.STATE['profiles'][0]['balance'] = 0
@@ -128,7 +169,7 @@ class ChromeLocation(unittest.TestCase):
         with patch.object(flow_accounts, 'chrome_executable', return_value=pathlib.Path('/opt/google/chrome/chrome')), patch.object(flow_accounts.subprocess, 'Popen') as popen:
             flow_accounts.launch(p)
         args = popen.call_args[0][0]
-        self.assertEqual(args, ['/opt/google/chrome/chrome', '--no-startup-window', '--profile-directory=Profile 2'])
+        self.assertEqual(args, [str(pathlib.Path('/opt/google/chrome/chrome')), '--no-startup-window', '--profile-directory=Profile 2'])
         with patch.object(flow_accounts, 'chrome_executable', return_value=None), self.assertRaisesRegex(ValueError, 'Chrome introuvable'):
             flow_accounts.launch(p)
 

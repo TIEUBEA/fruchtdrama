@@ -37,13 +37,17 @@ def prompt(j):
     scenes = [{'index': i, 'characters': s.get('characters', []), 'meaning': s.get('meaning', '')} for i, s in enumerate(j['scenes'])]
     # « Au fil de l'histoire »: a planned change of look is expected from its scene on, never a defect.
     changes = (j.get('script') or {}).get('state_changes') or []
-    for scene in scenes:
+    for scene, script_scene in zip(scenes, j['scenes']):
+        for key in ('montre', 'critical_mark'):
+            if script_scene.get(key):
+                scene[key] = script_scene[key]
         seen = [{'character': c['character'], 'change': c['change']} for c in changes if c['from_scene'] <= scene['index'] + 1 and c['character'] in scene['characters']]
         if seen:
             scene['changed_look'] = seen
     return ('Review the attached BOARDS (numbered "Planche N", N starting at 1) against the attached character reference sheet and the script. '
             'Do not generate an image. For each board say whether it is usable for animation: same identity and outfit as the reference, '
-            'only the characters of that scene (no extra character, nobody missing), no text, no deformed body, the scene meaning readable. '
+            'only the characters of that scene (no extra character, nobody missing), no deformed body, the scene meaning and opening gesture or object readable. '
+            'Flag added lettering, except a critical_mark specified for that scene. When specified, verify its exact lettering, placement and legibility. '
             + ('A "changed_look" listed for a scene is planned by the story: it is expected on that board, not an error. ' if changes else '')
             + 'Output JSON only: {"production_id": "...", "generation_task_id": "...", "board_review": {"boards": [{"index": 0, "status": "pass|issue", "detail": "short reason"}]}} '
             'with one entry per board, index starting at 0, and the exact production_id and generation_task_id given here.\n'

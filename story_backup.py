@@ -19,6 +19,7 @@ def folder_name(j):
 def files_of(j):
     names = [j.get('character_sheet_file'), j.get('cover_file')]
     names += [c.get('file') for c in j.get('characters', [])] + [s.get('image') for s in j.get('scenes', [])]
+    names += [sheet.get('file') for sheet in j.get('state_sheets', [])]
     return [n for n in dict.fromkeys(list(names) + list(TEXTS)) if n and pathlib.PurePath(n).name == n]
 
 

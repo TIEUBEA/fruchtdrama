@@ -64,12 +64,14 @@ globalThis.FruchtFlowSession={
   const target=task.payload?.flow_route;if(!target)throw Error('Compte Flow non enregistré.');
   const url=this.project(target.url);if(!url)throw Error('Adresse Flow enregistrée invalide.');
   const tabs=await chrome.tabs.query({url:['https://labs.google/*','https://flow.google.com/*']});
-  let tab=tabs.find(t=>this.project(t.url)===url);
+  const recovery=(await chrome.storage.local.get('flowRecoveryTabs')).flowRecoveryTabs||{};
+  const protectedTabs=Object.values(recovery).map(x=>x.tabId);
+  let tab=tabs.find(t=>this.project(t.url)===url&&!protectedTabs.includes(t.id));
   if(!tab){
    const saved=(await chrome.storage.local.get('flowTab')).flowTab,store=await chrome.storage.local.get(['activeVideoTask','activeVideoTask2','activeVideoTask3','activeVideoTask4']);
    // Reuse only the tab previously owned by this connector, never one where the other clip lane works (parallel clips).
    const working=[store.activeVideoTask?.tabId,store.activeVideoTask2?.tabId,store.activeVideoTask3?.tabId,store.activeVideoTask4?.tabId].filter(Number.isInteger);
-   const owned=tabs.find(t=>t.id===saved&&!working.includes(t.id));
+   const owned=tabs.find(t=>t.id===saved&&!working.includes(t.id)&&!protectedTabs.includes(t.id));
    tab=owned?await chrome.tabs.update(owned.id,{url}):await globalThis.FruchtWorkspace.createTab(chrome,{url,active:false});
   }
   tab=await globalThis.FruchtWorkspace.adopt(chrome,tab);

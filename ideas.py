@@ -4,6 +4,7 @@ Nothing is paid before the sheet is validated: both steps only use the owner's C
 quota. Pure functions (prompts, validation, brief); the server schedules the tasks.
 """
 import json
+import re
 
 IDEA_COUNT = 10
 SHEET_FIELDS = ('logline', 'engine', 'obstacle', 'twist', 'image', 'question')
@@ -75,8 +76,9 @@ def sheet_prompt(language, idea, scene_count, seconds, note='', previous=None):
 Idée : {idea}
 Vidéo verticale de {scene_count} plans de {seconds} secondes, 2 à 5 personnages, plusieurs lieux. Langue de tous les textes : {language}.
 Le moteur (engine) est ce que veut la victime, l'obstacle est l'antagoniste et l'injustice qui s'aggrave, le twist est la preuve ou la révélation qui renverse la situation et punit l'injuste. L'émotion doit être forte et lisible sans le son (humiliation, trahison, sacrifice, revanche), jamais un malentendu poli.
+Choisis un seul protagoniste. Décris dans image l'anomalie visible dès la première image (un geste, un objet ou un signe précis) et dans obstacle la règle concrète qui l'empêche d'agir. Dans twist, indique la preuve visible, le détail qui permet de la semer discrètement au début et ce que sa découverte change pour le protagoniste. La question du spectateur doit pouvoir recevoir une réponse à l'écran.
 Titres en 2 à 4 mots, en majuscules. Premières répliques : une phrase choc de 10 mots au plus, dite dans les 2 premières secondes par un personnage à l'écran (c'est le hook : danger, injustice ou secret, jamais une présentation).
-Appels de fin : trois appels différents, dits par un personnage à la fin, liés au twist, 15 mots au plus. Le premier fait choisir en commentaire (ex. « Je le dénonce, dis 1. Je me tais, dis 2. »), le deuxième annonce la partie 2 et demande l'abonnement, le troisième pose une question au spectateur.
+Place le danger ou l'anomalie dans les cinq premiers mots de chaque accroche. Appels de fin : trois appels différents, dits par le protagoniste après la chute, liés à son choix, 15 mots au plus. Le premier fait choisir en commentaire (ex. « Je le dénonce, dis 1. Je me tais, dis 2. »), le deuxième annonce la partie 2 et demande l'abonnement, le troisième pose une question au spectateur.
 Réponds UNIQUEMENT avec du JSON valide, sans explication, clés techniques en anglais.{revision}
 Schéma : {json.dumps(schema, ensure_ascii=False)}"""
 
@@ -129,6 +131,14 @@ def end_call(sheet, call_index=0):
     calls = sheet.get('end_calls') or ([sheet['end_call']] if sheet.get('end_call') else [])
     return calls[min(max(int(call_index), 0), len(calls) - 1)] if calls else ''
 
+def hook_parts(hook):
+    """Separate a casting or acting label from the words that must be spoken."""
+    match = re.fullmatch(r'\s*([^«»]+):\s*«\s*(.+?)\s*»\s*', hook)
+    return (match[1].split(',',1)[0].strip(),match[2]) if match else ('',hook)
+
+def spoken_hook(hook):
+    return hook_parts(hook)[1]
+
 
 def brief(sheet, title_index=0, hook_index=0, call_index=0):
     """The validated sheet becomes the brief of the script step."""
@@ -138,5 +148,5 @@ def brief(sheet, title_index=0, hook_index=0, call_index=0):
     cast = '; '.join(f"{c['name']} ({c['role']}) : {c['appearance']}" for c in sheet['cast'])
     return (f"Fiche validée par le propriétaire. Titre : {title}. Histoire : {sheet['logline']} Moteur : {sheet['engine']} "
             f"Obstacle : {sheet['obstacle']} Twist : {sheet['twist']} Image d'ouverture : {sheet['image']} "
-            f"Question du spectateur : {sheet['question']} La toute première réplique de la scène 1 est exactement : « {hook} ». "
+            f"Question du spectateur : {sheet['question']} La toute première réplique de la scène 1 est exactement : « {spoken_hook(hook)} ». "
             f"Casting : {cast}." + (f" La dernière scène se termine par cet appel : « {call} »." if call else ''))

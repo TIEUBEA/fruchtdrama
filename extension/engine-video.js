@@ -53,7 +53,7 @@ globalThis.FruchtEngines={
   if(own)return globalThis.FruchtWorkspace.adopt(chrome,own);
   return globalThis.FruchtWorkspace.createTab(chrome,{url:this.site(engine).home,active:false});
  },
- label(el){return [el.getAttribute?.('aria-label'),el.getAttribute?.('title'),el.innerText,el.textContent].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();},
+ label(el){return [...new Set([el.getAttribute?.('aria-label'),el.getAttribute?.('title'),el.innerText,el.textContent].filter(Boolean).map(s=>s.trim()))].join(' ').replace(/\s+/g,' ').trim();},
  visible(el){if(!el||el.hidden||el.getAttribute?.('aria-hidden')==='true')return false;const r=el.getBoundingClientRect?.();return !!r&&r.width>4&&r.height>4;},
  buttons(doc){return [...doc.querySelectorAll('button,[role="button"],[role="tab"],[role="radio"]')].filter(b=>this.visible(b));},
  loggedOut(doc,engine){
@@ -77,6 +77,12 @@ globalThis.FruchtEngines={
   const ok=[...doc.querySelectorAll('input[type="file"]')].filter(i=>!i.disabled&&(!i.accept||/image|png|jpe?g|webp|\*/i.test(i.accept)));
   const form=editor?.closest?.('form');
   return (form&&ok.find(i=>form.contains(i)))||ok.find(i=>i.name==='files')||ok[ok.length-1]||null;
+ },
+ grokUploadButton(doc,exclude=null){
+  const upload=/^(?:attach(?: an? (?:image|file)| files?)?|(?:upload|add|choose|select) (?:an? )?(?:images?|files?|photos?)|(?:upload|import) from (?:computer|device)|(?:joindre|ajouter|importer|téléverser) (?:une image|un fichier|des (?:images|fichiers|photos))|(?:bild|datei|fotos?) (?:hinzufügen|hochladen|auswählen|anhängen))$/i;
+  return [...this.buttons(doc),...doc.querySelectorAll('[role="menuitem"]')].find(b=>
+   b!==exclude&&this.visible(b)&&!b.disabled&&b.getAttribute('aria-disabled')!=='true'
+   &&[b.getAttribute('aria-label'),b.getAttribute('title'),b.innerText].some(label=>upload.test(label?.trim()||'')));
  },
  videoModeButton(doc,engine){
   // A menu trigger (Arena « Video ▾ », aria-haspopup) shows the current mode: clicking it only opens the menu.
@@ -190,13 +196,37 @@ globalThis.FruchtEngines={
   if(attachments?.length){
    // The page may still be building its composer: wait a little for the field.
    let input=null;for(let i=0;i<20&&!input;i++){input=this.fileInput(doc,this.editor(doc));if(!input)await h.sleep(500);}
-   if(!input)throw h.fail('interface',site.label+' : champ d’image introuvable. Aucun envoi effectué.');
    const dt=new h.DataTransfer();
    for(const a of attachments){const bin=h.atob(a.data),bytes=Uint8Array.from(bin,c=>c.charCodeAt(0));dt.items.add(new h.File([bytes],a.name,{type:a.mime||'image/png'}));}
-   input.files=dt.files;input.dispatchEvent(new h.Event('change',{bubbles:true}));await h.sleep(3000);
-   // Grok: the board becomes the first frame (« Remove image » appears once it is uploaded).
-   if(engine==='grok'){let up=false;for(let i=0;i<30&&!up;i++){up=this.buttons(doc).some(b=>/^Remove image$/i.test(b.getAttribute('aria-label')||''));if(!up)await h.sleep(1000);}
-    if(!up)throw h.fail('interface',site.label+' : image non importée après 30 s. Aucun envoi effectué.');}
+   if(input){
+    input.files=dt.files;input.dispatchEvent(new h.Event('change',{bubbles:true}));
+   }else{
+    const upload=engine==='grok'&&task.payload.file_click_ready&&this.grokUploadButton(doc);
+    if(upload){
+     upload.click();
+     if(upload.getAttribute('aria-haspopup')){
+      await h.sleep(500);
+      const option=this.grokUploadButton(doc,upload);
+      if(option)option.click();
+     }
+    }else{
+     const editor=engine==='grok'&&h.ClipboardEvent&&this.editor(doc);
+     if(!editor)throw h.fail('interface',site.label+' : champ ou bouton d’image introuvable. Aucun envoi effectué.');
+     editor.dispatchEvent(new h.ClipboardEvent('paste',{clipboardData:dt,bubbles:true,cancelable:true}));
+    }
+   }
+   await h.sleep(3000);
+   // Grok confirms the attachment with a localized remove button.
+   if(engine==='grok'){
+    const removeImage=/^(?:Remove (?:the )?image|Bild entfernen|Bild löschen|Supprimer l[’']image|Retirer l[’']image)$/i;
+    let uploaded=false;
+    for(let i=0;i<60&&!uploaded;i++){
+     h.blocked();
+     uploaded=this.buttons(doc).some(b=>removeImage.test(b.getAttribute('aria-label')||b.getAttribute('title')||''));
+     if(!uploaded)await h.sleep(1000);
+    }
+    if(!uploaded)throw h.fail('interface',site.label+' : image non importée après 60 s. Aucun envoi effectué.');
+   }
   }
   const editor=this.editor(doc);if(!editor)throw h.fail('interface',site.label+' : zone de texte introuvable. Aucun envoi effectué.');
   h.fill(editor,task.payload.prompt);await h.sleep(700);

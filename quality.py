@@ -31,6 +31,7 @@ def fingerprint(j,folder):
 
 def compare(expected,transcript,language,probability):
     a,b=words(expected),words(transcript)
+    if not a and not b:return 1.0,[]  # An intentionally silent scene has no missing dialogue.
     ratio=difflib.SequenceMatcher(None,a,b,autojunk=False).ratio()
     issues=[]
     if not b:issues.append('Aucune parole reconnue : écoute nécessaire.')
@@ -141,8 +142,18 @@ def caption_events(scene,speech,offset,max_words=4,max_chars=30,length=8,karaoke
 
 
 def visual_prompt(j):
+    cast = [{key: c[key] for key in ('id', 'name', 'appearance', 'tenue', 'detail') if key in c} for c in j['characters']]
+    scenes = [{key: s[key] for key in ('title', 'characters', 'meaning', 'montre', 'critical_mark') if key in s}
+              for s in j['scenes']]
+    shape = {'production_id': j['id'], 'generation_task_id': 'COPY THE EXACT TASK ID FROM THIS REQUEST',
+             'quality_review': {'scenes': [{'index': i, 'status': 'pass|issue|uncertain', 'detail': 'one short observation'}
+                                           for i in range(len(scenes))],
+                                'continuity': {'status': 'pass|issue|uncertain', 'detail': 'one short observation'}}}
     return """Review the attached ACTUAL VIDEO FRAME CONTACT SHEETS against the script and character references. Do not generate an image. Output JSON only, with exact production_id and generation_task_id supplied in this request, and quality_review containing scenes (one per clip, index starting at 0, status pass/issue/uncertain, detail), plus continuity (status pass/issue/uncertain, detail). Every detail must state observable evidence or a limitation. Attachments are ordered: existing character-reference images first, then one contact sheet per scene in script order (quality-scene-00.jpg is scene index 0). You have sampled stills at approximately 0,2,4,6 seconds per clip, NOT continuous video or audio. Never claim to hear voices, verify lip sync, identify a speaker by voice, or certify unobserved movements. Check fruit identity, age, clothing, setting, important props, progression matching the script and contradictions between clips. Ignore typography on reference images. Use uncertain when the supplied evidence cannot settle a material question. Do not treat a deliberate story transition or change of setting as an error. Do not mark limitations inherent to still frames alone as scene failures. No overall perfection score.
-Script and cast: """+json.dumps({'title':j['title'],'characters':j['characters'],'scenes':j['scenes']},ensure_ascii=False)
+Script and cast: """+json.dumps({'title':j['title'],'characters':cast,'scenes':scenes,
+                                 'state_changes':(j.get('script') or {}).get('state_changes',[])},ensure_ascii=False)+(
+        '\nReturn exactly this JSON structure, replacing the task ID placeholder and choosing one status for each row. '
+        'Keep details to one short sentence.\n'+json.dumps(shape,ensure_ascii=False))
 
 def validate_visual(value,j,task):
     if value.get('production_id')!=j['id'] or value.get('generation_task_id')!=task:raise ValueError('Rapport qualité non associé à cette tâche')

@@ -15,6 +15,17 @@ class QualityTests(unittest.TestCase):
         self.key=quality.fingerprint(self.job,d)
         self.job['quality_report']={'fingerprint':self.key,'hard_errors':[],'warnings':[],'clips':[{'sheet':'sheet.jpg'}]}
     def tearDown(self):s.STATE,s.DATA=self.previous;self.temp.cleanup()
+    def test_cover_review_timeout_allows_autopilot_to_export_existing_cover(self):
+        self.job.update(stage='cover', cover_file='cover.png', autopilot=True)
+        task={'id':'review','job':self.job['id'],'kind':'chat_text','slot':'cover_review',
+              'status':'claimed','payload':{'file':'cover.png'}}
+        s.STATE['tasks'].append(task)
+        with patch.object(s,'start_render') as render:
+            s.accept_task_result(task,{'ok':False,'error_kind':'timeout'})
+        self.assertEqual(self.job['status'],'rendering')
+        self.assertEqual(self.job['cover_file'],'cover.png')
+        self.assertNotIn('cover_checked',self.job)
+        render.assert_called_once_with(self.job['id'])
     def test_transcript_comparison_keeps_accents_and_flags_missing_or_changed_dialogue(self):
         self.assertEqual(quality.compare('Gib mir meinen Schlüssel!','Gib mir meinen Schlüssel.', 'de',.95),(1.0,[]))
         self.assertTrue(quality.compare('Gib mir meinen Schlüssel!','Goodbye, see you tomorrow.', 'en',.95)[1])

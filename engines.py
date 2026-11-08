@@ -49,11 +49,14 @@ def clip_length(j, actual, scene=None):
     return round(min(max(float(actual or 0), low), high), 3)
 
 
-def word_limit(j, base=20):
-    """Spoken words per scene scale with the clip duration (20 words for 8 s)."""
+MAX_DIALOGUE_TURNS = 3
+
+
+def word_limit(j, base=24):
+    """Spoken words per scene scale with the clip duration (24 words for 8 s)."""
     return max(8, int(base * spec(j)['seconds'] / 8))
 
 
-def words_for(engine, base=20):
+def words_for(engine, base=24):
     """Same rule for one engine (a clip moved to Grok has 6 s for words written for 8 s)."""
     return max(8, int(base * ENGINES[engine]['seconds'] / 8))

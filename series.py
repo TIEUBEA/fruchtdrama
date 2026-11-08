@@ -29,13 +29,18 @@ def brief(previous, owner_note=''):
     """Brief of the next part: same main characters, direct continuation, new twist."""
     s = previous.get('script', {})
     last = (previous.get('scenes') or [{}])[-1]
-    cast = [{'id': c['id'], 'name': c.get('name'), 'appearance': c.get('appearance')} for c in previous.get('characters', [])]
+    cast = [{key: c[key] for key in ('id', 'name', 'appearance', 'tenue', 'detail', 'voice', 'place') if c.get(key)}
+            for c in previous.get('characters', [])]
+    changes = [{'character': x['character'], 'change': x['change']} for x in s.get('state_changes', [])]
+    continuity = (' Changements physiques déjà établis, du plus ancien au plus récent : '
+                  + json.dumps(changes, ensure_ascii=False)
+                  + '. Reporte le dernier état encore visible par personnage dans state_changes dès from_scene 1.') if changes else ''
     lines = ' / '.join(x.get('text', '') for x in last.get('dialogue', []))
     text = (f"SUITE DIRECTE, partie {part_of(previous) + 1}, de l'épisode « {s.get('title', previous.get('title'))} ». "
             f"Garde exactement les mêmes personnages principaux (mêmes id, noms et apparences) : {json.dumps(cast, ensure_ascii=False)}. "
             f"Fin de l'épisode précédent : {last.get('meaning', '')} — dernières répliques : {lines}. "
             "Rappelle l'enjeu en une réplique dès la première seconde, ajoute une nouvelle complication, termine sur un rebondissement qui appelle la partie suivante. "
-            "Aucune scène ni réplique ne doit répéter l'épisode précédent.")
+            "Aucune scène ni réplique ne doit répéter l'épisode précédent." + continuity)
     return (text + (' Idée du propriétaire : ' + owner_note if owner_note else ''))[:4000]
 
 

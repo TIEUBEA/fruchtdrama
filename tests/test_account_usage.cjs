@@ -18,6 +18,10 @@ const {rows,home}=ctx.o;
 // 1. Most credits first, empty then blocked at the bottom; each keeps its own number.
 assert.deepEqual(rows.map(r=>[r.number,r.credits,r.text]),[[5,50,'Prêt'],[3,38,'Prêt'],[1,12,'Prêt'],[2,0,'Vide'],[4,90,'À régler']]);
 assert.match(rows[3].reason,/^Recharge à \d\d:\d\d$/,'refill time shown for an empty account');
+ctx.state.profiles.push(flow('unknown',0,6));
+vm.runInContext('globalThis.unknown=accountRows("flow").find(r=>r.number===6)',ctx);
+assert.equal(ctx.unknown.credits,null);
+assert.equal(ctx.unknown.text,'Solde à vérifier');
 // 2. Mes comptes says who works now, for what, with the credits left.
 const flowBlock=home.split('<section').find(x=>x.includes('Google Flow <span'));
 assert.match(flowBlock,/Utilisé maintenant/);assert.match(flowBlock,/<b>Compte 3<\/b> \(cc•••t@example\.com, 38 crédits\) · Clip 3 de BANANITO/);

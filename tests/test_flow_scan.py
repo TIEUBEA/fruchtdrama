@@ -45,6 +45,16 @@ class ScanTests(unittest.TestCase):
         s.STATE = s.fresh(); c = {'id': 'win', 'role': 'all'}
         self.assertIn('Ajouter un compte', s.flow_scan(s.STATE, c, []))
 
+    def test_detected_account_uses_its_slot_and_clears_obsolete_mismatch(self):
+        s.STATE=s.fresh();c={'id':'online','role':'all'}
+        s.STATE['profiles']=[{'id':'p','label':'owner@x.com','balance':50,'flow_url':'https://flow.google.com/project/old',
+            'readiness':{'state':'fix','reason':'Autre compte Google ouvert à cette place : clique « Détecter mes comptes »'}}]
+        s.flow_scan(s.STATE,c,[{'slot':1,'email':'owner@x.com','balance':50}])
+        p=s.STATE['profiles'][0]
+        self.assertEqual(p['flow_url'],'https://flow.google.com/u/1/project/old')
+        self.assertNotIn('readiness',p)
+        self.assertEqual(flow_accounts.at_slot('https://flow.google.com/u/3/project/old',1),p['flow_url'])
+
 
 if __name__ == '__main__':
     unittest.main()

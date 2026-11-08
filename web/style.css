@@ -128,6 +128,8 @@ table.unified td small{display:block;color:var(--muted)}.link-btn{background:non
 .fc-meta{display:flex;justify-content:space-between;color:var(--muted);font-size:14px}.fc-actions{display:flex;gap:8px;margin-top:auto}.fc-actions .primary,.fc-actions>button.secondary:first-child{flex:1;justify-content:center}.secondary.icon{width:44px;padding:0;display:grid;place-items:center}.secondary.icon.on{color:#c58a00;border-color:#e8c46a}
 .filon-accounts .acc{display:flex;align-items:center;gap:10px}.filon-accounts .acc img{width:34px;height:34px;border-radius:50%;object-fit:cover}.filon-accounts .acc small{color:var(--muted)}
 .filon-media .filon-player{opacity:0;transition:opacity .6s;pointer-events:none}.filon-media .filon-player.ready{opacity:1}.brand .wm span{margin:0}
+.filon-media .filon-preview{position:absolute;right:8px;bottom:8px;z-index:2}
+.filon-status{margin:.5rem 0}
 .track-act{display:block;margin-top:6px}.track-act .link-btn{color:var(--green);text-decoration:none;font-weight:600}
 .cover-panel{display:grid;grid-template-columns:170px 1fr;gap:20px;align-items:start;max-width:720px}.cover-now{aspect-ratio:9/16;border-radius:12px;background:var(--line);display:grid;place-items:center;color:var(--muted);overflow:hidden}.cover-now img{width:100%;height:100%;object-fit:cover}.cover-panel h3{margin:0 0 12px}
 .cover-picks{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}.cover-picks button{width:58px;aspect-ratio:9/16;padding:0;border:2px solid transparent;border-radius:8px;overflow:hidden;background:none;cursor:pointer}.cover-picks button.on{border-color:#3c8a4e}.cover-picks img{width:100%;height:100%;object-fit:cover}
@@ -253,6 +255,7 @@ body.theme-papier .dot-state.ok{color:#2a7537}
 /* 0.1.91 « Mes comptes » simple: one block per service, one line per account, big buttons. */
 .acc-service{padding:20px 22px}.acc-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}.acc-head h2{margin:0;font-size:20px}.acc-head .tag{font-size:11px;vertical-align:middle;margin-left:6px}.acc-head .hint{margin:4px 0 0}
 .acc-buttons{display:flex;gap:8px;flex-wrap:wrap}button.big{font-size:15px;padding:12px 20px;border-radius:12px}
+.acc-picker{margin:0 0 16px;padding:18px 22px}.acc-picker h2{margin:0 0 8px;font-size:20px}.acc-picker p{margin:0 0 12px}
 .acc-list{list-style:none;margin:14px 0 0;padding:0}.acc-row{display:grid;grid-template-columns:minmax(150px,1.2fr) auto minmax(150px,1.4fr) auto;gap:12px;align-items:center;padding:12px 0;border-top:1px solid var(--line)}
 .acc-mail{font-weight:600;overflow-wrap:anywhere}.acc-credits{color:var(--muted);font-variant-numeric:tabular-nums}.acc-state small{display:block;color:var(--muted);margin-top:4px;font-size:12px}.acc-act{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
 .acc-empty{padding:14px 0;color:var(--muted);border-top:1px solid var(--line)}.acc-foot{text-align:right;margin-top:8px}.link-btn.danger{color:#9b3030}.acc-checked{margin:-6px 0 14px}

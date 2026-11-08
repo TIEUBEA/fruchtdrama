@@ -81,7 +81,15 @@ if not os.environ.get('FRUCHT_NO_THUMBS'):
     thumbs.warm([c['url'] for j in STATE['jobs'] for c in j.get('candidates',[])],DATA)
 def save():
     p=DATA/'state.tmp'
-    p.write_text(json.dumps(STATE, ensure_ascii=False, indent=2),'utf-8'); p.replace(DATA/'state.json')
+    p.write_text(json.dumps(STATE, ensure_ascii=False, indent=2),'utf-8')
+    for attempt in range(5):
+        try:
+            p.replace(DATA/'state.json')
+            return
+        except PermissionError:
+            if sys.platform!='win32' or attempt==4:
+                raise
+            time.sleep(.05*(attempt+1))
 def job_by(id):
     return next((j for j in STATE['jobs'] if j['id']==id),None)
 def profile_by(id): return next((p for p in STATE['profiles'] if p['id']==id),None)
@@ -133,7 +141,7 @@ def client_accepts(client,task):
         target=task.get('payload',{}).get('flow_route')
         if target and not profile_by(task.get('profile')):return False
         return role in ('all','flow') and (target.get('client')==client.get('id') if target else task.get('profile')==client.get('flow_profile'))
-    if task['kind']=='engine_video':return role in ('all','flow')
+    if task['kind']=='engine_video':return role=='all'
     if role not in ('all','creation'):return False
     if task['kind'] in ('chat_text','chat_collect','chat_image','chat_image_collect'):
         provider=task.get('payload',{}).get('provider','chatgpt')
@@ -165,15 +173,17 @@ class AccountsNotReady(ValueError):
 def gate_blockers(j,setup=True):
     """Known reasons not to start this production now (first step: accounts added; then nothing known « À régler »)."""
     eligible=lambda p:flow_accounts.eligible(STATE,p)
-    out=readiness.setup_missing(STATE) if setup else []
-    return out+readiness.blockers(STATE,j['config'],j.get('stage','research'),int(j['config'].get('flow_cost',12)),time.time(),eligible,j.get('flow_profile'))
+    stage = j.get('stage', 'research')
+    out = readiness.setup_missing(STATE) if setup and stage != 'clips' else []
+    return out+readiness.blockers(STATE,j['config'],stage,int(j['config'].get('flow_cost',12)),time.time(),eligible,j.get('flow_profile'))
 
 def window_online():
     return any(client_online(c) and c.get('role','all') in ('all','flow') for c in STATE['clients'].values())
 
 def request_readiness(sites,profiles,background=False,job=None):
     """Ask the FruchtDrama window to read these services and Flow accounts (read only: no credit, no prompt)."""
-    rid=uid();targets=[readiness.profile_target(p,flow_accounts.account_home) for p in STATE['profiles'] if p['id'] in profiles and p.get('flow_url')]
+    rid=uid();targets=[readiness.profile_target(p,flow_accounts.account_home) for p in STATE['profiles']
+                      if p['id'] in profiles and p.get('flow_url') and not flow_accounts.offline_route(STATE,p)]
     queue=STATE.setdefault('bridge_requests',[])
     if not job:queue[:]=[r for r in queue if not (r.get('type')=='readiness' and not r.get('job'))]  # one owner check waiting at most
     queue.append({'type':'readiness','id':rid,'sites':list(sites),'profiles':targets,'background':bool(background),**({'job':job} if job else {})})
@@ -185,7 +195,8 @@ def start_check(j):
     """Before a production starts: read what is not known recently. True when it may start right away."""
     need=readiness.checks_needed(STATE,j['config'],j.get('stage','research'),int(j['config'].get('flow_cost',12)),time.time(),lambda p:flow_accounts.eligible(STATE,p))
     if not (need['sites'] or need['profiles']) or not window_online():return True
-    j['accounts_check']={'at':now(),'id':request_readiness(need['sites'],need['profiles'],job=j['id'])}
+    j['accounts_check']={'at':now(),'id':request_readiness(need['sites'],need['profiles'],job=j['id']),
+                        'pending':['site:'+n for n in need['sites']]+['flow:'+p for p in need['profiles']]}
     names=[readiness.SITE_LABELS[n] for n in need['sites']]+(['compte(s) Google Flow'] if need['profiles'] else [])
     event(j,'Vérification des comptes avant de commencer ('+', '.join(names)+') : quelques secondes, sans crédit ni prompt.');return False
 
@@ -202,6 +213,10 @@ def end_check(j,timeout=False):
 
 def readiness_tick(moment=None):
     moment=moment or time.time();changed=False
+    r=readiness.store(STATE)
+    if r.get('pending') and moment-flow_credits.seconds(r.get('requested'))>readiness.CHECK_TIMEOUT:
+        r['pending']=[];changed=True
+        STATE['bridge_requests']=[x for x in STATE.get('bridge_requests',[]) if x.get('type')!='readiness' or x.get('job')]
     for j in STATE['jobs']:
         c=j.get('accounts_check')
         if c and moment-flow_credits.seconds(c.get('at'))>readiness.CHECK_TIMEOUT:end_check(j,timeout=True);changed=True
@@ -218,6 +233,7 @@ def cover_check_pending(j):
     when it sees a defect ('fix'), or the defect is only reported ('report'). True while the check holds the montage back."""
     mode=j['config'].get('cover_controls',STATE.get('settings',{}).get('cover_controls','fix'))
     if mode=='none' or not j.get('cover_file') or j.get('cover_checked')==j['cover_file']:return False
+    if j.get('autopilot') and j.get('cover_review_unavailable')==j['cover_file']:return False
     review=j.get('cover_review')
     if not review or review.get('file')!=j['cover_file']:
         if any(t['job']==j['id'] and t['slot']=='cover_review' and t['status'] in ('queued','claimed') for t in STATE['tasks']):return True
@@ -232,11 +248,13 @@ def cover_check_pending(j):
         event(j,'Miniature redessinée une fois après le contrôle : '+review['problem']);schedule(j);return True
     alert(j,'auto','Miniature : défaut signalé par ChatGPT — '+review['problem']+' Vérifie-la avant de publier.');return False
 
-def readable_progress(text):
+def readable_progress(text,slot=None):
     # The extension reports the scenario reader's raw diagnostic; the owner sees a sentence instead.
     if text.startswith('Diagnostic import Flow'):return 'Import de la planche dans Flow…'
     prefix='Lecture du scénario : '
     if not text.startswith(prefix+'{'):return text
+    review={'cover_review':'la miniature','quality_review':'les clips','board_review':'les planches'}.get(slot)
+    if review:return 'Lecture de la réponse du contrôle sur '+review+' en cours.'
     try:d=json.loads(text[len(prefix):])
     except ValueError:return 'Lecture de la réponse de l’IA en cours.'
     if d.get('parsedScenes'):return f"Scénario reçu ({d['parsedScenes']} scènes) : vérification en cours."
@@ -275,6 +293,10 @@ def rebind_flow_routes():
         route=(t.get('payload') or {}).get('flow_route')
         if t.get('status')!='queued' or t.get('kind') not in ('flow_video','flow_collect') or not route:continue
         p=profile_by(t.get('profile'))
+        if t['kind']=='flow_video' and p and flow_accounts.offline_route(STATE,p):
+            t['status']='cancelled';t['cancel_reason']='offline_route';moved+=1
+            event(job_by(t['job']),'Clip '+str(int(t['slot'].split(':')[1])+1)+' : ancienne fenêtre Flow hors ligne ; tâche non envoyée libérée pour un compte disponible, aucun crédit réservé.')
+            continue
         if p and p.get('flow_client') and route.get('client')!=p['flow_client']:
             route['client']=p['flow_client'];t.pop('browser_opened',None);moved+=1
     for p in STATE['profiles']:
@@ -309,6 +331,7 @@ def alert(j,level,text):
     event(j,text);alerts=j.setdefault('alerts',[]);alerts.append({'at':now(),'level':level,'text':text});del alerts[:-6]
 STALL_ONLINE=180  # seconds without a heartbeat: the FruchtDrama window is considered gone
 STALL_QUIET={'chat_text':12,'chat_collect':6,'chat_image':10,'chat_image_collect':6,'research':12,'flow_video':20,'engine_video':45}  # minutes (Arena: up to 40 min, real test 06/11/2026)
+ENGINE_STALL_QUIET={'grok':8,'vidogrid':12,'arena':45}
 SERVICE={'chatgpt':'ChatGPT','claude':'Claude'}
 
 def stall_info(j,moment=None):
@@ -332,6 +355,10 @@ def task_stall(j,task,moment,ago,shared):
     paid=kind in ('flow_video','engine_video')
     retry_note=('Vérifie d’abord dans '+service+' si le clip a été créé : le relancer peut coûter des crédits.' if paid else 'Relancer renvoie la demande à '+service+' (aucun crédit Flow).')
     if task['status']=='queued':
+        route=(task.get('payload') or {}).get('flow_route')
+        if route and not client_online(STATE['clients'].get(route.get('client'))):
+            return {'reason':'Le compte de ce clip est affecté à une fenêtre Flow hors ligne.',
+                    'hint':'Détecter mes comptes dans la fenêtre ouverte permet de retrouver les comptes disponibles.','retry':False,'since':task.get('created')}
         if not online:
             return {'reason':'Aucune fenêtre FruchtDrama n’est ouverte : l’étape attend qu’une fenêtre se connecte.','hint':'Ouvre la fenêtre FruchtDrama (icône épinglée), l’étape repart toute seule.','retry':False,'since':task.get('created')}
         return None
@@ -344,17 +371,27 @@ def task_stall(j,task,moment,ago,shared):
     # With both lanes active, the other lane's news must not hide this one's silence: its own progress only.
     news=ago(task.get('progress_at')) if shared else ago((j.get('events') or [{}])[-1].get('at'))
     last=min([x for x in (ago(task.get('claimed')),news) if x is not None],default=None)
-    if last is not None and last>=STALL_QUIET.get(kind,12)*60:
+    limit=STALL_QUIET.get(kind,12)
+    if kind=='engine_video':
+        limit=ENGINE_STALL_QUIET.get((task.get('payload') or {}).get('engine'),limit)
+    if last is not None and last>=limit*60:
         return {'reason':f'Aucune nouvelle de {service} depuis {int(last//60)} min : l’onglet attend peut-être une connexion, une vérification anti-robot, ou la réponse s’est arrêtée.',
                 'hint':'Regarde l’onglet '+service+' dans la fenêtre FruchtDrama. '+retry_note,'retry':True,'paid':paid,'since':task.get('claimed')}
     return None
 
-def public_state():
+def public_state(light=False):
     account_usage.number_flow(STATE)  # « Compte 1, 2, 3… » stable, before the copy
-    s=copy.deepcopy(STATE); s.pop('token',None)
-    for t in s['tasks']:
-        t.pop('result',None)
+    s=copy.deepcopy({k:v for k,v in STATE.items() if k not in ('token','tasks')})
+    s['tasks']=[]
+    for source in STATE['tasks']:
+        t={k:v for k,v in source.items() if k not in ('result','payload')}
+        if not light:
+            t['payload']=source.get('payload',{})
+        elif source['status'] in ('queued','claimed'):
+            t['payload']={k:v for k,v in source.get('payload',{}).items() if k in ('prompt','query')}
+        t=copy.deepcopy(t)
         if t.get('progress'):t['progress']=readable_progress(t['progress'])
+        s['tasks'].append(t)
     for public,j in zip(s['jobs'],STATE['jobs']):
         for e in public.get('events',[]):e['text']=readable_progress(e['text'])
         public['uncertain_clips']=sorted({int(t['slot'].split(':')[1]) for t in uncertain_clip_tasks(j)})
@@ -407,8 +444,8 @@ def flow_dispatch_tick():
     pending=None
     with LOCK:
         if not STATE.get('settings',{}).get('flow_auto'):return
-        if any(t['kind'] in ('flow_video','flow_collect') and t['status']=='claimed' for t in STATE['tasks']):return
         if rebind_flow_routes():save()
+        if any(t['kind'] in ('flow_video','flow_collect') and t['status']=='claimed' for t in STATE['tasks']):return
         for j in STATE['jobs']:
             if j['stage']=='clips' and j['status']=='waiting_credit':
                 if flow_accounts.choose(STATE,j.get('flow_profile'),j['config']['flow_cost']):j['status']='running'
@@ -557,15 +594,15 @@ def filon_refresh(language=None,niche=None):
     cfg={**STATE['settings']};cfg['language']=creation_language(language or cfg.get('language','Deutsch (de-DE)'))
     cfg['filon_niche']=niche_name(niche or cfg.get('filon_niche') or 'Fruits');cfg['query']=niche_query(cfg['filon_niche'],cfg['language'])
     j={'id':uid(),'title':'Actualisation du Filon','brief':'','config':cfg,'filon_only':True,'status':'running','stage':'research','created':now(),'updated':now(),'events':[],'candidates':[],'characters':[],'scenes':[],'flow_profile':None}
-    STATE['jobs'].append(j);schedule(j);return j
+    STATE['jobs'].append(j);schedule(j);STATE['settings']['filon_attempted']=j['created'];return j
 
 def filon_tick(moment=None):
     moment=moment or time.time();s=STATE.get('settings',{})
     if not s.get('filon_auto'):return None
-    try:last=dt.datetime.fromisoformat(s.get('filon_refreshed','')).timestamp()
+    try:last=dt.datetime.fromisoformat(max(s.get('filon_attempted',''),s.get('filon_refreshed',''))).timestamp()
     except ValueError:last=0
     if moment-last<FILON_EVERY:return None
-    try:j=filon_refresh();s['filon_refreshed']=now();return j
+    try:return filon_refresh()
     except ValueError:return None
 
 def dispatch_once():
@@ -782,38 +819,51 @@ def _txt(v,limit=400):return ' '.join(str(v or '').split())[:limit]
 def cast_place(j,cid):
     c=next((c for c in j.get('characters',[]) if c.get('id')==cid),{})
     return _txt(c.get('place'),120)
+def scene_lettering(s):
+    mark=_txt(s.get('critical_mark'),180)
+    if mark:
+        return 'The only permitted lettering is the following exact in-world mark, readable on its specified surface: '+mark+'. No subtitles, overlays, logos or watermarks.'
+    return 'No text, letters, numbers, subtitles, logos or watermarks.'
+
 def plan_image_block(j,s):
     script=j.get('script') or {}
     parts=[]
     if s.get('montre'):parts.append('WHAT THE IMAGE SHOWS: '+_txt(s['montre'],600))
     if s.get('cadre'):parts.append('FRAMING: '+_txt(s['cadre'],300))
+    if s.get('deplacement'):parts.append('STARTING FRAME: show starting positions and leave room for this route: '+_txt(s['deplacement'],300))
     place=(script.get('lieux') or {}).get(s.get('lieu')) if isinstance(script.get('lieux'),dict) else None
     if place:parts.append('PLACE: '+_txt(place,300))
-    if script.get('lieu'):parts.append('WORLD: '+_txt(script['lieu'],300)+' No names, no logos, no readable text.')
-    marks=[f"{c.get('name')}: {_txt(c.get('tenue'),120)}; {_txt(c.get('detail'),120)}; {_txt(c.get('place'),120)}" for c in j.get('characters',[]) if c.get('id') in s.get('characters',[]) and (c.get('detail') or c.get('place'))]
-    if marks:parts.append('EACH CHARACTER, ALWAYS THE SAME: '+' | '.join(marks))
-    if s.get('actions'):parts.append('Catch the moment of: '+_txt((s['actions'] or [''])[0],200)+' Faces show the emotion strongly (exaggerated, readable on a phone).')
+    if script.get('lieu'):parts.append('WORLD: '+_txt(script['lieu'],300))
     names={c.get('id'):c.get('name') for c in j.get('characters',[])}
+    visible=[names[cid] for cid in s.get('characters',[]) if names.get(cid)]
+    if visible:parts.append('ONLY THESE CHARACTERS ARE VISIBLE: '+', '.join(visible))
+    marks=[f"{c.get('name')}: {_txt(c.get('tenue'),120)}; {_txt(c.get('detail'),120)}; {_txt(c.get('place'),120)}" for c in j.get('characters',[]) if c.get('id') in s.get('characters',[]) and (c.get('detail') or c.get('place'))]
+    if marks:parts.append('CHARACTER COSTUME, DISTINCTIVE MARK AND USUAL STARTING POSITION: '+' | '.join(marks))
+    if s.get('actions'):parts.append('Catch the moment of: '+_txt((s['actions'] or [''])[0],200)+' Faces show the emotion strongly (exaggerated, readable on a phone).')
     said=[f"{names.get(x.get('speaker'),x.get('speaker'))} says « {_txt(x.get('text'),160)} »"+(f" ({_txt(x.get('jeu'),80)})" if x.get('jeu') else '') for x in s.get('dialogue',[])]
-    if parts and said:parts.append('THE FACES PLAY THESE LINES (no text in the image): '+' / '.join(said))
+    if parts and said:parts.append('THE FACES PLAY THESE LINES (do not print the dialogue): '+' / '.join(said))
     if parts:parts.append('HOW THEY ARE MADE: the fruit is the WHOLE body (head, face, neck, arms, hands, fingers), four fingers per hand, fully clothed in ordinary covering clothes, no human, no human skin. '
                           'The attached sheet rules faces, species, proportions and outfits; a character who is not on the sheet does not exist in this image. '
-                          'ONE single shot filling the whole frame edge to edge, like a still from the film; no text, letters, numbers, watermark or subtitles.')
+                          'ONE single shot filling the whole frame edge to edge, like a still from the film. '+scene_lettering(s))
     return ('\n'+'\n'.join(parts)) if parts else ''
 def plan_video_block(j,s):
     parts=[]
     if s.get('camera'):parts.append('CAMERA: '+_txt(s['camera'],200))
     acts=[_txt(a,200) for a in (s.get('actions') or []) if _txt(a)]
     if acts:parts.append('ACTIONS IN ORDER (the last one closes the shot): '+' / '.join(acts))
-    mute=[c.get('name') for c in j.get('characters',[]) if c.get('id') in (s.get('muets') or [])]
+    if s.get('deplacement'):
+        parts.append('CHARACTER MOVEMENT: '+_txt(s['deplacement'],300)+'. Follow the moving character in one continuous shot. Keep the speaker’s face readable while they speak.')
+    silent=set(s.get('characters') or [])-{line['speaker'] for line in s.get('dialogue',[])}
+    mute=[c['name'] for c in j.get('characters',[]) if c.get('id') in silent]
     if mute:parts.append('SILENT, MOUTH CLOSED: '+', '.join(mute))
-    parts.append('Reactions are big and readable: tears, sweat drops, trembling, shouting, stepping back when the story calls for it.')
+    parts.append('Use the gestures specified for this shot. Silent characters react with eyes, brows and hands, lips closed. Only add tears, sweat or screams when explicitly directed. Start from the positions shown in the reference frame. Preserve identity and outfit as characters move. Deliver the exchange at a natural pace with clear turns.')
+    parts.append(scene_lettering(s))
     return '\n'+'\n'.join(parts)
 def dialogue_lines(j,s):
     out=[]
     for x in s['dialogue']:
         where=cast_place(j,x['speaker']);acting=_txt(x.get('jeu'),80)
-        out.append(x['speaker']+(f' ({where})' if where else '')+(f' [{acting}]' if acting else '')+': '+x['text'])
+        out.append(x['speaker']+(f' ({where})' if where and not s.get('deplacement') else '')+(f' [{acting}]' if acting else '')+': '+x['text'])
     return '\n'.join(out)
 
 SIZE_WORDS={'énorme','énormes','gros','grosse','grosses','géant','géante','géants','immense','immenses','obèse','huge','big','fat','giant','enormous','riesig','enorme','gordo','gorda','gigante'}
@@ -825,23 +875,36 @@ def size_problems(chars):
         if found:out.append(f"Le détail de {c.get('name','un personnage')} : « {', '.join(found)} » fait grossir le personnage dans la vidéo. Décris le détail sans parler de sa taille.")
     return out
 
-def validate_script(s, n, check_size=True):
+def validate_script(s, n, check_size=True, word_limit=25):
     if not isinstance(s,dict): raise ValueError('Objet JSON attendu')
     chars=s.get('characters',[]); scenes=s.get('scenes',[])
     # Name the count actually received: the rewrite request and the journal must say what to fix.
     if not 1<=len(chars)<=5: raise ValueError(f'{len(chars)} personnage(s) reçu(s), il en faut 1 à 5 : fusionner ou retirer les personnages secondaires')
     if len(scenes)!=n: raise ValueError(f'{len(scenes)} scène(s) reçue(s), il en faut exactement {n}')
-    ids=[c.get('id') for c in chars]
-    if len(set(ids))!=len(ids) or any(not re.fullmatch('[a-z][a-z0-9_]{0,24}',str(x)) for x in ids): raise ValueError('Identifiants personnages invalides')
-    for c in chars:
+    def character_id(value):
+        return value.strip().lower() if isinstance(value,str) else ''
+    ids=[character_id(c.get('id')) for c in chars]
+    if len(set(ids))!=len(ids) or any(not re.fullmatch('[a-z][a-z0-9_]{0,24}',x) for x in ids):
+        raise ValueError('Identifiants personnages invalides : utilise des identifiants uniques comme fruit_a, identiques dans les scènes et les dialogues.')
+    for c, cid in zip(chars, ids):
+        c['id']=cid
         if not all(isinstance(c.get(k),str) and c[k].strip() for k in ['name','appearance','voice','image_prompt']): raise ValueError('Fiche personnage incomplète')
     for scene in scenes:
         if not all(isinstance(scene.get(k),str) and scene[k].strip() for k in ['image_prompt','video_prompt','meaning']): raise ValueError('Prompt ou sens de scène manquant')
         lines=scene.get('dialogue',[])
+        for line in lines:line['speaker']=character_id(line.get('speaker'))
+        for key in ('characters','muets'):
+            if isinstance(scene.get(key),list):scene[key]=[character_id(x) for x in scene[key]]
         if not lines or any(x.get('speaker') not in ids or not isinstance(x.get('text'),str) or not x['text'].strip() for x in lines): raise ValueError('Dialogue ou locuteur invalide')
         if not set(scene.get('characters',[])).issubset(ids) or not scene.get('characters'): raise ValueError('Distribution de scène invalide')
         if any(x['speaker'] not in scene['characters'] for x in lines): raise ValueError('Locuteur absent de la scène')
-        if check_size and sum(len(x['text'].split()) for x in lines)>25: raise ValueError('Dialogue trop long pour un clip de huit secondes (25 mots maximum)')
+        mark=scene.get('critical_mark')
+        if isinstance(mark,str) and mark.strip():scene['critical_mark']=_txt(mark,180)
+        else:scene.pop('critical_mark',None)
+        movement=scene.get('deplacement')
+        if isinstance(movement,str) and movement.strip():scene['deplacement']=_txt(movement,300)
+        else:scene.pop('deplacement',None)
+        if check_size and sum(len(x['text'].split()) for x in lines)>word_limit: raise ValueError(f'Dialogue trop long pour ce clip ({word_limit} mots maximum)')
     for k in ['title','cover_title','description']:
         if not isinstance(s.get(k),str) or not s[k].strip(): raise ValueError('Titre, couverture ou description manquant')
     # Seen in the Atelier's checks (06/11/2026): size words in a character's distinctive mark make the video engine
@@ -868,6 +931,7 @@ def clean_state_changes(raw,ids,n):
         if isinstance(scene,str) and scene.strip().isdigit():scene=int(scene.strip())
         if isinstance(scene,bool) or not isinstance(scene,int) or not 1<=scene<=n:continue
         character=x.get('character')
+        if isinstance(character,str):character=character.strip().lower()
         change=' '.join(str(x.get('change') or '').split())[:200] if isinstance(x.get('change'),str) else ''
         if character not in ids or not change or (character,scene) in seen:continue
         seen.add((character,scene));clean.append({'from_scene':scene,'character':character,'change':change})
@@ -884,31 +948,46 @@ def translation_prompt(j):
     language=j['config']['language'];source=copy.deepcopy(j['variant']['script'])
     for k in ('production_id','generation_task_id','creative_selection','opening_plan'):source.pop(k,None)
     source['production_id']=j['id']
-    return f'''Traduis et adapte ce scénario de mini-fiction de fruits dans la langue : {language}. Garde exactement la même structure JSON, les mêmes identifiants de personnages, le même nombre de scènes, les mêmes locuteurs et le même sens. Adapte naturellement les répliques (pas de mot à mot), le titre, cover_title (3 à 5 mots) et la description (mentionne la création par IA). Les prénoms peuvent être adaptés à la langue. Les répliques restent courtes : au plus {engines.word_limit(j,25)} mots par scène. Les champs image_prompt et video_prompt restent tels quels, sauf la langue parlée indiquée dans video_prompt. Réponds UNIQUEMENT avec le JSON. JSON : {json.dumps(source,ensure_ascii=False)}'''
+    return f'''Traduis et adapte ce scénario de mini-fiction de fruits dans la langue : {language}. Garde exactement la même structure JSON, les mêmes identifiants de personnages, le même nombre de scènes, les mêmes locuteurs et le même sens. Adapte naturellement les répliques (pas de mot à mot), le titre, cover_title (3 à 5 mots) et la description (mentionne la création par IA). Les prénoms peuvent être adaptés à la langue. Garde des échanges naturels, avec au plus {engines.word_limit(j)} mots par scène. Les champs image_prompt et video_prompt restent tels quels, sauf la langue parlée indiquée dans video_prompt. Réponds UNIQUEMENT avec le JSON. JSON : {json.dumps(source,ensure_ascii=False)}'''
 
 PLAN_RULES='''
 PLANS (règles de mise en scène) :
 - Chaque plan apporte une information NEUVE (champ apporte) et sert l’histoire (champ sert) ; aucun plan de remplissage.
-- montre et actions décrivent des réactions EXAGÉRÉES et lisibles sur un téléphone : larmes, gouttes de sueur, tremblements, cris, recul, sourire triomphant.
+- Commence le plan sur un geste ou un indice visible et termine-le avec une conséquence nouvelle. Varie le cadrage entre plans voisins. Une action principale lisible sur téléphone suffit. Alterne les moments immobiles et les déplacements motivés par l’histoire : entrer, suivre quelqu’un, traverser jusqu’à une porte ou s’approcher pour intervenir. Dans deplacement, indique qui bouge, son départ et sa destination. Prévois un cadrage qui laisse la place dès la première image.
+- Décris ce qui est visible par des consignes positives. Réserve les larmes, cris et gouttes de sueur aux plans qui les justifient. Un personnage silencieux réagit avec les yeux, les sourcils ou les mains, bouche fermée.
 - La dernière action de chaque plan est un geste qui ferme le plan et appelle le suivant (porte qui s’ouvre, objet qui tombe, regard choqué vers…) : c’est la transition.
 - Chaque réplique va au personnage qui parle vraiment à l’image ; les autres personnages présents sont dans muets. Chaque réplique a son jeu (comment elle est dite).
-- Chaque personnage garde sa tenue, son détail reconnaissable et sa place dans le cadre (champ place) du début à la fin ; image_prompt et video_prompt les reprennent.
-- Respiration : au moins 2 secondes par réplique, au plus 3 mots par seconde ; si un plan est trop chargé, enlève une réplique.
+- Limite la distribution visible à deux personnages quand la scène le permet, trois si l'action en a besoin. Dans les prompts de rendu, décris uniquement les personnages présents. Distingue les voix par leur énergie et leur timbre. Écris des phrases courtes et idiomatiques dans la langue cible, qui répondent à un geste ou à la réplique précédente.
+- Chaque personnage garde sa tenue et son détail reconnaissable. La place dans le cadre indique le départ et peut évoluer si le plan prévoit un déplacement.
+- Dans une scène de dialogue, vise environ trois quarts du budget de mots ou davantage si l’échange le mérite. Écris des phrases parlées complètes et propres à chaque personnage. Fais réagir au geste ou à la réplique précédente, avec des objections, des hésitations et du sous-texte selon l’enjeu. Fais coïncider les paroles et l’action sans accélérer la diction.
 - detail et tenue ne parlent JAMAIS de taille (interdits : énorme, gros, géant, immense, obèse, big, huge, giant…) : le moteur vidéo grossirait tout le personnage. Décris la forme, la couleur, la matière.
+- critical_mark est facultatif. Si une inscription ou un chiffre joue un rôle dans l'intrigue, indique sa valeur exacte et son support (objet ou personnage et emplacement) dans chaque plan où il doit être lisible. Reprends-le dans les deux prompts du plan. Si le signe est caché à ce moment de l'histoire, omets le champ. Les sous-titres sont ajoutés au montage.
+- Réserve state_changes aux modifications physiques qui restent visibles d'un plan à l'autre. Une émotion momentanée va dans montre et actions.
+'''
+
+FLOW_SCENE_RULES='''
+PRÉPARATION POUR FLOW :
+- Écris des personnages fictifs originaux et invente leurs vêtements, accessoires et décors. Ne demande ni ressemblance avec une personne réelle, ni personnage de franchise, logo, imitation de voix réelle ou reproduction reconnaissable d’une planche existante.
+- Fais porter le conflit par une décision, un objet original, un silence ou un désaccord. Pour une scène tendue, montre l’urgence et les réactions avec une mise en scène tous publics. Si un élément pose problème, change réellement l’action ou le visuel avant de produire la planche.
+- La première image doit permettre de tourner l’action prévue. Choisis un trajet simple et une caméra qui peut suivre le personnage sans coupe. Garde le visage lisible pendant ses paroles.
 '''
 
 def is_identical(j):
     return ((j.get('selected') or {}).get('source')=='owner_link' and j['config'].get('recreate')=='identical')
 
 def correction_ready(j):
-    return bool(is_identical(j) and j.get('rejected_script') and j.get('editorial_feedback'))
+    return bool(j.get('rejected_script') and j.get('editorial_feedback'))
 
 def correction_prompt(j):
     """Light rewrite, like the Atelier's « corrige et renvoie l'épisode ENTIER »: the refused script and its defects,
     without the source images. A full rewrite took 5 to 7 min each time (real case 06/11/2026, 4 refusals = 47 min)."""
+    sheet=j.get('sheet') or {}
+    choices=j.get('sheet_choice') or {}
+    approved=ideas.brief(sheet,choices.get('title',0),choices.get('hook',0),choices.get('call',0)) if j.get('sheet_approved') and sheet else ''
     return ('Voici un scénario JSON refusé par le contrôle avant les images. Défauts à corriger : '
             +json.dumps(j['editorial_feedback'],ensure_ascii=False)
-            +'\nCorrige UNIQUEMENT ces défauts : enlève des mots, n’allonge rien, ne change ni l’histoire, ni les personnages, ni l’ordre des scènes. '
+            +('\n'+approved+' Place uniquement les paroles dans dialogue[0].text.\n' if approved else '')
+            +'\nCorrige UNIQUEMENT les défauts signalés. Conserve le nombre de scènes et la langue. Pour un défaut de longueur, raccourcis seulement les répliques concernées. Pour un détail visible manquant, reprends exactement opening_plan.visible_detail dans les deux prompts de la première scène. Ne remplace pas le scénario par une seule scène. '
             'Pas de mots de taille (énorme, gros, géant, immense…) dans detail et tenue. Tout le reste reste identique.\n'
             'Renvoie le JSON ENTIER corrigé, seul, sans commentaire, dans un bloc ```json.\n\n```json\n'
             +json.dumps({k:v for k,v in j['rejected_script'].items() if k not in ('production_id','generation_task_id')},ensure_ascii=False)+'\n```')
@@ -918,18 +997,20 @@ def script_prompt(j):
     if correction_ready(j):return correction_prompt(j)
     ref=j['selected']; n=j['config']['scene_count']
     language=j['config'].get('language','Deutsch (de-DE)')
-    schema={'production_id':j['id'],'title':'Titre dans la langue choisie','cover_title':'Question courte dans la langue choisie','hook_text':'Accroche écrite à l’écran pendant les 3 premières secondes : 4 à 7 mots, question ou promesse choc, sans révéler la fin','description':'Description TikTok dans la langue choisie, mentionnant la création par IA','lieu':'LE MONDE DE TOUT L’ÉPISODE, une fois : époque, lumière, matières ; aucun nom, aucun logo, aucun texte lisible','lieux':{'CUISINE':'la pièce décrite pour un dessinateur'},'su_du_public':'ce que le spectateur VOIT avant les personnages','cliffhanger':'la dernière réplique','characters':[{'id':'fruit_a','name':'Prénom dans la langue choisie','role':'protagoniste | antagoniste | témoin','appearance':'âge, TÊTE DE FRUIT décrite (couleur, matière, signe), vêtements précis, attitude','tenue':'la tenue en quelques mots, toujours la même','detail':'LE détail reconnaissable de loin (ex. une mèche blanche sur le front)','place':'sa place fixe dans le cadre vertical : « À DROITE — la prune violette en sweat gris »','voice':'Voix native de la langue choisie, âge, timbre, ton','veut':'ce qu’il veut','image_prompt':'Prompt de référence dans la langue choisie'}],'scenes':[{'title':'Titre court du plan (2 à 4 mots, MAJUSCULES, langue choisie)','sert':'moteur | obstacle | aggravation | twist | revanche | appel','apporte':'ce que le spectateur apprend de NEUF dans ce plan, une phrase','lieu':'CUISINE','characters':['fruit_a'],'muets':['personnages présents qui ne parlent pas'],'meaning':'Action compréhensible sans le son','montre':'CE QUE L’IMAGE MONTRE, en majuscules : qui, où, quel geste, quel objet, quelle émotion exagérée','cadre':'PLAN TAILLE / GROS PLAN… : qui est où dans le cadre vertical','camera':'ce que fait la caméra, quelques mots','actions':['ACTION 1.','ACTION 2.','LE GESTE QUI FERME LE PLAN et appelle le suivant.'],'image_prompt':'Prompt d’image dans la langue choisie, 9:16','video_prompt':'Animation, caméra, action, position des locuteurs, lèvres et personnages silencieux','dialogue':[{'speaker':'fruit_a','text':'Réplique courte dans la langue choisie, 10 mots au plus','jeu':'3 à 6 mots de jeu : « dans un souffle, les mains sur la bouche »'}]}],'state_changes':[{'from_scene':2,'character':'fruit_a','change':'Changement d’apparence visible à partir de cette scène (blessure, vêtement déchiré, objet perdu, maquillage coulé…), langue choisie'}]}
+    schema={'production_id':j['id'],'title':'Titre dans la langue choisie','cover_title':'Question courte dans la langue choisie','hook_text':'Accroche écrite à l’écran pendant les 3 premières secondes : 4 à 7 mots, question ou promesse choc, sans révéler la fin','description':'Description TikTok dans la langue choisie, mentionnant la création par IA','lieu':'LE MONDE DE TOUT L’ÉPISODE, une fois : époque, lumière, matières ; sans enseignes ni logos','lieux':{'CUISINE':'la pièce décrite pour un dessinateur'},'su_du_public':'ce que le spectateur VOIT avant les personnages','cliffhanger':'la dernière réplique','characters':[{'id':'fruit_a','name':'Prénom dans la langue choisie','role':'protagoniste | antagoniste | témoin','appearance':'âge, TÊTE DE FRUIT décrite (couleur, matière, signe), vêtements précis, attitude','tenue':'la tenue en quelques mots, toujours la même','detail':'LE détail reconnaissable de loin (ex. une mèche blanche sur le front)','place':'sa position de départ habituelle dans le cadre vertical : « À DROITE — la prune violette en sweat gris »','voice':'Voix native de la langue choisie, âge, timbre, ton','veut':'ce qu’il veut','image_prompt':'Prompt de référence dans la langue choisie'}],'scenes':[{'title':'Titre court du plan (2 à 4 mots, MAJUSCULES, langue choisie)','sert':'moteur | obstacle | aggravation | twist | revanche | appel','apporte':'ce que le spectateur apprend de NEUF dans ce plan, une phrase','lieu':'CUISINE','characters':['fruit_a'],'muets':['personnages présents qui ne parlent pas'],'meaning':'Action compréhensible sans le son','montre':'CE QUE L’IMAGE MONTRE, en majuscules : qui, où, quel geste, quel objet, quelle émotion exagérée','cadre':'PLAN TAILLE / GROS PLAN… : qui est où dans le cadre vertical','camera':'ce que fait la caméra, quelques mots','actions':['ACTION 1.','ACTION 2.','LE GESTE QUI FERME LE PLAN et appelle le suivant.'],'image_prompt':'Prompt d’image dans la langue choisie, 9:16','video_prompt':'Animation, caméra, action, position des locuteurs, lèvres et personnages silencieux','dialogue':[{'speaker':'fruit_a','text':'Réplique naturelle dans la langue choisie, avec une intention claire','jeu':'3 à 6 mots de jeu : « dans un souffle, les mains sur la bouche »'}]}],'state_changes':[{'from_scene':2,'character':'fruit_a','change':'Changement d’apparence visible à partir de cette scène (blessure, vêtement déchiré, objet perdu, maquillage coulé…), langue choisie'}]}
     guidance=''
     owner_link=(ref or {}).get('source')=='owner_link'
     identical=owner_link and j['config'].get('recreate')=='identical'
-    # Announce the limit the validators actually enforce (editorial.validate: 20 for retention productions).
-    word_limit=engines.word_limit(j,20 if j.get('editorial_version')==2 and j.get('retention_version')==1 else 25)
+    # Use the same dialogue budget in the prompt and in validation.
+    word_limit=engines.word_limit(j)
+    schema['scenes'][0]['deplacement']='Facultatif : personnage, point de départ, trajet et destination'
     if identical:
         # A faithful remake never receives the originality rules (five new concepts, history to avoid): they made the
         # writer invent another story (real case 05/11/2026: a maid hiding her poverty became two sisters and a pendant).
         guidance=editorial.retention_instructions(j)
     elif j.get('editorial_version')==2:
-        schema['creative_selection']={'candidates':[{'title':'Titre du concept','hook':'Première réplique','conflict':'Conflit','setting':'Décor','twist':'Retournement','ending':'Fin','scores':{'hook':4,'clarity':4,'emotion':4,'novelty':5}} for _ in range(5)],'selected_index':0,'reason':'Justification éditoriale, pas une prédiction de vues'}
+        if not j.get('sheet_approved'):
+            schema['creative_selection']={'candidates':[{'title':'Titre du concept','hook':'Première réplique','conflict':'Conflit','setting':'Décor','twist':'Retournement','ending':'Fin','scores':{'hook':4,'clarity':4,'emotion':4,'novelty':5}} for _ in range(5)],'selected_index':0,'reason':'Justification éditoriale, pas une prédiction de vues'}
         if j.get('hook_version')==1:
             schema['opening_plan']={'visible_detail':'Objet ou geste visible dès la première image','question':'Question laissée ouverte par la première réplique','payoff_scene':n,'payoff':'Explication concrète apportée dans cette scène'}
         schema['story_signature']={'relationship':'short English relationship','setting':'short English setting','central_object':'short English object','twist_mechanism':'short English plot mechanism'}
@@ -937,11 +1018,48 @@ def script_prompt(j):
     else:guidance=editorial.STORY_CRAFT
     if identical and j.get('editorial_feedback'):guidance+='\nCorrections demandées : '+json.dumps(j['editorial_feedback'],ensure_ascii=False)
     guidance+=PLAN_RULES
+    if engines.of(j)=='flow' or engine_chain.flow_grok_policy(STATE.get('settings'),j['config']):
+        guidance+=FLOW_SCENE_RULES
+    schema['scenes'][0]['critical_mark']='Facultatif : inscription exacte et emplacement précis sur un objet ou un personnage, seulement si nécessaire à l’intrigue'
+    if not identical:
+        guidance+=(
+            '\nDramaturgie : suis un seul protagoniste et rends visible ce qu’il veut dès l’ouverture. '
+            'Place l’anomalie dans les cinq premiers mots de la première réplique. Montre la règle qui fait obstacle par une action. '
+            'Sème une fois un indice concret, puis fais-le payer près de la fin par un seul retournement. '
+            'Le retournement se voit avant d’être expliqué. La dernière scène montre sa conséquence et donne au protagoniste '
+            'une chute brève, puis l’appel validé si la fiche en prévoit un. '
+            'Pour une suite, pars de l’état final établi dans l’épisode précédent.'
+        )
+    if j.get('sheet_approved'):
+        guidance+=(
+            '\nFiche validée : garde le conflit, le retournement, la première réplique et l’appel choisis. '
+            'Découpe-les en actions visibles. Fais apparaître un indice concret avant la révélation, '
+            'puis montre ce qui change pour le personnage après cette révélation. '
+            'Dans un dialogue, chaque réponse doit réagir au geste ou à la phrase qui la précède. '
+            'Prévois le geste et la place du locuteur dans le cadre. Répartis les répliques trop longues '
+            'sur les scènes disponibles, sans ajouter de plans ni dépasser la durée prévue. '
+            'Avant de rendre le JSON, relis le scénario dans l’ordre : si un objet change de main, '
+            'si un vêtement est retiré ou si un signe physique est dévoilé, indique la première scène '
+            'où ce changement est visible dans state_changes et conserve-le dans les scènes suivantes. '
+            'Dans la fiche du personnage, décris son apparence de départ. '
+            'Dans le dernier plan, prononce l’appel choisi avec le personnage prévu. '
+            'Dans dialogue[0].text, écris uniquement les paroles de la première réplique, sans le nom du locuteur ni son jeu.'
+        )
     reference=(source_video.guidance(j['config'].get('recreate','inspired'),j.get('source_analysis'),len(j.get('source_captures') or []),n)+(f"\nInstructions en plus du propriétaire (à respecter) : {j['brief']}" if j.get('brief','').strip() else '')) if owner_link else None
-    return f'''Crée une mini-fiction de fruits {'qui refait fidèlement la vidéo indiquée' if identical else 'entièrement ORIGINALE'}. Langue demandée pour les dialogues, les voix, les textes de couverture, la description et les prompts (sauf les clés techniques et la signature narrative) : {language}. La langue demandée prime sur la langue française des instructions et des descriptions du schéma. Aucune traduction ni réplique dans une autre langue. Les personnages parlent avec des voix natives de la langue demandée. Réponds UNIQUEMENT avec du JSON valide, sans explication. Conserve les clés techniques du schéma en anglais. {reference if reference else 'Référence comme indice de tendance seulement, jamais copier les répliques ou les plans : '+json.dumps(ref,ensure_ascii=False)+'.'} Idée : {j['brief']}. Exactement {n} scènes de {engines.spec(j)['seconds']} secondes, {'les mêmes personnages que la vidéo d’origine (5 au plus : fusionne ou laisse en figurant muet les rôles secondaires)' if identical else '2 à 5 personnages (au moins 3 quand l’histoire le permet : héros, adversaire, témoin ou figurant)'}. Au plus {word_limit} mots parlés par scène pour les langues avec espaces ; pour les autres, une réplique assez courte pour être prononcée naturellement en moins de 7 secondes. Maximum 2 locuteurs par scène. {'HOOK : garde l’ouverture de la vidéo d’origine (elle a déjà prouvé qu’elle accroche) ; sa première réplique, reformulée, est dite dans les 2 premières secondes ; hook_text pose une question résolue seulement à la fin.' if identical else 'HOOK OBLIGATOIRE : la scène 1 s’ouvre sur l’instant le plus fort (danger, injustice, secret révélé), la première réplique est une phrase choc de moins de 10 mots dite dans les 2 premières secondes, et hook_text pose une question résolue seulement à la fin.'} Mouvement : chaque scène a un cadrage différent (gros plan, plan large, plongée), un mouvement de caméra (travelling, panoramique, zoom), des personnages qui se déplacent et agissent, un arrière-plan vivant (figurants, objets, lumière, météo) ; au moins deux lieux différents dans l’épisode. Retournement visible, conclusion satisfaisante. Pas de présentation comme fait réel. Animation 3D premium, fruits anthropomorphes avec peau de fruit aussi sur les mains, vêtements couvrants sans logos, grands visages expressifs, {'mêmes décors que la vidéo d’origine' if identical else 'décor cohérent avec l’intrigue choisie et différent des épisodes récents'}, vertical 9:16. Même identité et tenue partout, aucune voix de narrateur, personnages parlant à l'écran, caméra en mouvement continu dans chaque clip. Sous-titres ajoutés au montage. {guidance} Champ state_changes FACULTATIF : seulement si l’histoire change vraiment l’apparence visible d’un personnage (blessure, vêtement déchiré, objet perdu, maquillage coulé…), de 0 à 3 entrées, from_scene = numéro de la première scène (1 à {n}) où le changement se voit, character = identifiant du personnage, change = description courte ; sinon une liste vide []. Le champ cover_title doit être une accroche de couverture de 3 à 5 mots maximum dans la langue demandée, sans révéler la fin. Schéma : {json.dumps(schema,ensure_ascii=False)}'''
+    return f'''Crée une mini-fiction de fruits {'qui refait fidèlement la vidéo indiquée' if identical else 'entièrement ORIGINALE'}. Langue demandée pour les dialogues, les voix, les textes de couverture, la description et les prompts (sauf les clés techniques et la signature narrative) : {language}. La langue demandée prime sur la langue française des instructions et des descriptions du schéma. Aucune traduction ni réplique dans une autre langue. Les personnages parlent avec des voix natives de la langue demandée. Réponds UNIQUEMENT avec du JSON valide, sans explication. Conserve les clés techniques du schéma en anglais. {reference if reference else 'Référence comme indice de tendance seulement, jamais copier les répliques ou les plans : '+json.dumps(ref,ensure_ascii=False)+'.'} Idée : {j['brief']}. Exactement {n} scènes de {engines.spec(j)['seconds']} secondes, {'les mêmes personnages que la vidéo d’origine (5 au plus : fusionne ou laisse en figurant muet les rôles secondaires)' if identical else '2 à 5 personnages (au moins 3 quand l’histoire le permet : héros, adversaire, témoin ou figurant)'}. Au plus {word_limit} mots parlés par scène pour les langues avec espaces ; dans toutes les langues, vérifie que la scène peut être jouée au rythme naturel dans la durée du clip. Jusqu’à trois répliques, avec au maximum deux locuteurs par scène. {'HOOK : garde l’ouverture de la vidéo d’origine (elle a déjà prouvé qu’elle accroche) ; sa première réplique, reformulée, est dite dans les 2 premières secondes ; hook_text pose une question résolue seulement à la fin.' if identical else 'HOOK OBLIGATOIRE : la scène 1 s’ouvre sur l’instant le plus fort (danger, injustice, secret révélé), la première réplique est une phrase choc de moins de 10 mots dite dans les 2 premières secondes, et hook_text pose une question résolue seulement à la fin.'} Mouvement : chaque scène a un cadrage différent (gros plan, plan large, plongée), un mouvement de caméra motivé (travelling, panoramique, zoom), des gestes précis et un arrière-plan vivant par les objets, la lumière ou la météo ; au moins deux lieux différents dans l’épisode. Retournement visible, conclusion satisfaisante. Pas de présentation comme fait réel. Animation 3D premium, fruits anthropomorphes avec peau de fruit aussi sur les mains, vêtements couvrants sans logos, grands visages expressifs, {'mêmes décors que la vidéo d’origine' if identical else 'décor cohérent avec l’intrigue choisie et différent des épisodes récents'}, vertical 9:16. Même identité et tenue partout, aucune voix de narrateur, personnages parlant à l'écran, caméra en mouvement continu dans chaque clip. Sous-titres ajoutés au montage. {guidance} Champ state_changes FACULTATIF : seulement si l’histoire change vraiment l’apparence visible d’un personnage (blessure, vêtement déchiré, objet perdu, maquillage coulé…), de 0 à 3 entrées, from_scene = numéro de la première scène (1 à {n}) où le changement se voit, character = identifiant du personnage, change = description courte ; sinon une liste vide []. Le champ cover_title doit être une accroche de couverture de 3 à 5 mots maximum dans la langue demandée, sans révéler la fin. Schéma : {json.dumps(schema,ensure_ascii=False)}'''
 
 def horizontal(j): return (j.get('config') or {}).get('format')=='horizontal'
 def frame_size(j): return (1920,1080) if horizontal(j) else (1080,1920)  # best resolution for TikTok (owner priority)
+
+def normalize_flow_resolution(cfg):
+    """Our Omni Flash/Lite Flow connectors generate in native 720p; export size is separate.
+
+    Also protects jobs sent by an already-open older form and restored productions.
+    Keep the requested value as evidence instead of letting an unsupported setting block paid work.
+    """
+    if cfg.get('flow_model') in ('gemini_omni_flash','veo_3_1_lite') and cfg.get('flow_resolution')=='1080p':
+        cfg['flow_resolution_requested']='1080p';cfg['flow_resolution']='720p';return True
+    return False
 def check_publish_size(probe,path,expected):
     """The exported video must be exactly 1080p (1080 x 1920 or 1920 x 1080); never hand over a smaller one."""
     if not probe:return
@@ -1007,13 +1125,18 @@ def check_originality(j):
     event(j,'Contrôle d’originalité : '+str(j['originality']['score'])+' % · '+{'publish':'publication conseillée','fix':'corrections conseillées avant publication','hold':'publication déconseillée'}[j['originality']['verdict']]+'.')
     return j['originality']
 
-def flow_scan(state,client,accounts):
+def flow_scan(state,client,accounts,only_profile=None):
     """Google accounts found in this Chrome: one Flow profile each, real credits, automatic rotation."""
     added=updated=0;names=[]
     for a in accounts[:40]:
         email=str(a.get('email') or '').strip().lower()
         if not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+',email):continue
-        p=next((x for x in state['profiles'] if (x.get('flow_email') or x.get('label','')).lower()==email),None)
+        if only_profile and email!=only_profile.get('flow_email','').lower():continue
+        p=only_profile or next((x for x in state['profiles'] if (x.get('flow_email') or x.get('label','')).lower()==email),None)
+        if p and any(c.get('role') == 'flow' and c.get('flow_profile') == p['id']
+                     and c['id'] != client['id'] and not c.get('disabled')
+                     for c in state['clients'].values()):
+            continue
         if not p:
             p={'id':uid(),'label':email,'balance':0};state['profiles'].append(p);added+=1
         else:updated+=1
@@ -1024,19 +1147,25 @@ def flow_scan(state,client,accounts):
         if not p.get('flow_url'):
             # No project yet: each production creates its own project from this account's home page.
             p['flow_url']=f"https://flow.google.com/u/{int(a.get('slot',0))}/project/home";p['flow_url_home']=True
+        p['flow_url']=flow_accounts.at_slot(p['flow_url'],p['slot'])
+        # This scan just verified the email at its current Google slot. An older wrong-slot warning is obsolete.
+        if (p.get('readiness') or {}).get('state')=='fix' and 'Autre compte Google ouvert' in p['readiness'].get('reason',''):
+            p.pop('readiness',None)
         if isinstance(a.get('balance'),int) and 0<=a['balance']<=100000:
             flow_refill.read(p,a['balance'],time.time(),int(state.get('settings',{}).get('flow_daily',flow_refill.DAILY)));p['balance']=a['balance'];p['credit_source']='read';p['checked']=now();p.pop('blocked',None) if a['balance']>0 else p.update(blocked='credits')
         names.append(email)
-    if names:
+    if names and not only_profile:
         # Google renumbers /u/N when accounts are added or removed: an account of this browser that the scan no
         # longer finds must not keep a number that now opens another account (real case 04/11/2026: fruit123abc
         # kept /u/0, its balance checks read arnaudchewa65 and failed every 15 min). Kept, out of rotation.
         for x in state['profiles']:
             if x.get('flow_client')==client['id'] and x.get('slot') is not None and (x.get('flow_email') or '').lower() not in names:
                 x['slot']=None;x['auto_enabled']=False;x.pop('credit_probe',None);x.pop('refill_at',None)
-    state.setdefault('settings',{})['flow_auto']=True
+    if names:state.setdefault('settings',{})['flow_auto']=True
     total=sum(int(x.get('balance') or 0) for x in state['profiles'] if (x.get('flow_email') or '') in names)
-    if not names:return 'Aucun compte Google détecté dans cette fenêtre : ajoute tes comptes dans Chrome (photo de profil › Ajouter un compte), puis Détecter.'
+    if not names:
+        if only_profile:return 'Aucun compte correspondant dans ce profil Chrome. Ouvre la bonne session Google dans ce profil, puis réessaie.'
+        return 'Aucun compte Google détecté dans cette fenêtre. Connecte-toi avec « Ajouter un compte Google », puis clique sur « Détecter les comptes Flow ».'
     # Says "in this window": with several FruchtDrama windows the table below adds up all of them.
     return f'Dernière détection dans une fenêtre : {len(names)} compte(s) Google ({added} nouveau(x)), {total} crédits Flow sur ces comptes. Changement de compte automatique activé.'
 
@@ -1161,14 +1290,72 @@ def schedule(j):
         if not j.get('final'):
             j['status']='rendering';event(j,'Montage local relancé avec les médias existants.');start_render(j['id'])
 
+FLOW_REWRITE_FIELDS=('image_prompt','video_prompt','meaning','montre','cadre','camera','actions','deplacement','dialogue')
+
+
+def flow_rewrite_prompt(j,i):
+    scene=j['scenes'][i]
+    fields={k:scene[k] for k in FLOW_REWRITE_FIELDS if k in scene}
+    return (f'Adapte uniquement cette scène de {j["config"]["language"]} pour une animation Flow de 8 secondes. '
+            'Conserve les personnages, les locuteurs, la conséquence dans l’histoire et tout signe indispensable. '
+            'Conçois une nouvelle composition et, si nécessaire, remplace une action ou un accessoire problématique par une action réellement différente, '
+            'originale et tous publics. Évite les références reconnaissables à une œuvre ou à une personne réelle. '
+            'Garde des dialogues parlés et naturels, jusqu’à trois répliques et 24 mots en tout. '
+            'La planche décrit le départ, puis le clip décrit un mouvement réalisable. '
+            'Renvoie uniquement le JSON avec production_id, generation_task_id et scene_rewrite contenant les champs modifiés. '
+            'Inclue au minimum image_prompt et video_prompt, réellement différents. '
+            f'Personnages présents : {json.dumps(scene["characters"],ensure_ascii=False)}. '
+            f'Raison indiquée par Flow : {scene["engine_tries"][-1]["reason"]}. '
+            f'Scène : {json.dumps(fields,ensure_ascii=False)}')
+
+
+def apply_flow_rewrite(j,t,result):
+    i=int(t['slot'].split(':')[1])
+    scene=j['scenes'][i]
+    answer=parse_json(result.get('text',''))
+    changes=answer.get('scene_rewrite') if isinstance(answer,dict) else None
+    if (not scene.get('flow_rewrite_pending') or not isinstance(changes,dict)
+            or answer.get('production_id')!=j['id'] or answer.get('generation_task_id')!=t['id']):
+        raise ValueError('Adaptation Flow non associée à cette tâche.')
+    for key in ('image_prompt','video_prompt'):
+        value=changes.get(key)
+        if not isinstance(value,str) or not value.strip() or value.strip()==scene[key].strip():
+            raise ValueError('L’adaptation doit fournir deux nouveaux prompts.')
+    updated={**scene,**{key:changes[key] for key in FLOW_REWRITE_FIELDS if key in changes}}
+    lines=updated['dialogue']
+    if (not isinstance(lines,list) or not 1<=len(lines)<=engines.MAX_DIALOGUE_TURNS
+            or any(not isinstance(line,dict) or not isinstance(line.get('text'),str) or not line['text'].strip() for line in lines)
+            or {line.get('speaker') for line in lines}!={line['speaker'] for line in scene['dialogue']}
+            or sum(len(line['text'].split()) for line in lines)>engines.words_for('flow')):
+        raise ValueError('L’adaptation doit conserver les locuteurs et tenir dans huit secondes.')
+    if any(not isinstance(updated.get(key,''),str) for key in ('meaning','montre','cadre','camera','deplacement')):
+        raise ValueError('Consignes de mise en scène invalides.')
+    if not isinstance(updated.get('actions',[]),list) or any(not isinstance(action,str) for action in updated.get('actions',[])):
+        raise ValueError('Actions de la scène invalides.')
+    if scene.get('image'):
+        j.setdefault('redo_history',[]).append({'slot':f'image:{i}','file':scene['image'],'note':'adaptation après refus Flow','at':now()})
+    updated.pop('image',None)
+    updated.pop('flow_rewrite_pending',None)
+    j['scenes'][i]=updated
+    if j.get('board_review'):
+        j['board_review']['boards']=[board for board in j['board_review']['boards'] if board['index']!=i]
+    if j.get('script'):
+        j['script']['scenes'][i].update({k:copy.deepcopy(updated[k]) for k in FLOW_REWRITE_FIELDS if k in updated})
+        (job_dir(j)/'scenario.json').write_text(json.dumps(j['script'],ensure_ascii=False,indent=2),'utf-8')
+    event(j,f'Clip {i+1} : scène adaptée. Nouvelle planche avant le deuxième essai Flow.')
+
+
 def schedule_images(j):
     """Boards stage on two lanes: the chat lane draws the boards one by one (then the board check), while the video
     lane already animates each validated board, one clip at a time. The clips stage then makes only what is missing."""
     if not lane_busy(j,'chat'):
         for i,s in enumerate(j['scenes']):
+            if s.get('flow_rewrite_pending'):
+                add_task(j,'chat_text',{'provider':'chatgpt','prompt':flow_rewrite_prompt(j,i),
+                                       'response_kind':'flow_rewrite'},f'flow_rewrite:{i}');break
             if not s.get('image'):
                 attachments,states=scene_references(j,i)
-                add_task(j,'chat_image',{'provider':'chatgpt','prompt':s['image_prompt']+plan_image_block(j,s)+' Use attached character references. Same identity and outfit, no text, 9:16. Dynamic cinematic composition with a camera angle different from the other scenes, characters caught in action, detailed living background. Highest resolution available (at least 1024×1536), ultra sharp, no blur.'+state_note(j,states)+correction(j.get('corrections',{}).get(f'image:{i}')),'attachments':attachments},f'image:{i}');break
+                add_task(j,'chat_image',{'provider':'chatgpt','prompt':s['image_prompt']+plan_image_block(j,s)+' Use attached character references. Same identity and outfit, 9:16. Dynamic cinematic composition with a camera angle different from the other scenes, characters caught in action, detailed living background. Highest resolution available (at least 1024×1536), ultra sharp, no blur.'+state_note(j,states)+correction(j.get('corrections',{}).get(f'image:{i}')),'attachments':attachments},f'image:{i}');break
         else:
             if not board_gate(j):
                 # Every board drawn and validated: the clips stage waits for a clip still in progress, then goes on.
@@ -1178,7 +1365,7 @@ def schedule_images(j):
 def board_ready(j,i):
     """Board i may be animated: it is drawn and, when the board check is on, the check has given its verdict.
     The check looks at all boards together, so before its verdict no board counts as validated."""
-    if not j['scenes'][i].get('image'):return False
+    if j['scenes'][i].get('flow_rewrite_pending') or not j['scenes'][i].get('image'):return False
     return j['config'].get('board_controls','none')=='none' or bool(j.get('board_checked'))
 
 def held_clips(j):
@@ -1207,12 +1394,18 @@ def schedule_clips(j):
             return True
         return False
     if not active:
-        schedule_clip(j,todo.pop(0))
-        if j['status']!='running':return True
-        active=video_tasks(j)
-        if not active:return True
-    for i in todo[:max(0,video_slots(j)-len(active))]:
-        if not schedule_clip(j,i,early=True,parallel=True):break
+        # Find ready work before setting a global account/credit wait for the first scene.
+        for i in list(todo):
+            schedule_clip(j,i,early=True)
+            active=video_tasks(j)
+            if active:
+                todo.remove(i);break
+        if not active:
+            schedule_clip(j,todo[0]);return True
+    for i in todo:
+        if len(video_tasks(j))>=video_slots(j):break
+        # A Flow account waiting its turn must not starve a later clip ready on Grok.
+        schedule_clip(j,i,early=True,parallel=True)
     return True
 
 def early_clip(j):
@@ -1241,7 +1434,7 @@ def engine_ready(j,engine,moment=None):
     if engine not in engines.AVAILABLE:return False
     if engine=='flow':return flow_can_pay(j)
     # Owner 06/11/2026: Grok is costly, never used without their go-ahead (« Utiliser Grok » on the episode).
-    if engine=='grok' and not (j.get('grok_ok') or STATE.get('settings',{}).get('grok_auto')):return False
+    if engine=='grok' and not (j.get('grok_ok') or STATE.get('settings',{}).get('grok_auto') or engine_chain.flow_grok_policy(STATE.get('settings'),j['config'])):return False
     own=engine==engines.of(j)
     if j['config'].get('dry_run') and not own:return False  # a dry run checks the episode's engine only
     if (STATE.get('engine_walls') or {}).get(engine,0)>moment:return False
@@ -1258,6 +1451,8 @@ def engine_ready(j,engine,moment=None):
 def clip_engine_for(j,i,early=False):
     """Engine of the next try of clip i, or None when every engine has been tried (the clip waits for the owner)."""
     s=j['scenes'][i];chain=engine_chain.order(STATE.get('settings'),j['config'])
+    if engine_chain.flow_grok_policy(STATE.get('settings'),j['config']):
+        return engine_chain.flow_grok_next(s)
     if j['config'].get('dry_run'):return engines.of(j)
     ready=lambda e:engine_ready(j,e)
     nxt=engine_chain.pick(s,chain,ready)
@@ -1277,12 +1472,15 @@ def clip_engine_for(j,i,early=False):
 
 def clip_prompt(j,i,engine):
     s=j['scenes'][i]
-    cast='\n'.join(c['id']+': '+c['appearance']+' Voice: '+c['voice'] for c in j['characters'])
+    visible=s.get('characters') or [c['id'] for c in j['characters']]
+    cast='\n'.join(c['id']+': '+c['appearance']+' Voice: '+c['voice'] for c in j['characters'] if c['id'] in visible)
     dialog=dialogue_lines(j,s);language=j['config'].get('language','Deutsch (de-DE)');seconds=engines.ENGINES[engine]['seconds']
+    prompt=(f"One continuous shot, {seconds} seconds, portrait 9:16. Animate the attached image with the directed camera motion and gestures. "
+            f"No music. Spoken language ONLY: {language}. Natural native voices, no translation or extra narration. "
+            f"Only the following cast appears. Preserve their identity.\n{cast}\n{s['video_prompt']}{plan_video_block(j,s)}\n"
+            f"Exact dialogue in this order; only the named speaker moves their lips, all others stay silent:\n{dialog}")
     if engine=='flow':
-        prompt=f"One continuous shot, 8 seconds, portrait 9:16. No text, no music. Spoken language ONLY: {language}. Natural native voices in the requested language, no translation or extra narration. Preserve identity.\n{cast}\n{s['video_prompt']}{plan_video_block(j,s)}\nExact dialogue in this order; only the named speaker moves their lips, all others stay silent:\n{dialog}"
-    else:
-        prompt=f"One continuous shot, {seconds} seconds, portrait 9:16. Animate the attached image with real motion: the camera moves (dolly, pan or push-in), characters walk, turn and use their hands, the background is alive (extras, objects, light). No text, no music. Spoken language ONLY: {language}. Natural native voices, no translation or extra narration. Preserve identity.\n{cast}\n{s['video_prompt']}{plan_video_block(j,s)}\nExact dialogue in this order; only the named speaker moves their lips, all others stay silent:\n{dialog}"
+        prompt+='\nUse the reference as the first frame. Keep the fictional cast and setting original, and use a general-audience presentation.'
     prompt+=correction(j.get('corrections',{}).get(f'clip:{i}'))
     # Last round (every engine refused): the scene is reworded once so that an engine accepts it.
     return engine_chain.soften(prompt) if engine_chain.round_of(s)>=engine_chain.FINAL_ROUND else prompt
@@ -1336,6 +1534,8 @@ def schedule_engine_clip(j,i,engine,early=False,parallel=False):
 
 def schedule_flow_clip(j,i,early=False,parallel=False):
     s=j['scenes'][i]
+    if normalize_flow_resolution(j['config']):
+        event(j,'Réglage Flow corrigé avant envoi : génération native 720p pour ce modèle ; export final 1080p conservé.')
     flow_accounts.follow_active_browser(STATE)
     cost=j['config']['flow_cost'];busy=busy_flow_profiles()
     if parallel:
@@ -1395,6 +1595,20 @@ def clip_failed(j,t,result,kind):
             schedule(j);return True
         if result.get('flow_blocked') in ('credits','unavailable','not_ready') and (t.get('payload') or {}).get('flow_route'):
             return False  # this Google account, not Flow itself: the next Flow account, then the next engine (schedule_clip)
+    if engine_chain.flow_grok_policy(STATE.get('settings'),j['config']):
+        engine_chain.record(scene,engine,kind,reason,now())
+        nxt=engine_chain.flow_grok_next(scene)
+        t['status']='failed';j['status']='running'
+        if engine=='flow' and kind=='refusal' and nxt=='flow':
+            scene['flow_rewrite_pending']=True;j['stage']='images'
+            event(j,f'Clip {i+1} : refus confirmé de Flow. Adaptation de la scène avant le deuxième essai.')
+            schedule(j);return True
+        event(j,engine_chain.line(i,engine,kind,reason,nxt))
+        if not nxt:
+            scene['engine_exhausted']=True
+            if engine=='flow':j['status']='attention'  # shared Flow settings: fix once before trying every other clip
+            alert(j,'action',f'Clip {i+1} : '+('Grok n’a pas livré le clip après le refus de Flow.' if engine=='grok' else 'Flow rencontre un problème technique ; Grok est réservé aux refus de génération.')+' '+engine_chain.short(reason))
+        schedule(j);return True
     chain=engine_chain.order(STATE.get('settings'),j['config'])
     ready=lambda e:engine_ready(j,e)
     if kind=='quota' and t['kind']=='engine_video':
@@ -1704,11 +1918,11 @@ def edit_script(j,changes):
             if not isinstance(lines,list):raise ValueError('Dialogue de scène attendu')
             scene['dialogue']=[{'speaker':str(x.get('speaker','')),'text':' '.join(str(x.get('text','')).split())} for x in lines if isinstance(x,dict)]
     if draft==j['script']:return False
-    validate_script(draft,j['config']['scene_count'])
+    validate_script(draft,j['config']['scene_count'],word_limit=max(25,engines.word_limit(j)))
     if j.get('editorial_version')==2 and j.get('retention_version')==1:
         for i,scene in enumerate(draft['scenes']):
-            if len(scene['dialogue'])>2 or sum(len(x['text'].split()) for x in scene['dialogue'])>engines.word_limit(j):
-                raise ValueError(f"Scène {i+1} : deux répliques et {engines.word_limit(j)} mots au plus pour tenir dans le clip de {engines.spec(j)['seconds']} secondes")
+            if len(scene['dialogue'])>engines.MAX_DIALOGUE_TURNS or len({x['speaker'] for x in scene['dialogue']})>2 or sum(len(x['text'].split()) for x in scene['dialogue'])>engines.word_limit(j):
+                raise ValueError(f"Scène {i+1} : trois répliques entre deux personnages et {engines.word_limit(j)} mots au plus pour tenir dans le clip de {engines.spec(j)['seconds']} secondes")
     j['script']=draft;j['title']=draft['title']
     for scene,source in zip(j['scenes'],draft['scenes']):scene['dialogue']=copy.deepcopy(source['dialogue'])
     d=job_dir(j);(d/'scenario.json').write_text(json.dumps(draft,ensure_ascii=False,indent=2),'utf-8');(d/'description.txt').write_text(draft['description'],'utf-8')
@@ -1718,7 +1932,7 @@ def edit_script(j,changes):
 def store_script(j,s):
     if s.get('production_id') and s['production_id']!=j['id']:raise ValueError('Ce scénario appartient à une autre production')
     identical=is_identical(j)
-    validate_script(s,j['config']['scene_count'],check_size=not identical)
+    validate_script(s,j['config']['scene_count'],check_size=not identical,word_limit=engines.word_limit(j))
     if identical:
         # Faithful remake: no concept comparison, no novelty check against the history; only what fits in the clips.
         # Like the Atelier, every defect is listed in one refusal: one rewrite fixes them all (one per refusal cost 5 min each).
@@ -1728,10 +1942,15 @@ def store_script(j,s):
         limit=max(engines.word_limit(j),int(3*engines.spec(j)['seconds']))
         for i,scene in enumerate(s['scenes']):
             lines=scene.get('dialogue',[]);words=sum(len(x['text'].split()) for x in lines)
-            if len(lines)>2 or words>limit:
-                problems.append(f"Scène {i+1} : {len(lines)} réplique(s) et {words} mots, deux répliques et {limit} mots au plus pour tenir dans le clip de {engines.spec(j)['seconds']} secondes ; enlève des mots, n'allonge rien")
+            if len(lines)>engines.MAX_DIALOGUE_TURNS or len({line['speaker'] for line in lines})>2 or words>limit:
+                problems.append(f"Scène {i+1} : {len(lines)} réplique(s) et {words} mots, trois répliques entre deux personnages et {limit} mots au plus pour tenir dans le clip de {engines.spec(j)['seconds']} secondes ; enlève des mots, n'allonge rien")
         if problems:raise ValueError(' ; '.join(problems))
-    else:editorial.validate(s,j,STATE['jobs'])
+    else:
+        if j.get('sheet_approved'):
+            editorial.restore_approved_choices(s,j)
+            validate_script(s,j['config']['scene_count'],word_limit=engines.word_limit(j))
+        editorial.validate(s,j,STATE['jobs'])
+    j.pop('editorial_feedback',None);j.pop('rejected_script',None)
     j['script']=s; j['characters']=copy.deepcopy(s['characters']); j['scenes']=copy.deepcopy(s['scenes']); j['title']=s['title']; j['stage']='characters'; j['status']='running'
     v=j.get('variant') or {}
     if v.get('kind')=='language':
@@ -1751,7 +1970,12 @@ def store_script(j,s):
 def apply_research(j,rows):
     if j.get('filon_only'):
         # Filon refresh: keep the gallery, never start a story.
-        j['candidates']=rank_candidates(rows,j['config'].get('language','Deutsch (de-DE)'))[:60];j['stage']='done';j['status']='done'
+        candidates=rank_candidates(rows,j['config'].get('language','Deutsch (de-DE)'))[:60]
+        if not candidates:
+            j['status']='attention'
+            event(j,'TikTok n’a renvoyé aucun lien vidéo exploitable. Ouvre TikTok dans la fenêtre FruchtDrama, vérifie la recherche puis actualise à nouveau.')
+            return
+        j['candidates']=candidates;j['stage']='done';j['status']='done'
         for c in j['candidates']:c['niche']=j['config'].get('filon_niche','Fruits')
         thumbs.warm([c['url'] for c in j['candidates']],DATA)
         STATE.setdefault('settings',{})['filon_refreshed']=now();event(j,'Filon actualisé : '+str(len(j['candidates']))+' vidéo(s).');return
@@ -1780,12 +2004,31 @@ def apply_research(j,rows):
 def accept_task_result(t,result):
     j=job_by(t['job'])
     was_paused=j['status']=='paused'
+    if t.get('slot')=='cover_review' and j.get('stage')!='cover':
+        t['status']='cancelled'
+        return
     if not result.get('ok') and t.get('kind') in ('flow_video','engine_video') and result.get('dry_run') is True and t.get('payload',{}).get('dry_run') and result.get('generation_submitted') is False:
         t['status']='cancelled';t['dry_run_passed']=now();j['dry_run_passed']=now();j['status']='paused'
         event(j,str(result.get('error','Essai à blanc réussi.'))[:600]+' Désactivez l’essai à blanc puis cliquez sur Reprendre pour générer réellement.')
         return
     if not result.get('ok'):
         kind=errors.classify(result);t['error_kind']=kind
+        if (not was_paused and j.get('autopilot') and t.get('slot')=='cover_review'
+                and kind in errors.RETRYABLE and j.get('cover_file')
+                and (t.get('payload') or {}).get('file')==j['cover_file']):
+            t['status']='failed'
+            j['cover_review_unavailable']=j['cover_file']
+            alert(j,'auto','Revue automatique de la miniature indisponible. La miniature existante est conservée et le montage continue. Vérifie-la avant publication.')
+            schedule(j)
+            return
+        if (not was_paused and j.get('autopilot') and t.get('kind') in ('chat_text','chat_image')
+                and result.get('generation_submitted') is False and kind in errors.RETRYABLE
+                and not any(old.get('retried_before_send') for old in STATE['tasks']
+                            if old['job']==j['id'] and old.get('slot')==t.get('slot'))):
+            t['status']='failed';t['retried_before_send']=True
+            event(j,'Incident de connexion au navigateur avant l’envoi : nouvel essai automatique unique.')
+            schedule(j)
+            return
         j['last_error']={'kind':kind,'slot':t.get('slot'),'task':t.get('id'),'at':now()}
         reservation=t.get('reservation')
         if t.get('kind')=='flow_video' and result.get('generation_submitted') is False and reservation and not reservation.get('refunded'):
@@ -1845,6 +2088,7 @@ def accept_task_result(t,result):
         return
     slot=t['slot']
     if slot=='research': apply_research(j,result.get('candidates',[]))
+    elif slot.startswith('flow_rewrite:'):apply_flow_rewrite(j,t,result)
     elif slot=='board_review':
         j['board_review']=board_check.validate(parse_json(result.get('text','')),j,t['id'])
     elif slot=='cover_review':
@@ -1885,8 +2129,7 @@ def accept_task_result(t,result):
             draft=parse_json(result.get('text',''));store_script(j,draft);j.pop('rejected_script',None)
         except ValueError as e:
             # Kept for a light correction (Atelier-like): the next request sends this script and its defects only.
-            if isinstance(draft,dict) and is_identical(j) and isinstance(draft.get('scenes'),list) and len(draft['scenes'])==j['config']['scene_count']:j['rejected_script']=draft
-            else:j.pop('rejected_script',None)
+            if isinstance(draft,dict) and isinstance(draft.get('scenes'),list) and len(draft['scenes'])==j['config']['scene_count']:j['rejected_script']=copy.deepcopy(draft)
             # Editorial refusals and structurally invalid JSON share the same bounded rewrite.
             t['status']='failed';t['error']=str(e);j['editorial_attempts']=j.get('editorial_attempts',0)+1
             j['editorial_feedback']=[str(e)];j['stage']='script'
@@ -1991,7 +2234,10 @@ def make_variant(j,kind,language=''):
 
 def render_job(id):
     try:
-        with LOCK: j=copy.deepcopy(job_by(id)); d=job_dir(j)
+        with LOCK:
+            current=job_by(id)
+            if current is None:return
+            j=copy.deepcopy(current); d=job_dir(j)
         ff=shutil.which('ffmpeg')
         if not ff: raise RuntimeError('ffmpeg introuvable. Installe ffmpeg et relance le studio.')
         aligned_count=0
@@ -2073,7 +2319,9 @@ def render_job(id):
             else:
                 run_command([ff,'-y','-i',str(d/'final.mp4'),'-frames:v','1',str(d/'cover-frame.jpg')]);make_cover(d/'cover-frame.jpg',cover_path,j['script']['cover_title'],frame_size(j))
         with LOCK:
-            actual=job_by(id); actual['stage']='done'; actual['status']='done'; actual['rendered_at']=now(); actual['final']=asset_url(actual,'final.mp4'); actual['cover']=asset_url(actual,cover_file); actual['qc']={'export':'Réussi : MP4 '+('horizontal 1920 × 1080' if horizontal(j) else 'vertical 1080 × 1920')+', haute qualité, audio normalisé.','subtitles':f'{aligned_count}/{len(j["scenes"])} scènes calées sur reconnaissance vocale ; autres timings estimés. Contrôle à l’écoute nécessaire.','lips':'Synchronisation labiale non vérifiée automatiquement.','duration':round(sum(lengths)-fade*max(len(lengths)-1,0)),'duration_target':montage.target(j['config'].get('duration')),'montage':montage.summary({**mset,'karaoke':bool(j['config'].get('karaoke'))})+('' if subtitles else ' · sans sous-titres')}; event(actual,'Export terminé. Un contrôle visuel et audio reste nécessaire avant publication.')
+            actual=job_by(id)
+            if actual is None:return
+            actual['stage']='done'; actual['status']='done'; actual['rendered_at']=now(); actual['final']=asset_url(actual,'final.mp4'); actual['cover']=asset_url(actual,cover_file); actual['qc']={'export':'Réussi : MP4 '+('horizontal 1920 × 1080' if horizontal(j) else 'vertical 1080 × 1920')+', haute qualité, audio normalisé.','subtitles':f'{aligned_count}/{len(j["scenes"])} scènes calées sur reconnaissance vocale ; autres timings estimés. Contrôle à l’écoute nécessaire.','lips':'Synchronisation labiale non vérifiée automatiquement.','duration':round(sum(lengths)-fade*max(len(lengths)-1,0)),'duration_target':montage.target(j['config'].get('duration')),'montage':montage.summary({**mset,'karaoke':bool(j['config'].get('karaoke'))})+('' if subtitles else ' · sans sous-titres')}; event(actual,'Export terminé. Un contrôle visuel et audio reste nécessaire avant publication.')
             goal=montage.target(actual['config'].get('duration'));got=sum(lengths)-fade*max(len(lengths)-1,0)
             if goal and got<goal-0.05:event(actual,f'Durée finale {got:.1f} s, en dessous des {goal:g} s visés : il manque des plans. Ajoutez une scène ou reprenez avec une durée plus courte.'); check_originality(actual)
             backup_story(actual)
@@ -2087,7 +2335,9 @@ def render_job(id):
             except Exception as e:log_error('Kit de publication',e)
     except Exception as e:
         with LOCK:
-            j=job_by(id); j['status']='attention'; event(j,'Montage : '+str(e)); save()
+            j=job_by(id)
+            if j is not None:
+                j['status']='attention'; event(j,'Montage : '+str(e)); save()
     finally: BUSY.discard(id)
 
 def start_render(id):
@@ -2150,11 +2400,48 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     c=STATE['clients'].get(urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get('client',[''])[0])
                     if not c or c.get('disabled') or c.get('role') not in ('all','flow'):return self.send_json([])
                     pending=STATE.get('bridge_requests',[])
+                    def addressed(request):
+                        kind=request.get('type')
+                        if kind=='show' and request.get('profile'):
+                            owner=(profile_by(request['profile']['id']) or {}).get('flow_client')
+                            return owner==c['id'] if owner else c['role']=='all'
+                        if kind=='scan_flow' and request.get('profile'):
+                            return (profile_by(request['profile']) or {}).get('flow_client')==c['id']
+                        if kind in ('open','show','add_google','scan_flow'):
+                            return c['role']=='all'
+                        return True
                     if urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get('light',[''])[0]=='1':
                         # A task is running: only the owner's clicks that show a tab are done now; checks wait for idle lanes.
-                        quick=[r for r in pending if r.get('type') in ('open','show','add_google')]
+                        quick=[r for r in pending if r.get('type') in ('open','show','add_google') and addressed(r)]
                         STATE['bridge_requests']=[r for r in pending if r not in quick];save();return self.send_json(quick)
-                    STATE['bridge_requests']=[];save();return self.send_json(pending)
+                    ready_requests, remaining = [], []
+                    for request in pending:
+                        if not addressed(request):
+                            remaining.append(request)
+                            continue
+                        if request['type'] != 'readiness':
+                            ready_requests.append(request)
+                            continue
+                        sites = request.get('sites', [])
+                        targets = request.get('profiles', [])
+                        own_sites = sites if c['role'] == 'all' else []
+                        own_targets = []
+                        for target in targets:
+                            profile = profile_by(target['id'])
+                            if profile and profile.get('flow_client') == c['id']:
+                                own_targets.append(readiness.profile_target(profile, flow_accounts.account_home))
+                            elif not (profile or {}).get('flow_client') and c['role'] == 'all':
+                                own_targets.append(target)
+                        if own_sites or own_targets:
+                            ready_requests.append({**request, 'sites': own_sites, 'profiles': own_targets})
+                        claimed_profiles = {target['id'] for target in own_targets}
+                        other_targets = [target for target in targets if target['id'] not in claimed_profiles]
+                        other_sites = [] if own_sites else sites
+                        if other_sites or other_targets:
+                            remaining.append({**request, 'sites': other_sites, 'profiles': other_targets})
+                    STATE['bridge_requests'] = remaining
+                    save()
+                    return self.send_json(ready_requests)
                 if path=='/api/report':
                     # P4-1: copiable failure report, without token, pairing code or e-mail addresses.
                     if self.headers.get('Sec-Fetch-Site')=='cross-site': return self.send_json({'error':'Accès local requis'},403)
@@ -2168,7 +2455,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if path=='/api/state':
                     # Cross-origin fetches cannot read the pairing code.
                     if self.headers.get('Sec-Fetch-Site')=='cross-site': return self.send_json({'error':'Accès local requis'},403)
-                    return self.send_json(public_state())
+                    light=urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get('view')==['studio']
+                    return self.send_json(public_state(light=light))
                 if path=='/api/bridge/credit-check':
                     if not self.auth_bridge():return self.send_json({'error':'Appairage requis'},401)
                     client=urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get('client',[''])[0]
@@ -2201,6 +2489,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             # One tab per site: one clip at a time per engine (Grok, Arena, Vidogrid each in its tab).
                             if t['kind']=='engine_video' and any(o.get('kind')=='engine_video' and (o.get('payload') or {}).get('engine')==t['payload'].get('engine') for o in STATE['tasks'] if o['status']=='claimed'):continue
                         if t['kind']=='flow_video':
+                            if normalize_flow_resolution(j['config']):event(j,'Ancien réglage 1080p corrigé en 720p avant attribution du clip Flow.')
+                            if t.get('payload',{}).get('model') in ('gemini_omni_flash','veo_3_1_lite') and t['payload'].get('resolution')=='1080p':
+                                t['payload']['resolution']='720p';t['payload']['resolution_requested']='1080p'
                             # Never two clips on the same account at once: one reservation per account, one tab per project.
                             if any(other['kind'] in ('flow_video','flow_collect') and other['status']=='claimed' and (other.get('profile')==t.get('profile') or not lane) for other in STATE['tasks']):continue
                             p=profile_by(t['profile']); cost=t['payload']['cost']
@@ -2352,6 +2643,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     p=next((p for p in STATE['profiles'] if p.get('flow_email',p.get('label','')).lower()==email),None)
                     if not p:raise ValueError('Ajoutez ce compte dans Connexions et renseignez son solde vérifié avant de le mémoriser')
                     if any(t['status']=='claimed' and t.get('profile')==p['id'] for t in STATE['tasks']):raise ValueError('Attendez la fin du clip en cours avant de modifier ce compte')
+                    if p.get('flow_client') != c['id']:
+                        p.pop('readiness', None)
+                        p.pop('credit_probe', None)
+                        if p.get('blocked') == 'unavailable':
+                            p.pop('blocked', None)
+                    p.pop('flow_url_home', None)
                     p.update(flow_url=url,flow_email=email,flow_client=c['id'],auto_enabled=True)
                     STATE['settings']['flow_auto']=True;save();return self.send_json({'ok':True,'profile':p['id']})
                 if path=='/api/bridge/flow-slot':
@@ -2360,7 +2657,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     if not t:raise ValueError('Tâche Flow non associée à cette passerelle')
                     slot=b.get('slot')
                     if isinstance(slot,bool) or not isinstance(slot,int) or not 0<=slot<=20:raise ValueError('Numéro de compte invalide')
-                    move=lambda u:re.sub(r'/u/\d+/','/u/'+str(slot)+'/',u,count=1) if isinstance(u,str) else u
+                    move=lambda u:flow_accounts.at_slot(u,slot) if isinstance(u,str) else u
                     p=profile_by(t.get('profile'));j=job_by(t['job'])
                     if p:p['flow_url']=move(p.get('flow_url'));p['slot']=slot
                     for x in STATE['tasks']:
@@ -2379,7 +2676,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if path=='/api/bridge/progress':
                     t=next((t for t in STATE['tasks'] if t['id']==b.get('task') and t.get('client')==b.get('client') and t['status']=='claimed'),None)
                     if not t:raise ValueError('Tâche non associée à ce navigateur')
-                    j=job_by(t['job']);message=readable_progress(str(b.get('message','')))[:240]
+                    j=job_by(t['job']);message=readable_progress(str(b.get('message','')),t.get('slot'))[:240]
                     if j['status']!='paused' and message and message!=t.get('progress'):
                         t['progress']=message;t['progress_at']=now();event(j,message);save()
                     return self.send_json({'ok':True})
@@ -2412,7 +2709,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         if j['status']=='paused':raise ValueError('Production en pause : récupération automatique suspendue')
                     for old in STATE['tasks']:
                         if old['job']==j['id'] and old['status'] in ('queued','claimed'):old['status']='cancelled'
-                    t={'id':uid(),'job':j['id'],'kind':'chat_collect','slot':'script','status':'claimed','client':client,'created':now(),'claimed':now(),'payload':{'provider':j['config']['provider'],'scene_count':j['config']['scene_count']}}
+                    t={'id':uid(),'job':j['id'],'kind':'chat_collect','slot':'script','status':'claimed','client':client,'created':now(),'claimed':now(),'payload':{'provider':j['config']['provider'],'scene_count':j['config']['scene_count'],'expected_job':j['id']}}
                     STATE['tasks'].append(t);j['status']='running';event(j,'Récupération de la réponse existante dans l’onglet choisi ; aucun nouveau prompt.');save();return self.send_json(t)
                 if path=='/api/bridge/recover-video':
                     client=b.get('client');old=next((t for t in STATE['tasks'] if t['id']==b.get('previous_task') and t.get('client')==client and t['kind']=='flow_video' and t['status']=='failed'),None)
@@ -2557,15 +2854,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     queue=STATE.setdefault('bridge_requests',[])
                     item={'type':action,'site':b.get('site')} if action=='open' else {'type':action,'job':b.get('job')} if action=='recover' else {'type':action}
                     if action=='scan_flow' and b.get('check'):item['then_check']=True  # Mes comptes › Google Flow › Vérifier
+                    if action=='scan_flow' and b.get('check_all') is True:item.update(then_check=True,check_all=True)
+                    if action=='scan_flow' and b.get('profile'):
+                        profile=profile_by(b['profile'])
+                        if not profile or not client_online(STATE['clients'].get(profile.get('flow_client'))):
+                            raise ValueError('Ouvre d’abord le profil Chrome de ce compte Flow.')
+                        item['profile']=profile['id']
                     if item not in queue:queue.append(item)
-                    if action in ('register_flow','tidy','recover','scan_flow','add_google'):STATE['bridge_notice']={'at':now(),'action':action,'pending':True,'text':'Demande envoyée à la fenêtre FruchtDrama…'}
+                    if action in ('open','register_flow','tidy','recover','scan_flow','add_google'):STATE['bridge_notice']={'at':now(),'action':action,'pending':True,'text':'Demande en attente du connecteur FruchtDrama…'}
                     if action=='check':STATE.setdefault('sites',{})['_requested']=now()
                 elif path=='/api/bridge/flow-scan':
                     c=STATE['clients'].get(b.get('client'))
                     if not c:raise ValueError('Passerelle inconnue')
+                    only_profile=profile_by(b.get('profile') or c.get('flow_profile'))
+                    if (b.get('profile') or c.get('role')=='flow') and (not only_profile or only_profile.get('flow_client')!=c['id']):
+                        raise ValueError('Ce compte Flow est associé à un autre profil Chrome.')
                     STATE['bridge_notice']={'at':now(),'action':'scan_flow','ok':True,'text':''}
-                    message=flow_scan(STATE,c,b.get('accounts') or [])
-                    STATE['bridge_notice']['text']=message;save();return self.send_json({'ok':True,'message':message})
+                    message=flow_scan(STATE,c,b.get('accounts') or [],only_profile)
+                    detected=not message.startswith('Aucun compte')
+                    STATE['bridge_notice'].update(text=message,ok=detected)
+                    save();return self.send_json({'ok':True,'detected':detected,'message':message})
                 elif path=='/api/bridge/notice':
                     if b.get('client') not in STATE['clients']:raise ValueError('Passerelle inconnue')
                     STATE['bridge_notice']={'at':now(),'action':str(b.get('action',''))[:20],'ok':bool(b.get('ok')),'text':str(b.get('text',''))[:300]}
@@ -2574,6 +2882,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     c=STATE['clients'].get(b.get('client'))
                     if not c:raise ValueError('Passerelle inconnue')
                     c['seen']=now()
+                    b['profiles'] = {pid: result for pid, result in (b.get('profiles') or {}).items()
+                                     if (profile_by(pid) or {}).get('flow_client') in (None, c['id'])}
+                    if c.get('role') == 'flow':
+                        b['sites'] = {}
                     busy={t.get('profile') for t in STATE['tasks'] if t['status']=='claimed' and t.get('kind') in ('flow_video','flow_collect')}
                     readiness.apply_report(STATE,b,now(),time.time(),busy,int(STATE.get('settings',{}).get('flow_daily',flow_refill.DAILY)))
                     # A service found signed in with a readable address joins Mes comptes by itself (address only, no password).
@@ -2582,8 +2894,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         if name in ('chatgpt','claude','grok','arena','vidogrid') and entry.get('state')=='ready' and entry.get('email'):
                             try:identities.add(STATE,entry['email'],[name],new_id=uid)
                             except ValueError:pass
+                    completed = {'site:' + name for name in b.get('sites', {})}
+                    completed.update('flow:' + pid for pid in b['profiles'])
                     for j in STATE['jobs']:
-                        if j.get('accounts_check') and (not b.get('id') or j['accounts_check'].get('id')==b.get('id')):end_check(j)
+                        check = j.get('accounts_check')
+                        if not check or (b.get('id') and check['id'] != b['id']):
+                            continue
+                        check['pending'] = [key for key in check.get('pending', []) if key not in completed]
+                        if not check['pending']:
+                            end_check(j)
                     rows=[v for v in list((b.get('sites') or {}).values())+list((b.get('profiles') or {}).values()) if isinstance(v,dict)]
                     ready=sum(1 for v in rows if v.get('state')=='ready')
                     STATE['bridge_notice']={'at':now(),'action':'readiness','ok':ready==len(rows),'text':f'Comptes vérifiés : {ready} prêt(s) sur {len(rows)}.'}
@@ -2591,13 +2910,30 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 elif path=='/api/bridge/readiness-request':
                     # The FruchtDrama window was just opened: every account is checked in the background.
                     if b.get('client') not in STATE['clients']:raise ValueError('Passerelle inconnue')
-                    full=readiness.full_targets(STATE);request_readiness(full['sites'],full['profiles'],background=b.get('background',True) is not False);save();return self.send_json({'ok':True})
+                    full=readiness.full_targets(STATE)
+                    sites=[] if b.get('flow_only') is True else full['sites']
+                    profiles=full['profiles']
+                    if b.get('profile'):
+                        profile=profile_by(b['profile'])
+                        if not profile or profile.get('flow_client')!=b['client']:raise ValueError('Compte Flow associé à un autre profil Chrome.')
+                        sites,profiles=[],[profile['id']]
+                    request_readiness(sites,profiles,background=b.get('background',True) is not False)
+                    save();return self.send_json({'ok':True})
                 elif path=='/api/bridge/sites':
                     c=STATE['clients'].get(b.get('client'))
                     if not c:raise ValueError('Passerelle inconnue')
                     sites={k:{'connected':bool(v.get('connected')),'email':str(v.get('email') or '')[:120] or None,'challenge':bool(v.get('challenge')),'checked':now()} for k,v in (b.get('sites') or {}).items() if k in SITES}
                     # partial: one site re-read after « Se connecter » ; the others keep their last state.
-                    STATE['sites']={**{k:v for k,v in STATE.get('sites',{}).items() if not k.startswith('_')},**sites} if b.get('partial') else sites;save();return self.send_json({'ok':True})
+                    if b.get('partial'):
+                        STATE.setdefault('sites',{}).update(sites)
+                        if c.get('role','all')=='all':
+                            for name, session in sites.items():
+                                if name in identities.SERVICES and name!='flow' and session['connected'] and not session['challenge']:
+                                    entry=readiness.clean_entry({'state':'ready','email':session['email']},session['checked'])
+                                    readiness.store(STATE)['sites'][name]=entry
+                                    if entry.get('email'):identities.add(STATE,entry['email'],[name],new_id=uid)
+                    else:STATE['sites']=sites
+                    save();return self.send_json({'ok':True})
                 elif path=='/api/settings':
                     if 'language' in b:STATE['settings']['language']=creation_language(b['language'])
                     for k in CLAUDE_DEFAULTS:
@@ -2617,6 +2953,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     if 'engine_chain' in b:
                         # 0.1.93: order of the clip engines (one try each per clip); an engine left out is never used.
                         STATE['settings']['engine_chain']=engine_chain.validate(b['engine_chain'])
+                    if 'clip_routing' in b:
+                        if b['clip_routing'] not in ('flow_grok_per_clip','chain'):raise ValueError('Mode de bascule inconnu')
+                        target=job_by(b.get('job')) if b.get('job') else None
+                        if b.get('job') and not target:raise ValueError('Production inconnue')
+                        if target and any(t['job']==target['id'] and t['status'] in ('queued','claimed') for t in STATE['tasks']):raise ValueError('Attendez la fin de la tâche avant de changer de bascule')
+                        STATE['settings']['clip_routing']=b['clip_routing']
+                        if b['clip_routing']=='flow_grok_per_clip':STATE['settings']['engine_chain']=['flow','grok']
+                        if target:
+                            target['config']['clip_routing']=b['clip_routing']
+                            for sc in target.get('scenes') or []:
+                                if not sc.get('clip'):engine_chain.reset(sc)
+                            event(target,'Bascule par clip : Flow en premier, Grok seulement après un refus confirmé, puis retour à Flow pour le clip suivant.')
                     if 'follow' in b:
                         # Followed TikTok accounts in Le Filon (star), like the Atelier.
                         name=str(b['follow']).strip().lstrip('@')[:60];followed=STATE['settings'].setdefault('filon_follow',[])
@@ -2642,6 +2990,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     cfg['video_engine']=engines.validate(b.get('config',{}).get('video_engine','flow'))
                     if cfg['video_engine'] not in engines.AVAILABLE:raise ValueError('Connecteur '+engines.ENGINES[cfg['video_engine']]['label']+' pas encore livré : choisissez Google Flow.')
                     cfg['flow_resolution']='1080p' if b.get('config',{}).get('flow_resolution')=='1080p' else '720p';cfg['clip_seconds']=engines.ENGINES[cfg['video_engine']]['seconds']
+                    normalize_flow_resolution(cfg)
                     duration=b.get('config',{}).get('duration')
                     if duration is not None:
                         # Atelier-like fixed durations (TikTok monetisation needs more than one minute).
@@ -2715,6 +3064,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     if action=='pause': j['status']='paused';j['autopilot']=False; event(j,'Pause demandée. Une génération déjà envoyée peut continuer chez le fournisseur.')
                     elif action=='resume':
                         # "Boucle complète": the studio decides alone at the quality checks and keeps going.
+                        if j.get('stage')=='done' and j.get('final'):
+                            j['status']='done';save();return self.send_json(public_state())
                         j['autopilot']=True;j['alerts']=[a for a in j.get('alerts',[]) if a['level']!='action']
                         active=next((t for t in STATE['tasks'] if t['job']==id and t['status']=='claimed'),None)
                         if active:
@@ -2724,11 +3075,39 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         uncertain={int(t['slot'].split(':')[1]) for t in uncertain_clip_tasks(j)}
                         if j.get('stage')=='clips' and uncertain and not any(not x.get('clip') and k not in uncertain for k,x in enumerate(j['scenes'])):raise ValueError(uncertain_message(j))
                         # Reprendre after « aucun moteur n'a pu faire ce clip »: every engine may try it again (the owner fixed something).
-                        for x in j.get('scenes') or []:
-                            if x.get('engine_exhausted') and not x.get('clip'):engine_chain.reset(x)
                         # Reprendre / Boucle complète: nothing is relaunched while a needed account is known « À régler ».
                         found=gate_blockers(j)
                         if found:raise AccountsNotReady(found)
+                        if j.get('stage')=='script' and j.get('rejected_script'):
+                            try:store_script(j,copy.deepcopy(j['rejected_script']))
+                            except ValueError:pass
+                            else:
+                                for task in STATE['tasks']:
+                                    if task['job']==id and task['status']=='queued':task['status']='cancelled'
+                                event(j,'Brouillon existant réparé et réutilisé sans nouvelle demande de scénario.')
+                                schedule(j);save();return self.send_json(public_state())
+                        for index, scene in enumerate(j.get('scenes') or []):
+                            if scene.get('clip'):
+                                continue
+                            if scene.get('engine_exhausted'):
+                                attempts=scene.get('engine_tries') or []
+                                last=attempts[-1] if attempts else {}
+                                if (engine_chain.flow_grok_policy(STATE.get('settings'),j['config'])
+                                        and last.get('engine')=='grok' and last.get('kind')=='interface'
+                                        and re.search(r'image introuvable|image non importée',last.get('reason',''),re.I)):
+                                    attempts.pop()
+                                    scene.pop('engine_exhausted',None)
+                                else:engine_chain.reset(scene)
+                            if (not scene.get('engine_tries')
+                                    and engine_chain.flow_grok_policy(STATE.get('settings'), j['config'])):
+                                previous = next((t for t in reversed(STATE['tasks'])
+                                                 if t['job'] == id and t.get('slot') == f'clip:{index}'
+                                                 and t.get('kind') == 'flow_video' and t['status'] == 'failed'), None)
+                                if previous and previous.get('error_kind') == 'refusal':
+                                    engine_chain.record(scene, 'flow', 'refusal', 'Refus Flow déjà constaté', now())
+                                    scene['flow_rewrite_pending']=True
+                        if j.get('stage')=='clips' and any(scene.get('flow_rewrite_pending') for scene in j['scenes']):
+                            j['stage']='images'
                         for t in STATE['tasks']:
                             if t['job']==id and t['status'] in ('queued','claimed'): t['status']='cancelled'
                         if b.get('flow_profile'): j['flow_profile']=b['flow_profile']
@@ -2790,10 +3169,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             # Queued Flow payloads were built for the previous mode.
                             if t['job']==id and t['status']=='queued' and t['kind'] in ('flow_video','engine_video'):t['status']='cancelled'
                         event(j,'Essai à blanc activé : les clips seront préparés dans Flow sans être envoyés.' if j['config']['dry_run'] else 'Production réelle : les prochains clips seront envoyés à Flow et consommeront des crédits.')
+                    elif action=='flow_resolution':
+                        if any(t['job']==id and t['status'] in ('queued','claimed') for t in STATE['tasks']):raise ValueError('Attendez la fin de la tâche avant de changer la résolution')
+                        resolution=b.get('resolution')
+                        if resolution not in ('720p','1080p'):raise ValueError('Résolution Flow inconnue')
+                        j['config']['flow_resolution']=resolution;j.pop('dry_run_passed',None)
+                        normalize_flow_resolution(j['config']);resolution=j['config']['flow_resolution']
+                        event(j,'Résolution de génération Flow : '+resolution+'. Dimensions du montage final conservées.')
                     elif action=='rerender':
                         # "Remonter…": same clips, new montage (new hook, subtitles or resolution).
                         if not all(x.get('clip') for x in j['scenes']):raise ValueError('Il manque des clips')
                         if j['id'] in BUSY:raise ValueError('Montage déjà en cours')
+                        for task in STATE['tasks']:
+                            if task['job']==id and task['slot']=='cover_review' and task['status'] in ('queued','claimed'):
+                                task['status']='cancelled'
+                                event(j,'Revue automatique de la miniature interrompue par la demande de montage.')
                         j.pop('final',None);j.pop('montage_stale',None);j['stage']='edit';j['status']='rendering';event(j,'Remontage demandé avec les clips existants.');start_render(j['id'])
                     elif action=='rename':
                         title=' '.join(str(b.get('title','')).split())[:80]
@@ -2911,6 +3301,9 @@ def recover_after_restart():
         # Never automatically resend an ambiguous generation after a restart.
         for t in STATE['tasks']:
             if t['status']=='claimed':
+                if client_online(STATE['clients'].get(t.get('client'))):
+                    event(job_by(t['job']),'Redémarrage : suivi de la tâche '+t['slot']+' conservé dans la fenêtre connectée ; aucun nouvel envoi.')
+                    continue
                 t['status']='failed'; j=job_by(t['job']); j['status']='attention'; event(j,'Redémarrage : génération précédente à vérifier avant de réessayer.')
                 j['last_error']={'kind':'restart','slot':t.get('slot'),'task':t.get('id'),'at':now()}
         for j in STATE['jobs']:

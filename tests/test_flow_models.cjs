@@ -26,6 +26,17 @@ function fixture({missing=false,ambiguous=false,wrongResolution=false,wrongDurat
  return {doc,picked,model};
 }
 (async()=>{
+ // New Flow controls use a labelled button rather than a value-only combobox.
+ for(const label of ['Videoauflösung','Résolution','Video resolution']){
+  let open=false,value='720p',picked=0;
+  const el=(text,attrs,click)=>({innerText:text,getAttribute:k=>attrs[k]||null,click,getClientRects:()=>[{}]});
+  const header=el('',{'aria-label':'Settings trigger'},()=>{});
+  Object.defineProperty(header,'innerText',{get:()=>`Video · ${value} · 8 s · x1`});
+  const trigger=el('720p',{'aria-label':label,'aria-haspopup':'menu'},()=>open=true);
+  const option=el('1080p',{'role':'option'},()=>{value='1080p';picked++;open=false;});
+  const doc={querySelectorAll:q=>q==='[aria-checked="true"],[aria-selected="true"]'?[]:q==='[role="radio"],[role="option"],[role="menuitem"],button'?(open?[option]:[header,trigger]):[header,trigger,...(open?[option]:[])]};
+  await f.chooseSetting(doc,async()=>{},'1080p','resolution');assert.equal(picked,1);assert.equal(value,'1080p');
+ }
  // Real Flow label (03/11/2026): "Avertissement de crédits insuffisants" must stop before any send.
  {const el=t=>({innerText:'',getAttribute:k=>k==='aria-label'?t:null,getClientRects:()=>[{}]});const d=labels=>({querySelectorAll:()=>labels.map(el)});
   f.visible=()=>true;assert.ok(f.creditBlocked(d(['Avertissement de crédits insuffisants'])));assert.ok(f.creditBlocked(d(['Warnung: Nicht genügend Guthaben'])));assert.ok(!f.creditBlocked(d(['Ingrédient image','Effacer le prompt'])));}

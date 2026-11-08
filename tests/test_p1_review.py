@@ -79,11 +79,11 @@ class ReviewGateTests(unittest.TestCase):
                     s.edit_script(j, change)
                 self.assertEqual(json.dumps(j['script']), before)
 
-    def test_retention_productions_keep_twenty_word_limit(self):
+    def test_retention_productions_allow_twenty_four_words(self):
         j = review_job(editorial_version=0, retention_version=1)
         j['editorial_version'] = 2
-        with self.assertRaisesRegex(ValueError, '20 mots'):
-            s.edit_script(j, {'scenes': lines(' '.join(['Wort'] * 19), 'b', 'c', 'd')})
+        with self.assertRaisesRegex(ValueError, '24 mots'):
+            s.edit_script(j, {'scenes': lines(' '.join(['Wort'] * 23), 'b', 'c', 'd')})
 
     def test_story_locked_once_images_started(self):
         j = review_job(); j['script_approved'] = s.now(); j['status'] = 'running'; s.schedule(j)

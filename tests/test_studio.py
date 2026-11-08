@@ -1,3 +1,4 @@
+from unittest.mock import patch
 import copy, importlib.util, os, pathlib, tempfile, unittest, threading, urllib.request, urllib.error, json, subprocess, shutil
 
 TEMP=tempfile.TemporaryDirectory()
@@ -19,6 +20,21 @@ def scene_images(j):
         name=f'scene{i}.png';Image.new('RGB',(32,64),(i*50,100,200)).save(s.job_dir(j)/name);scene['image']=name
 
 class StudioTests(unittest.TestCase):
+    def test_review_progress_names_the_actual_control(self):
+        raw='Lecture du scénario : {"hasJob":true,"hasTask":true}'
+        self.assertIn('miniature',s.readable_progress(raw,'cover_review'))
+        self.assertIn('clips',s.readable_progress(raw,'quality_review'))
+        self.assertIn('planches',s.readable_progress(raw,'board_review'))
+        self.assertNotIn('scénario',s.readable_progress(raw,'cover_review'))
+    def test_render_stops_cleanly_if_episode_was_removed(self):
+        s.STATE=s.fresh();s.BUSY.add('removed')
+        s.render_job('removed')
+        self.assertNotIn('removed',s.BUSY)
+    def test_render_error_does_not_crash_if_episode_disappeared(self):
+        s.STATE=s.fresh();episode=job();s.BUSY.add(episode['id'])
+        with patch.object(s,'job_by',side_effect=[episode,None]),patch.object(s.shutil,'which',return_value=None):
+            s.render_job(episode['id'])
+        self.assertNotIn(episode['id'],s.BUSY)
     def setUp(self):
         s.STATE=s.fresh();s.DOWNLOADS_ROOT=pathlib.Path(TEMP.name)/'downloads';s.DOWNLOADS_ROOT.mkdir(exist_ok=True)
     def test_omni_clip_budget_and_model_are_passed_to_the_extension(self):
@@ -45,13 +61,15 @@ class StudioTests(unittest.TestCase):
     def test_shared_family_poster_uses_own_scene_without_private_style_capture(self):
         j=job();s.store_script(j,script());s.STATE['tasks']=[];j['stage']='clips';j['cover_style']='family_poster_v3'
         for scene in j['scenes']:scene.update(image='scene.png',clip='existing.mp4')
-        before=copy.deepcopy(j['scenes']);s.schedule(j)
+        before=copy.deepcopy(j['scenes'])
+        with patch.object(s,'ROOT',pathlib.Path(TEMP.name)/'shared-distribution'):
+            s.schedule(j)
         self.assertEqual(j['stage'],'cover');self.assertEqual(j['scenes'],before)
         task=s.STATE['tasks'][0];prompt=task['payload']['prompt']
         self.assertIn('PHONE SCREENSHOT OF A GRID',prompt)
         self.assertIn('display serif',prompt);self.assertIn('UPPER',prompt)
         self.assertIn('Deutsch',prompt);self.assertEqual(len(task['payload']['attachments']),1)
-        self.assertFalse((s.ROOT/'cover-reference-grid.png').exists())
+        self.assertFalse(any('cover-reference-grid' in url for url in task['payload']['attachments']))
         j['cover_style']='dramatic_v2'
         self.assertIn('lower middle BELOW faces',s.cover_prompt(j))
 
@@ -218,6 +236,23 @@ class StudioTests(unittest.TestCase):
         s.accept_task_result(t,{'ok':False,'error':'Unknown after submission'});self.assertEqual(p['balance'],40)
 
 class HTTPTests(unittest.TestCase):
+    def test_old_open_form_cannot_create_unsupported_native_1080p(self):
+        for model,cost in [('gemini_omni_flash',12),('veo_3_1_lite',10)]:
+            self.req('/api/job',{'brief':'A family secret','config':{'flow_model':model,'flow_cost':cost,'flow_resolution':'1080p'}})
+            cfg=s.STATE['jobs'][0]['config']
+            self.assertEqual(cfg['flow_resolution'],'720p')
+            self.assertEqual(cfg['flow_resolution_requested'],'1080p')
+            self.assertEqual(s.frame_size(s.STATE['jobs'][0]),(1080,1920))
+
+    def test_legacy_queued_flow_task_is_normalized_before_credit_reservation(self):
+        j=job();j['stage']='script';j['config'].update(flow_model='gemini_omni_flash',flow_resolution='1080p',flow_cost=12)
+        s.STATE['profiles'].append({'id':'flow','label':'Flow','balance':50})
+        pair=self.req('/api/bridge/pair',{'code':s.STATE['pair_code'],'role':'flow','flow_profile':'flow'})
+        s.STATE['tasks'].append({'id':s.uid(),'job':j['id'],'kind':'flow_video','slot':'clip:0','status':'queued','profile':'flow','payload':{'model':'gemini_omni_flash','resolution':'1080p','cost':12}})
+        result=self.req('/api/bridge/task?client='+pair['client']+'&lane=video',headers={'Authorization':'Bearer '+pair['token']})
+        self.assertEqual(result['payload']['resolution'],'720p')
+        self.assertEqual(j['config']['flow_resolution'],'720p')
+        self.assertEqual(s.STATE['profiles'][0]['balance'],38)
     @classmethod
     def setUpClass(cls):
         cls.http=s.http.server.ThreadingHTTPServer(('127.0.0.1',0),s.Handler);s.PORT=cls.http.server_port
@@ -313,9 +348,21 @@ class HTTPTests(unittest.TestCase):
         auth={'Authorization':'Bearer '+pair['token']}
         task=self.req('/api/bridge/recover',{'client':pair['client'],'job':j['id']},auth)
         self.assertEqual(task['kind'],'chat_collect');self.assertEqual(task['status'],'claimed');self.assertNotIn('prompt',task['payload'])
+        self.assertEqual(task['payload']['expected_job'],j['id'])
         self.assertEqual(j['status'],'running')
         self.req('/api/bridge/result',{'client':pair['client'],'task':task['id'],'result':{'ok':True,'text':json.dumps(script())}},auth)
         self.assertEqual(j['stage'],'characters')
+
+    def test_flow_generation_resolution_preserves_output_and_invalidates_old_dry_run(self):
+        j=job();j['status']='paused';j['config']['flow_resolution']='1080p';j['dry_run_passed']='old-engine-test'
+        before=s.frame_size(j)
+        self.req('/api/job/'+j['id'],{'action':'flow_resolution','resolution':'720p'})
+        self.assertEqual(j['config']['flow_resolution'],'720p');self.assertEqual(s.frame_size(j),before)
+        self.assertNotIn('dry_run_passed',j);self.assertEqual(j['status'],'paused')
+        with self.assertRaises(urllib.error.HTTPError):self.req('/api/job/'+j['id'],{'action':'flow_resolution','resolution':'4k'})
+        s.STATE['tasks'].append({'id':'active','job':j['id'],'slot':'clip:0','kind':'flow_video','status':'claimed'})
+        with self.assertRaises(urllib.error.HTTPError):self.req('/api/job/'+j['id'],{'action':'flow_resolution','resolution':'1080p'})
+        self.assertEqual(j['config']['flow_resolution'],'720p')
     def test_duplicate_result_is_acknowledged_without_duplicate_tasks(self):
         j=job();j['stage']='script';j['status']='attention'
         pair=self.req('/api/bridge/pair',{'code':s.STATE['pair_code'],'label':'QA','role':'all'});auth={'Authorization':'Bearer '+pair['token']}

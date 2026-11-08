@@ -1,6 +1,6 @@
 """0.1.93: bascule de moteur par clip (Flow, Arena, Vidogrid, Grok), prompt adouci au dernier tour, clip mis de côté
 sans bloquer les autres, moteur gardé par clip pour le montage (owner 06/11/2026: « un essai par cas »)."""
-import datetime as dt, importlib.util, os, pathlib, shutil, subprocess, sys, tempfile, time, unittest
+import datetime as dt, importlib.util, json, os, pathlib, shutil, subprocess, sys, tempfile, time, unittest
 
 ROOT = pathlib.Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT))
@@ -100,6 +100,66 @@ class ChainUnitTests(unittest.TestCase):
 class ChainScheduleTests(unittest.TestCase):
     def setUp(self):
         s.STATE = fresh()
+
+    def test_restored_1080p_episode_queues_native_720p_without_changing_media(self):
+        j=clip_job();j['config'].update(flow_model='gemini_omni_flash',flow_resolution='1080p')
+        images=[x['image'] for x in j['scenes']]
+        s.schedule(j)
+        self.assertEqual(queued(j)[0]['payload']['resolution'],'720p')
+        self.assertEqual(j['config']['flow_resolution_requested'],'1080p')
+        self.assertEqual([x['image'] for x in j['scenes']],images)
+        self.assertEqual(s.frame_size(j),(1080,1920))
+
+    def test_flow_refusal_uses_grok_for_only_that_clip_then_returns_to_flow(self):
+        s.STATE['settings'].update(clip_routing='flow_grok_per_clip',parallel_clips=False)
+        j=clip_job(engine='grok',n=2)
+        self.assertEqual(engine_chain.order(s.STATE['settings'],j['config']),['flow','grok'])
+        s.schedule(j);t=queued(j)[0]
+        self.assertEqual((t['slot'],engine_of(t)),('clip:0','flow'))
+        fail(t,{'ok':False,'error_kind':'refusal','generation_submitted':False,'error':'Flow : contenu refusé.'})
+        rewrite=queued(j)[0]
+        self.assertEqual(rewrite['slot'],'flow_rewrite:0')
+        self.assertEqual(j['scenes'][0]['image'],'scene0.png')
+        rewrite['status']='claimed'
+        adapted={'image_prompt':'Original desk with a folded letter','video_prompt':'Oma walks to the desk and opens the letter',
+                 'deplacement':'Oma walks from the door to the desk'}
+        s.accept_task_result(rewrite,{'ok':True,'text':json.dumps({'production_id':j['id'],'generation_task_id':rewrite['id'],'scene_rewrite':adapted})})
+        board=queued(j)[0]
+        self.assertEqual(board['slot'],'image:0')
+        self.assertIn(adapted['deplacement'],board['payload']['prompt'])
+        from PIL import Image
+        Image.new('RGB',(32,64),(180,90,10)).save(s.job_dir(j)/'adapted.png')
+        board['status']='claimed'
+        s.accept_task_result(board,{'ok':True,'file':'adapted.png'})
+        retry=queued(j)[0]
+        self.assertEqual((retry['slot'],engine_of(retry)),('clip:0','flow'))
+        self.assertIn(adapted['deplacement'],retry['payload']['prompt'])
+        fail(retry,{'ok':False,'error_kind':'refusal','generation_submitted':True,'flow_failed':True,'error':'Flow : nouveau refus.'})
+        t=queued(j)[0];self.assertEqual((t['slot'],engine_of(t)),('clip:0','grok'))
+        deliver(j,t)
+        self.assertEqual(j['scenes'][0]['engine'],'grok')
+        t=queued(j)[0];self.assertEqual((t['slot'],engine_of(t)),('clip:1','flow'))
+        deliver(j,t)
+        self.assertEqual(j['scenes'][1]['engine'],'flow')
+
+    def test_flow_technical_error_and_empty_credit_do_not_spend_grok(self):
+        s.STATE['settings']['clip_routing']='flow_grok_per_clip'
+        j=clip_job(n=2);s.schedule(j);t=queued(j)[0]
+        fail(t,{'ok':False,'error_kind':'interface','generation_submitted':False,'error':'Réglage resolution non reconnu ; aucun envoi effectué.'})
+        self.assertFalse(any(engine_of(t)=='grok' for t in queued(j)))
+        self.assertTrue(j['scenes'][0]['engine_exhausted'])
+        self.assertEqual(j['status'],'attention','Fix shared Flow settings before repeating the same failure on every clip')
+        self.assertEqual(queued(j),[])
+        s.STATE=fresh();s.STATE['settings']['clip_routing']='flow_grok_per_clip'
+        j=clip_job(balance=0);s.schedule(j)
+        self.assertFalse(any(engine_of(t)=='grok' for t in queued(j)))
+
+    def test_uncertain_flow_submission_is_never_replayed_on_grok(self):
+        s.STATE['settings']['clip_routing']='flow_grok_per_clip'
+        j=clip_job(n=2);s.schedule(j);t=queued(j)[0]
+        fail(t,{'ok':False,'error_kind':'restart','generation_submitted':True,'error':'Connexion interrompue après envoi.'})
+        self.assertTrue(t['uncertain'])
+        self.assertFalse(any(engine_of(t)=='grok' for t in queued(j)))
 
     def test_one_try_per_engine_then_softened_flow_then_owner(self):
         s.STATE["settings"]["grok_auto"] = True; j = clip_job(); s.schedule(j)

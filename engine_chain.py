@@ -37,12 +37,27 @@ VIDEO_WORDS = (
 
 def order(settings, cfg=None):
     """Engines in the owner's order. An episode made for one engine (« Moteur des clips ») tries it first."""
+    if flow_grok_policy(settings,cfg):return ['flow','grok']
     raw = (cfg or {}).get('engine_chain') or (settings or {}).get('engine_chain') or DEFAULT
     out = [e for e in dict.fromkeys(raw if isinstance(raw, (list, tuple)) else DEFAULT) if e in DEFAULT] or list(DEFAULT)
     first = (cfg or {}).get('video_engine')
     if first in DEFAULT and first != 'flow' and first != out[0]:  # 'flow' is the default of every episode, not a choice
         out = [first] + [e for e in out if e != first]
     return out
+
+
+def flow_grok_policy(settings, cfg=None):
+    return ((cfg or {}).get('clip_routing') or (settings or {}).get('clip_routing'))=='flow_grok_per_clip'
+
+
+def flow_grok_next(scene):
+    """Each scene starts at Flow, with one adapted retry after a confirmed refusal."""
+    attempts=scene.get('engine_tries') or []
+    flow=[a for a in attempts if a.get('engine')=='flow']
+    if not flow:return 'flow'
+    if flow[-1].get('kind')=='refusal' and not any(a.get('engine')=='grok' for a in attempts):
+        return 'flow' if len(flow)==1 else 'grok'
+    return None
 
 
 def validate(value):
@@ -130,5 +145,5 @@ def soften(prompt):
 
 def reset(scene):
     """A clip received (or redone by the owner) starts again from the first engine."""
-    for key in ('engine_tries', 'engine_round', 'engine_exhausted'):
+    for key in ('engine_tries', 'engine_round', 'engine_exhausted', 'flow_rewrite_pending'):
         scene.pop(key, None)

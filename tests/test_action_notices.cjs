@@ -1,0 +1,13 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
+const source=fs.readFileSync(path.join(__dirname,'../web/atelier.js'),'utf8');
+const start=source.indexOf('function alertsNotice0('),end=source.indexOf('\nfunction detail(',start);
+assert.ok(start>=0&&end>start);
+const context=vm.createContext({esc:x=>String(x)});
+vm.runInContext(source.slice(start,end),context);
+const job={status:'running',events:[],alerts:[{level:'action',command:'allow_grok',label:'Utiliser Grok',text:'Consent needed'},...Array.from({length:4},(_,i)=>({level:'action',text:'Clip failed '+i}))]};
+context.job=job;
+let html=vm.runInContext('alertsNotice0(job)',context);
+assert.match(html,/data-command="allow_grok"/,'Action must remain visible while images are running and after later errors');
+assert.match(html,/Clip failed 3/);
+job.alerts=[];html=vm.runInContext('alertsNotice0(job)',context);assert.equal(html,'');
+console.log('Required actions remain visible during parallel image generation.');

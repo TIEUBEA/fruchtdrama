@@ -82,6 +82,25 @@ class EditorialTests(unittest.TestCase):
         self.assertEqual(old,old_before);self.assertEqual(file.read_bytes(),b'untouched')
         self.assertIn('creative_selection',prompt);self.assertNotIn('appartement réaliste chaleureux, vertical',prompt)
 
+    def test_original_refused_script_is_preserved_for_targeted_correction(self):
+        draft=self.opening_story();draft['opening_plan']['payoff_scene']=4
+        task={'id':'rejected','job':self.job['id'],'kind':'chat_text','slot':'script','status':'claimed'}
+        s.STATE['tasks'].append(task)
+        s.accept_task_result(task,{'ok':True,'text':json.dumps(draft)})
+        self.assertEqual(self.job['rejected_script'],draft)
+        prompt=s.script_prompt(self.job)
+        self.assertIn('opening_plan.visible_detail',prompt)
+        self.assertIn('JSON ENTIER',prompt)
+        # An incomplete retry must not erase the last complete recoverable draft.
+        bad={'id':'partial','job':self.job['id'],'kind':'chat_text','slot':'script','status':'claimed'}
+        s.STATE['tasks'].append(bad)
+        s.accept_task_result(bad,{'ok':True,'text':'{}'})
+        self.assertEqual(self.job['rejected_script'],draft)
+        draft['opening_plan']['payoff_scene']=3
+        s.store_script(self.job,draft)
+        self.assertNotIn('editorial_feedback',self.job)
+        self.assertNotIn('rejected_script',self.job)
+
     def test_retention_rules_only_apply_to_new_productions(self):
         draft=story()
         editorial.validate(draft,self.job,s.STATE['jobs'])
@@ -96,8 +115,10 @@ class EditorialTests(unittest.TestCase):
         draft['scenes'][0]['dialogue'][0]['text']='Give me my ticket!'
         draft['creative_selection']['candidates'][0]['hook']='Give me my ticket!'
         editorial.validate(draft,self.job,s.STATE['jobs'])
-        draft['scenes'][1]['dialogue'][0]['text']=' '.join(['word']*21)
-        with self.assertRaisesRegex(editorial.Rejection,'20 mots'):
+        draft['scenes'][1]['dialogue'][0]['text']=' '.join(['word']*24)
+        editorial.validate(draft,self.job,s.STATE['jobs'])
+        draft['scenes'][1]['dialogue'][0]['text']+=' word'
+        with self.assertRaisesRegex(editorial.Rejection,'24 mots'):
             editorial.validate(draft,self.job,s.STATE['jobs'])
 
     def opening_story(self):
@@ -111,11 +132,16 @@ class EditorialTests(unittest.TestCase):
         draft['opening_plan']={'visible_detail':'altes Foto','question':'Wer ist das Kind?','payoff_scene':3,'payoff':'Die Großmutter erklärt die Herkunft des Fotos.'}
         return draft
 
-    def test_new_hooks_accept_natural_german_over_eight_words_and_validate_visual_anchor(self):
+    def test_new_hooks_accept_long_visual_anchor_and_add_it_to_missing_prompts(self):
         draft=self.opening_story();editorial.validate(draft,self.job,s.STATE['jobs'])
-        draft['scenes'][0]['video_prompt']='Moving camera with no visible object.'
-        with self.assertRaisesRegex(editorial.Rejection,'détail visible'):
+        detail="Diane approche la photo d’Esther du fil incandescent"
+        draft['opening_plan']['visible_detail']=detail
+        first=draft['scenes'][0]
+        first['video_prompt']='The camera follows Diane.'
+        for _ in range(2):
             editorial.validate(draft,self.job,s.STATE['jobs'])
+        for key in ('image_prompt','video_prompt'):
+            self.assertEqual(first[key].count(detail),1)
 
     def test_new_hooks_require_a_resolution_scene_and_reject_overlong_opening(self):
         draft=self.opening_story();draft['opening_plan']['payoff_scene']=4

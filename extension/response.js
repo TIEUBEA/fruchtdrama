@@ -1,23 +1,32 @@
 globalThis.FruchtResponse={
  parse(text,expectedScenes,expectedJob,expectedTask,kind){
   const value=String(text||'').trim().slice(0,2000000);
-  // UI text can include the user's example JSON and the generated JSON. Scan
-  // balanced objects instead of joining the first opening and last closing brace.
-  const objects=[];
-  // A malformed example in the prompt must not consume the valid reply after it.
-  // Scan each possible object start independently, newest first.
-  for(let start=value.lastIndexOf('{');start>=0;start=value.lastIndexOf('{',start-1)){
-   let depth=0,quoted=false,escaped=false;
-   for(let i=start;i<value.length;i++){
-    const c=value[i];
-    if(quoted){if(escaped)escaped=false;else if(c==='\\')escaped=true;else if(c==='"')quoted=false;continue;}
-    if(c==='"'){quoted=true;continue;}
-    if(c==='{')depth++;
-    else if(c==='}'&&--depth===0){objects.unshift(value.slice(start,i+1));break;}
+  if(expectedTask&&!value.includes(expectedTask))return null;
+  const starts=[],objects=[];
+  let quoted=false,escaped=false;
+  for(let i=0;i<value.length;i++){
+   const c=value[i];
+   if(quoted){
+    if(c==='\n'||c==='\r'){quoted=false;escaped=false;}
+    else if(escaped)escaped=false;
+    else if(c==='\\')escaped=true;
+    else if(c==='"')quoted=false;
+    continue;
    }
-   if(start===0)break;
+   if(c==='{')starts.push(i);
+   else if(c==='"'&&starts.length)quoted=true;
+   else if(c==='}'&&starts.length)objects.push([starts.pop(),i+1]);
   }
-  for(const object of objects.reverse())try{const parsed=JSON.parse(object);
+  for(let i=objects.length-1;i>=0;i--)try{
+   const [start,end]=objects[i];
+   if(expectedTask&&value.lastIndexOf(expectedTask,end-expectedTask.length)<start)continue;
+   const parsed=JSON.parse(value.slice(start,end));
+   if(kind==='flow_rewrite'){
+    const scene=parsed?.scene_rewrite;
+    if(parsed?.production_id===expectedJob&&parsed?.generation_task_id===expectedTask&&scene
+       &&typeof scene.image_prompt==='string'&&typeof scene.video_prompt==='string')return parsed;
+    continue;
+   }
    if(kind==='quality_review'){
     if(parsed?.production_id!==expectedJob||parsed?.generation_task_id!==expectedTask)continue;
     const q=parsed.quality_review;
@@ -68,13 +77,21 @@ globalThis.FruchtResponse={
   // Last resort: code blocks, excluding user turns and the composer.
   return [...doc.querySelectorAll('pre')].filter(n=>!n.closest('[data-message-author-role="user"],[data-turn="user"],[contenteditable="true"],form')).reverse().map(n=>n.innerText||n.textContent||'');
  },
- extract(doc,n,job,task,kind){
-  const texts=this.candidates(doc);
+ extract(doc,n,job,task,kind,texts=this.candidates(doc)){
+  const seen=new Set();
+  const tryText=text=>{
+   if(!text||seen.has(text))return null;
+   seen.add(text);
+   const parsed=this.parse(text,n,job,task,kind);
+   return parsed?JSON.stringify(parsed):null;
+  };
+  for(const text of texts){const parsed=tryText(text);if(parsed)return parsed;}
   // A provider layout change can remove all known assistant wrappers. Read main
   // only for a bound production, and accept ONLY its exact production_id.
-  if(job){const main=doc.querySelector?.('main,[role="main"]');if(main)texts.push(main.innerText||main.textContent||'',main.textContent||'');}
-  if(job&&task&&doc.body)texts.push(doc.body.innerText||'',doc.body.textContent||'');
-  for(const text of texts){const parsed=this.parse(text,n,job,task,kind);if(parsed)return JSON.stringify(parsed);}return null;
+  const main=job?doc.querySelector?.('main,[role="main"]'):null;
+  const found=main&&(tryText(main.textContent)||tryText(main.innerText));
+  if(found)return found;
+  return job&&task&&doc.body?(tryText(doc.body.textContent)||tryText(doc.body.innerText)):null;
  }
 };
 
@@ -82,12 +99,9 @@ globalThis.FruchtResponse={
 try{if(globalThis.fruchtScenarioProbe)chrome.runtime.onMessage.removeListener(globalThis.fruchtScenarioProbe);}catch{}
 globalThis.fruchtScenarioProbe=(m,s,reply)=>{
  if(m.type!=='frucht-scenario-probe')return false;
- const texts=FruchtResponse.candidates(document),main=document.querySelector('main,[role="main"]');
- if(main)texts.push(main.innerText||main.textContent||'',main.textContent||'');
- if(m.job&&m.task&&document.body)texts.push(document.body.innerText||'',document.body.textContent||'');
- const text=FruchtResponse.extract(document,m.scenes,m.job,m.task,m.response_kind);
- const combined=texts.join('\n');
- const any=text?JSON.parse(text):texts.map(t=>FruchtResponse.parse(t)).find(Boolean);
- reply({text,diagnostic:{candidates:texts.length,lengths:texts.map(t=>t.length).slice(0,5),hasJob:combined.includes(m.job),hasTask:combined.includes(m.task),parsedScenes:any?.scenes?.length||0,parsedJob:any?.production_id||null,parsedTask:any?.generation_task_id||null}});return false;
+ const texts=FruchtResponse.candidates(document);
+ const text=FruchtResponse.extract(document,m.scenes,m.job,m.task,m.response_kind,texts);
+ const any=text?JSON.parse(text):null;
+ reply({text,diagnostic:{candidates:texts.length,lengths:texts.map(t=>t.length).slice(0,5),hasJob:texts.some(t=>t.includes(m.job)),hasTask:texts.some(t=>t.includes(m.task)),parsedScenes:any?.scenes?.length||0,parsedJob:any?.production_id||null,parsedTask:any?.generation_task_id||null}});return false;
 };
 try{chrome.runtime.onMessage.addListener(globalThis.fruchtScenarioProbe);}catch{}

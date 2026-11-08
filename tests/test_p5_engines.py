@@ -37,8 +37,8 @@ class EngineUnitTests(unittest.TestCase):
         self.assertEqual(engines.of({'config': {}}), 'flow', 'older productions stay on Flow')
 
     def test_word_limit_follows_duration(self):
-        self.assertEqual(engines.word_limit({'config': {}}), 20)
-        self.assertEqual(engines.word_limit({'config': {'video_engine': 'grok'}}), 15)
+        self.assertEqual(engines.word_limit({'config': {}}), 24)
+        self.assertEqual(engines.word_limit({'config': {'video_engine': 'grok'}}), 18)
         self.assertEqual(engines.word_limit({'config': {'video_engine': 'grok'}}, 25), 18)
 
     def test_montage_length(self):
@@ -50,7 +50,7 @@ class EngineUnitTests(unittest.TestCase):
 
     def test_editorial_limit_scales(self):
         j = {'config': {'video_engine': 'grok'}, 'retention_version': 1}
-        self.assertIn('15 mots parlés par scène de 6 secondes', editorial.retention_instructions(j))
+        self.assertIn('18 mots parlés par scène de 6 secondes', editorial.retention_instructions(j))
 
 
 class ScheduleTests(unittest.TestCase):
@@ -71,8 +71,8 @@ class ScheduleTests(unittest.TestCase):
         j.update(stage='characters', editorial_version=2, retention_version=1); j['config']['review_script'] = True
         for c in j['characters']:
             c.pop('file', None)
-        with self.assertRaisesRegex(ValueError, '15 mots au plus pour tenir dans le clip de 6 secondes'):
-            s.edit_script(j, {'scenes': [{'dialogue': [{'speaker': 'orange', 'text': t}]} for t in (' '.join(['Wort'] * 16), 'b', 'c', 'd')]})
+        with self.assertRaisesRegex(ValueError, '18 mots au plus pour tenir dans le clip de 6 secondes'):
+            s.edit_script(j, {'scenes': [{'dialogue': [{'speaker': 'orange', 'text': t}]} for t in (' '.join(['Wort'] * 19), 'b', 'c', 'd')]})
 
     def test_dry_run_for_grok(self):
         j = clip_job('arena', dry=True); s.schedule(j)
@@ -88,7 +88,7 @@ class ScheduleTests(unittest.TestCase):
 
     def test_routing(self):
         task = {'kind': 'engine_video', 'payload': {'engine': 'grok'}}
-        self.assertTrue(s.client_accepts({'role': 'all'}, task)); self.assertTrue(s.client_accepts({'role': 'flow'}, task))
+        self.assertTrue(s.client_accepts({'role': 'all'}, task)); self.assertFalse(s.client_accepts({'role': 'flow'}, task))
         self.assertFalse(s.client_accepts({'role': 'creation'}, task))
 
 

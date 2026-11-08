@@ -1,6 +1,7 @@
 """Editorial variety and observable similarity checks, not virality predictions."""
 import hashlib
 import engines
+import ideas
 import json
 import re
 import unicodedata
@@ -78,6 +79,10 @@ STORY_CRAFT='''RÉCIT QUI CAPTIVE (règles prioritaires) :
 
 
 def instructions(j,jobs):
+    if j.get('sheet_approved'):
+        return (retention_instructions(j)+hook_instructions(j)+STORY_CRAFT+
+                'Développe directement la fiche validée. Le titre et la première réplique choisis sont définitifs. '
+                'Ajoute story_signature en anglais court : relation, décor, objet central et mécanisme du retournement.')
     creative=direction(j,jobs)
     return retention_instructions(j)+hook_instructions(j)+STORY_CRAFT+'''DIRECTION ÉDITORIALE : '''+json.dumps(creative,ensure_ascii=False)+'''. C’est le moteur émotionnel conseillé ; invente les événements précis, les personnages et les lieux. Ne recopie pas une intrigue existante mot pour mot.
 HISTORIQUE (pour ne pas refaire le même épisode) : '''+json.dumps(history_brief(j,jobs),ensure_ascii=False)+'''. Ne reprends pas le même duo, le même objet central et la même révélation qu’un épisode récent ; le type d’émotion (injustice, revanche) peut revenir, c’est ce qui plaît.
@@ -92,8 +97,8 @@ def retention_instructions(j):
     return opening+'\n'+"""MISE EN SCÈNE POUR LA RÉTENTION (hypothèse à tester, aucune garantie de vues) :
 Une seule phrase immédiatement compréhensible, commencer à parler dès la première seconde sans accélérer artificiellement la diction. Pas de salutations, présentation, narrateur, logo, titre d'introduction ni fondu noir.
 L'image de la scène 1 est déjà le début de l'action : gros plan ou plan poitrine sur le visage qui réagit, avec l'objet ou le geste du conflit lisible. Évite le plan d'ensemble et les personnages entiers éloignés. Décris cette composition dans image_prompt ET video_prompt ; le clip doit pouvoir démarrer exactement depuis cette image.
-0–2 secondes : accusation, urgence ou découverte concrète avec réaction visible. 2–4 secondes : une réponse ou un geste change la situation. 4–8 secondes : un indice ou une décision ouvre la suite, sans attendre immobile. Conserve un mouvement de caméra continu par clip, sans demander des coupes impossibles dans le même plan.
-Au maximum """+str(engines.word_limit(j))+" mots parlés par scène de "+str(engines.spec(j)['seconds'])+""" secondes, deux répliques au maximum, une seule personne parle à la fois. Dialogues naturels dans la langue choisie ; aucun échange ne répète une information connue. Les gestes et les réactions occupent le temps restant, pas de pause d'introduction.
+0–2 secondes : accusation, urgence ou découverte concrète avec réaction visible. 2–4 secondes : une réponse ou un geste change la situation. Dans le temps restant : un indice ou une décision ouvre la suite, sans attendre immobile. Conserve un mouvement de caméra continu par clip, sans demander des coupes impossibles dans le même plan.
+Au maximum """+str(engines.word_limit(j))+" mots parlés par scène de "+str(engines.spec(j)['seconds'])+""" secondes, jusqu’à trois répliques entre deux personnages, une seule personne parle à la fois. Écris un échange qui sonne parlé : réaction, objection, hésitation ou sous-entendu propre à chaque voix. Exploite la durée quand l’échange le mérite et laisse respirer les scènes qui reposent sur une action.
 Chaque nouvelle scène commence par une action ou une information nouvelle. Utilise si utile une alternance de cadrages entre les scènes ; conserve les identités, positions et accessoires cohérents. Révélation et conséquence visibles dans la dernière scène : histoire complète dans la durée sélectionnée, sans rallonge ni faux suspense pour une partie 2.
 """
 
@@ -119,33 +124,68 @@ def grams(text):
     words=normalize(text).split()
     return set(zip(words,words[1:],words[2:]))
 
+def restore_approved_choices(s,j):
+    if not j.get('sheet_approved'):
+        return
+    sheet=j.get('sheet') or {}
+    choices=j.get('sheet_choice') or {}
+    for field,choice in (('titles','title'),('hooks','hook')):
+        options=sheet.get(field) or []
+        if not options:
+            continue
+        expected=options[min(max(choices.get(choice,0),0),len(options)-1)]
+        if field=='titles':
+            s['title']=expected
+            continue
+        label,text=ideas.hook_parts(expected)
+        line=s['scenes'][0]['dialogue'][0]
+        speaker=next(c for c in s['characters'] if c['id']==line['speaker'])
+        if not label or normalize(label) in (normalize(speaker['name']),normalize(speaker['id'])):
+            line['text']=text
+
 
 def validate(s,j,jobs):
     if j.get('editorial_version')!=2:return
-    selection=s.get('creative_selection',{})
-    if not isinstance(selection,dict):raise Rejection('La comparaison des concepts doit être un objet creative_selection.')
-    concepts=selection.get('candidates',[]);index=selection.get('selected_index')
-    if not isinstance(concepts,list) or len(concepts)!=5 or type(index) is not int or not 0<=index<5:
-        raise Rejection('Comparer cinq concepts et préciser selected_index de 0 à 4 avant le scénario.')
-    scored=[]
-    for c in concepts:
-        if not isinstance(c,dict) or not all(isinstance(c.get(k),str) and c[k].strip() for k in ('title','hook','conflict','setting','twist','ending')):
-            raise Rejection('Chaque concept doit préciser titre, accroche, conflit, décor, retournement et fin.')
-        scores=c.get('scores',{})
-        if not isinstance(scores,dict) or any(type(scores.get(k)) not in (int,float) or not 0<=scores[k]<=5 for k in ('hook','clarity','emotion','novelty')):
-            raise Rejection('Les notes éditoriales doivent être comprises entre 0 et 5.')
-        scored.append((3*scores['hook']+2*scores['clarity']+3*scores['emotion']+1*scores['novelty'],scores['emotion']))
-    if len({normalize(c['hook']) for c in concepts})<5:raise Rejection('Les cinq concepts doivent avoir des accroches distinctes.')
-    if scored[index]!=max(scored):raise Rejection('Développer le concept au meilleur score pondéré annoncé (3*hook + 2*clarity + 3*emotion + 1*novelty), en privilégiant l’émotion en cas d’égalité.')
-    winner=concepts[index];first=s['scenes'][0]['dialogue'][0]['text']
-    if normalize(winner['title'])!=normalize(s['title']) or normalize(winner['hook'])!=normalize(first):
-        raise Rejection('Le titre et la première réplique doivent correspondre au concept sélectionné.')
+    first=s['scenes'][0]['dialogue'][0]['text']
+    if j.get('sheet_approved'):
+        sheet=j.get('sheet') or {}
+        choices=j.get('sheet_choice') or {}
+        for field, choice, actual in (('titles','title',s['title']), ('hooks','hook',first)):
+            options=sheet.get(field) or []
+            index=choices.get(choice,0)
+            if not options:
+                continue
+            expected=options[min(max(index,0),len(options)-1)]
+            if field=='hooks':
+                expected=ideas.spoken_hook(expected)
+            if normalize(expected)!=normalize(actual):
+                label='Titre exact attendu' if field=='titles' else 'Première réplique exacte attendue dans dialogue[0].text'
+                raise Rejection(f'{label} : « {expected} »')
+    else:
+        selection=s.get('creative_selection',{})
+        if not isinstance(selection,dict):raise Rejection('La comparaison des concepts doit être un objet creative_selection.')
+        concepts=selection.get('candidates',[]);index=selection.get('selected_index')
+        if not isinstance(concepts,list) or len(concepts)!=5 or type(index) is not int or not 0<=index<5:
+            raise Rejection('Comparer cinq concepts et préciser selected_index de 0 à 4 avant le scénario.')
+        scored=[]
+        for c in concepts:
+            if not isinstance(c,dict) or not all(isinstance(c.get(k),str) and c[k].strip() for k in ('title','hook','conflict','setting','twist','ending')):
+                raise Rejection('Chaque concept doit préciser titre, accroche, conflit, décor, retournement et fin.')
+            scores=c.get('scores',{})
+            if not isinstance(scores,dict) or any(type(scores.get(k)) not in (int,float) or not 0<=scores[k]<=5 for k in ('hook','clarity','emotion','novelty')):
+                raise Rejection('Les notes éditoriales doivent être comprises entre 0 et 5.')
+            scored.append((3*scores['hook']+2*scores['clarity']+3*scores['emotion']+1*scores['novelty'],scores['emotion']))
+        if len({normalize(c['hook']) for c in concepts})<5:raise Rejection('Les cinq concepts doivent avoir des accroches distinctes.')
+        if scored[index]!=max(scored):raise Rejection('Développer le concept au meilleur score pondéré annoncé (3*hook + 2*clarity + 3*emotion + 1*novelty), en privilégiant l’émotion en cas d’égalité.')
+        winner=concepts[index]
+        if normalize(winner['title'])!=normalize(s['title']) or normalize(winner['hook'])!=normalize(first):
+            raise Rejection('Le titre et la première réplique doivent correspondre au concept sélectionné.')
     if j.get('retention_version')==1:
         if j.get('hook_version')!=1 and len(first.split())>8:raise Rejection('Raccourcir la première réplique à 8 mots maximum pour entrer immédiatement dans le conflit.')
         for scene in s['scenes']:
             lines=scene.get('dialogue',[])
-            if len(lines)>2 or sum(len(line['text'].split()) for line in lines)>engines.word_limit(j):
-                raise Rejection(f'Limiter chaque scène à deux répliques et {engines.word_limit(j)} mots parlés maximum ; remplacer les répétitions par des actions visibles.')
+            if len(lines)>engines.MAX_DIALOGUE_TURNS or len({line.get('speaker') for line in lines})>2 or sum(len(line['text'].split()) for line in lines)>engines.word_limit(j):
+                raise Rejection(f'Limiter chaque scène à trois répliques entre deux personnages et {engines.word_limit(j)} mots parlés maximum.')
     if len(first.split())>12:raise Rejection('Raccourcir l’accroche à 12 mots maximum.')
     if j.get('hook_version')==1:validate_opening(s)
     signature=s.get('story_signature',{})
@@ -171,11 +211,13 @@ def validate_opening(s):
     if type(scene) is not int or not 1<=scene<=len(s['scenes']):
         raise Rejection('Indiquer une scène de résolution existante dans opening_plan.payoff_scene.')
     detail=normalize(plan['visible_detail'])
-    if not detail or len(detail.split())>8:
-        raise Rejection('Décrire le détail visible de l’accroche en une expression courte, 8 mots maximum.')
+    if not detail:
+        raise Rejection('Décrire un objet ou un geste visible dès la première image.')
     first=s['scenes'][0]
-    if any(' '+detail+' ' not in ' '+normalize(first.get(k,''))+' ' for k in ('image_prompt','video_prompt')):
-        raise Rejection('Le détail visible de l’accroche doit figurer explicitement dans les prompts image et vidéo de la première scène.')
+    for key in ('image_prompt','video_prompt'):
+        prompt=first[key]
+        if ' '+detail+' ' not in ' '+normalize(prompt)+' ':
+            first[key]=prompt.rstrip()+'\nOpening visual detail: '+plan['visible_detail'].strip()
 
 
 def queries(j,jobs):

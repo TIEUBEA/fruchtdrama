@@ -107,19 +107,22 @@ def refresh(url, data_dir, fetch=_fetch, now=time.time, force=False):
         if info.get('views'):
             history = (history + [[moment, info['views']]])[-24:]
         meta = {**(old or {}), **{k: v for k, v in info.items() if k not in ('cover', 'avatar')}, 'id': vid, 'read': moment, 'history': history}
-        for key, name in (('cover', vid + '.jpg'), ('avatar', vid + '.avatar.jpg')):
-            target = folder / name
-            if _cdn(info.get(key)) and (key == 'cover' or not target.is_file()):
-                data, _ = fetch(info[key])
-                if _image(data):
-                    target.write_bytes(shrink(data, 720 if key == 'cover' else 96))
         meta_file.write_text(json.dumps(meta, ensure_ascii=False), 'utf-8')
         failed.unlink(missing_ok=True)
-        return meta
     except Exception:
         if not old:
             failed.write_text(str(int(now())), 'utf-8')
         return old
+    for key, name in (('cover', vid + '.jpg'), ('avatar', vid + '.avatar.jpg')):
+        target = folder / name
+        if _cdn(info.get(key)) and (key == 'cover' or not target.is_file()):
+            try:
+                data, _ = fetch(info[key])
+                if _image(data):
+                    target.write_bytes(shrink(data, 720 if key == 'cover' else 96))
+            except Exception:
+                continue
+    return meta
 
 
 def get(url, data_dir, fetch=_fetch, now=time.time, kind='cover'):

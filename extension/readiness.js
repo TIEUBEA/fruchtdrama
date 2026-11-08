@@ -6,6 +6,13 @@ globalThis.FruchtReadiness={
  HOSTS:{chatgpt:['chatgpt.com'],claude:['claude.ai'],grok:['grok.com'],arena:['arena.ai','lmarena.ai'],vidogrid:['vidogrid.ai','www.vidogrid.ai'],flow:['flow.google.com','labs.google']},
  URLS:{chatgpt:'https://chatgpt.com/',claude:'https://claude.ai/new',grok:'https://grok.com/imagine',arena:'https://arena.ai/video',vidogrid:'https://vidogrid.ai/app/video-gen/grok'},
  EDITOR:['chatgpt','claude','grok'],
+ tabBusy(error){return /Tabs cannot be edited right now|user may be dragging a tab/i.test(String(error?.message||error));},
+ async retryTabEdit(operation,wait){
+  for(let attempt=0;;attempt++){
+   try{return await operation();}
+   catch(error){if(!this.tabBusy(error)||attempt>=3)throw error;await wait(750*(attempt+1));}
+  }
+ },
  // Pure: what the page shows -> Prêt / À régler (reason) / Pas d'accès.
  classify(info){
   info=info||{};
@@ -22,6 +29,7 @@ globalThis.FruchtReadiness={
    if(!info.home&&!info.editor)return fix(info.text?'Projet Flow sans zone de saisie (page vide ou bloquée)':'Page vide');
    return {state:'ready',reason:''};
   }
+  if(info.name==='chatgpt'&&info.editor&&info.connected)return {state:'ready',reason:''};
   if(!info.text)return fix('Page vide ou bloquée');
   if(this.EDITOR.includes(info.name)&&!info.editor)return fix('Zone de saisie absente : connexion requise ou page bloquée');
   return {state:'ready',reason:''};
@@ -32,7 +40,7 @@ globalThis.FruchtReadiness={
   const site=name!=='flow'&&globalThis.FruchtSites?FruchtSites.probe(name,doc):{};
   const labels=[...doc.querySelectorAll('button,a,[role="button"]')].filter(b=>b.getClientRects().length).map(b=>[b.getAttribute('aria-label'),b.innerText].filter(Boolean).join(' ').replace(/\s+/g,' ').trim());
   const signIn=labels.some(l=>/^(log in|sign in|se connecter|connexion|anmelden|einloggen)$/i.test(l));
-  return {editor:visibleEditor,signIn:name==='flow'?false:signIn&&!site.connected,challenge:!!globalThis.FruchtComposer?.challenge(doc),
+  return {editor:visibleEditor,connected:site.connected,signIn:name==='flow'?false:signIn&&!site.connected,challenge:!!globalThis.FruchtComposer?.challenge(doc),
    loggedOut:name==='vidogrid'&&site.connected===false,email:name==='flow'?(globalThis.FruchtFlowSession?.identity(doc)||null):(site.email||null),text:String(doc.body?.innerText||'').trim().length>0,
    ready:['interactive','complete'].includes(doc.readyState)};
  },
@@ -75,9 +83,18 @@ globalThis.FruchtReadiness={
  async forget(chrome,key){const {readinessTabs={}}=await chrome.storage.local.get('readinessTabs');if(key in readinessTabs){delete readinessTabs[key];await chrome.storage.local.set({readinessTabs});}},
  async site(chrome,ws,name,wait){
   const hosts=this.HOSTS[name],tabs=await chrome.tabs.query({});
-  let tab=tabs.find(t=>hosts.includes(this.hostOf(t.url||t.pendingUrl))),opened=false;
+  const candidates=tabs.filter(t=>hosts.includes(this.hostOf(t.url||t.pendingUrl))&&!t.discarded);
+  if(name==='chatgpt')candidates.sort((a,b)=>Number(!!b.active)-Number(!!a.active));
+  let tab=candidates[0],opened=false;
   if(!tab){tab=await ws.createTab(chrome,{url:this.URLS[name],active:false});opened=true;await wait(6000);}
-  const {verdict,info}=await this.look(chrome,tab,name,{},wait);
+  let {verdict,info}=await this.look(chrome,tab,name,{},wait);
+  if(name==='chatgpt'&&verdict.reason==='Page vide ou bloquée'){
+   for(const other of candidates.slice(1,3)){
+    const result=await this.look(chrome,other,name,{},wait,2);
+    if(result.verdict.reason==='Page vide ou bloquée')continue;
+    tab=other;({verdict,info}=result);break;
+   }
+  }
   if(verdict.state==='ready'){await this.forget(chrome,'site:'+name);if(opened)try{await ws.close(chrome,[tab.id]);}catch{}}
   else await this.keep(chrome,'site:'+name,tab.id);
   return {...verdict,email:info.email||null,challenge:!!info.challenge,connected:verdict.state==='ready'};
@@ -105,10 +122,12 @@ globalThis.FruchtReadiness={
   const report={id:request.id,sites:{},profiles:{}};
   for(const name of request.sites||[]){
    if(!this.HOSTS[name])continue;
-   try{report.sites[name]=await this.site(chrome,ws,name,wait);}catch(e){report.sites[name]={state:'fix',reason:'Vérification interrompue : '+String(e.message||e).slice(0,120)};}
+   try{report.sites[name]=await this.retryTabEdit(()=>this.site(chrome,ws,name,wait),wait);}
+   catch(e){if(!this.tabBusy(e))report.sites[name]={state:'fix',reason:'Vérification interrompue : '+String(e.message||e).slice(0,120)};}
   }
   for(const target of request.profiles||[]){
-   try{report.profiles[target.id]=await this.profile(chrome,ws,target,wait);}catch(e){report.profiles[target.id]={state:'fix',reason:'Vérification interrompue : '+String(e.message||e).slice(0,120)};}
+   try{report.profiles[target.id]=await this.retryTabEdit(()=>this.profile(chrome,ws,target,wait),wait);}
+   catch(e){if(!this.tabBusy(e))report.profiles[target.id]={state:'fix',reason:'Vérification interrompue : '+String(e.message||e).slice(0,120)};}
   }
   return report;
  },

@@ -42,14 +42,45 @@ class StoryQualityTests(unittest.TestCase):
         scenes = [{'title': 'T', 'characters': ['a'], 'meaning': 'm', 'image_prompt': 'i', 'video_prompt': 'v',
                    'dialogue': [{'speaker': 'a', 'text': 'Tu peux le jeter.'}]} for _ in range(4)]
         script = {'title': 'La femme de ménage', 'cover_title': 'Elle cache tout', 'hook_text': 'Elle cache tout ?', 'description': 'Fiction IA',
-                  'characters': [{'id': 'a', 'name': 'Rose', 'appearance': 'Pomme', 'voice': 'douce', 'image_prompt': 'p'}], 'scenes': scenes}
+                  'characters': [{'id': ' A ', 'name': 'Rose', 'appearance': 'Pomme', 'voice': 'douce', 'image_prompt': 'p'}], 'scenes': scenes}
         s.store_script(j, script)  # no creative_selection, no story_signature: accepted for a faithful remake
         self.assertEqual(j['script']['title'], 'La femme de ménage')
+        self.assertEqual(j['characters'][0]['id'], 'a')
 
     def test_inspired_and_new_stories_get_the_story_craft(self):
         p = s.script_prompt(job('inspired'))
         self.assertIn('RÉCIT QUI CAPTIVE', p); self.assertIn('mécanique émotionnelle', p); self.assertIn('CINQ concepts', p)
         self.assertIn('3*emotion', p)
+
+    def test_approved_sheet_replaces_concept_selection(self):
+        j = job('inspired')
+        j.update(sheet_approved=True, sheet={'titles': ['La preuve'], 'hooks': ['ROSE, EN CRIANT : « Rends-moi la clé ! »']})
+        j.pop('hook_version')
+        prompt = s.script_prompt(j)
+        self.assertIn('Développe directement la fiche validée', prompt)
+        self.assertNotIn('creative_selection', prompt)
+        script = {'title': 'La preuve', 'scenes': [{'dialogue': [{'text': 'Rends-moi la clé !'}]}],
+                  'story_signature': dict(relationship='family', setting='hall', central_object='key', twist_mechanism='lock')}
+        editorial.validate(script, j, [])
+        script['title'] = 'Autre idée'
+        with self.assertRaisesRegex(editorial.Rejection, 'Titre exact attendu'):
+            editorial.validate(script, j, [])
+
+    def test_critical_mark_and_cast_reach_the_rendering_prompts(self):
+        j = job('inspired')
+        j['characters'] = [{'id': name.lower(), 'name': name, 'appearance': name, 'voice': 'native'}
+                           for name in ('Rose', 'Paul', 'Absent')]
+        scene = {'characters': ['rose', 'paul'], 'dialogue': [{'speaker': 'rose', 'text': 'Regarde !'}],
+                 'video_prompt': 'A close-up', 'critical_mark': '10/10 on the front of the medal'}
+        j['scenes'] = [scene]
+        for prompt in (s.plan_image_block(j, scene), s.clip_prompt(j, 0, 'grok'), s.board_check.prompt(j)):
+            self.assertIn(scene['critical_mark'], prompt)
+        video = s.clip_prompt(j, 0, 'grok')
+        self.assertIn('SILENT, MOUTH CLOSED: Paul', video)
+        self.assertNotIn('Absent', video)
+        self.assertIn('6 seconds', video)
+        scene.pop('critical_mark')
+        self.assertIn('No text, letters, numbers', s.clip_prompt(j, 0, 'flow'))
 
     def test_directions_are_emotional_engines_not_quiet_family_secrets(self):
         ids = [d[0] for d in editorial.FAMILY_DIRECTIONS]

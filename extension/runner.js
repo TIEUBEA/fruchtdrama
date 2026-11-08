@@ -13,6 +13,9 @@ try{if(globalThis.fruchtRunnerHandler)chrome.runtime.onMessage.removeListener(gl
 globalThis.fruchtRunnerHandler=(m,s,reply)=>{
  if(m.type==='frucht-status'){reply(globalThis.fruchtRunState||{state:'absent'});return false;}
  if(m.type!=='frucht-run')return false;
+ if(globalThis.fruchtRunState?.task===m.task.id&&['running','completed'].includes(globalThis.fruchtRunState.state)){
+  reply({accepted:true,task:m.task.id,already_started:true});return false;
+ }
  if(globalThis.fruchtRunState?.state==='running'){reply({accepted:false,error:'Une tâche est déjà en cours dans cet onglet.'});return false;}
  globalThis.fruchtRunState={state:'running',task:m.task.id};
  run(m.task,m.attachments).then(result=>{if(['flow_video','engine_video'].includes(m.task.kind))result.generation_submitted=globalThis.fruchtRunState.submitted===true;globalThis.fruchtRunState={...globalThis.fruchtRunState,state:'completed',task:m.task.id,result};return notifyResult(m.task.id);}).catch(e=>{globalThis.fruchtRunState={...globalThis.fruchtRunState,state:'completed',task:m.task.id,result:{ok:false,error:e.message,...(e.kind?{error_kind:e.kind}:{}),...(e.retryAfter?{retry_after:e.retryAfter}:{}),...(['flow_video','engine_video'].includes(m.task.kind)?{generation_submitted:globalThis.fruchtRunState.submitted===true,...(e.flowBlocked?{flow_blocked:e.flowBlocked}:{}),...(e.flow_failed?{flow_failed:true}:{})}:{})}};return notifyResult(m.task.id);});
@@ -37,13 +40,13 @@ async function run(task,attachments){
  const blocked=()=>{requireLiveExtension();const t=text();if(globalThis.FruchtComposer.challenge(document))throw fail('challenge','Contrôle du fournisseur : intervention manuelle nécessaire.');if(location.hostname==='accounts.google.com')throw fail('login','Connexion requise. Connectez-vous vous-même.')};
  const findEditor=()=>globalThis.FruchtComposer.editor(document);
  const fill=(el,value)=>{el.focus();if(el.tagName==='TEXTAREA'||el.tagName==='INPUT'){const setter=Object.getOwnPropertyDescriptor(el.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype,'value').set;setter.call(el,value);el.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:value}))}else{const selection=window.getSelection(),range=document.createRange();range.selectNodeContents(el);selection.removeAllRanges();selection.addRange(range);if(!document.execCommand('insertText',false,value)){el.textContent=value;el.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:value}))}}el.dispatchEvent(new Event('change',{bubbles:true}))};
- const waitFor=async(fn,timeout=30000)=>{const start=Date.now();while(Date.now()-start<timeout){blocked();const v=fn();if(v)return v;await sleep(1000)}throw fail('interface','Interface non reconnue ou délai dépassé. Utilisez le prompt et l’import manuel dans le studio.')};
+ const waitFor=async(fn,timeout=30000,message='Interface non reconnue ou délai dépassé. Utilisez le prompt et l’import manuel dans le studio.')=>{const start=Date.now();while(Date.now()-start<timeout){blocked();const v=fn();if(v)return v;await sleep(1000)}throw fail('interface',message)};
  const count=s=>{if(!s)return null;const v=s.trim().replace(/\s/g,'').replace(',','.');const m=v.match(/^(\d+(?:\.\d+)?)\s*([kmb])?$/i);return m?Number(m[1])*({k:1e3,m:1e6,b:1e9}[m[2]?.toLowerCase()]||1):null};
  await sleep(1500);blocked();
  if(task.kind==='chat_collect')return collectScenario(task);
  if(['chat_text','chat_image'].includes(task.kind)&&globalThis.FruchtComposer.loggedOut?.(document))throw fail('login',(location.hostname==='claude.ai'?'Claude':'ChatGPT')+' : non connecté. Connectez-vous vous-même dans l’onglet de la fenêtre FruchtDrama, puis Reprendre. Aucun prompt envoyé.');
  // P5-09/P5-10: Grok Imagine and LMArena video.
- if(task.kind==='engine_video')return globalThis.FruchtEngines.run(task,attachments,{document,sleep,fill,blocked,fail,DataTransfer,File,Event,now:()=>Date.now(),
+ if(task.kind==='engine_video')return globalThis.FruchtEngines.run(task,attachments,{document,sleep,fill,blocked,fail,DataTransfer,File,Event,ClipboardEvent:globalThis.ClipboardEvent,now:()=>Date.now(),
   // Bound: called as h.atob(), the bare browser atob throws « Illegal invocation » (real page 06/11/2026).
   atob:s=>atob(s),
   intent:async()=>(await chrome.runtime.sendMessage({type:'submission-intent',task:task.id}))?.ok===true,
@@ -51,8 +54,9 @@ async function run(task,attachments){
   videoPayload:v=>globalThis.FruchtMedia.videoPayload(v),
   retryAfter:t=>globalThis.FruchtComposer.retryAfter?.(t)||null});
  if(task.kind==='tiktok_search'){
-  await waitFor(()=>document.querySelector('a[href*="/video/"]'),45000);
-  return {ok:true,candidates:globalThis.FruchtResearch.extract(document)};
+  const candidates=await waitFor(()=>{const rows=globalThis.FruchtResearch.extract(document);return rows.length?rows:null;},
+   45000,'Aucun résultat vidéo TikTok détecté après 45 s. Vérifie l’onglet TikTok dans la fenêtre FruchtDrama, puis actualise le Filon.');
+  return {ok:true,candidates};
  }
  const isFlow=task.kind==='flow_video';
  const checkFlowAccount=()=>{
@@ -105,11 +109,11 @@ async function run(task,attachments){
  checkFlowAccount();requireLiveExtension();
  // Dry run (P1-4): everything is configured and verified in Flow, nothing is sent or charged.
  if(isFlow&&task.payload.dry_run===true)return {ok:false,dry_run:true,generation_submitted:false,error:'Essai à blanc réussi : modèle, coût ('+task.payload.cost+' crédits), format, image et prompt prêts dans Flow. Rien n’a été envoyé ni facturé.'};
- const intent=await chrome.runtime.sendMessage({type:'submission-intent',task:task.id});if(!intent?.ok)throw Error('Envoi suspendu : association de la tâche perdue. Aucun prompt envoyé.');const flowBefore=isFlow?new Set(String(document.body?.innerText||'').split('\n').map(x=>x.trim())):null;send.click();globalThis.fruchtRunState.submitted=true;await sleep(2500);
+ const intent=await chrome.runtime.sendMessage({type:'submission-intent',task:task.id});if(!intent?.ok)throw Error('Envoi suspendu : association de la tâche perdue. Aucun prompt envoyé.');const flowBefore=isFlow?globalThis.FruchtFlow.generationSnapshot(document):null;send.click();globalThis.fruchtRunState.submitted=true;await sleep(2500);
  if(task.kind==='chat_text'){
   return collectScenario(task);
  }
- let previewOpened=false,openedAt=0,lastRefusal=null;const start=Date.now();while(Date.now()-start<480000){blocked();if(isFlow){if(!previewOpened){previewOpened=globalThis.FruchtFlow.openNewVideo(document,oldImages,oldImageElements);if(previewOpened)openedAt=Date.now();}const v=[...document.querySelectorAll('video')].find(v=>(v.currentSrc||v.src)&&!oldVideos.has(v.currentSrc||v.src)&&v.readyState>=1);const flowError=globalThis.FruchtFlow.generationError?.(document,flowBefore);if(flowError)throw fail('refusal','Flow a refusé ce clip : '+flowError,{generation_submitted:true,flow_failed:true});if(!v&&previewOpened&&Date.now()-openedAt>15000&&globalThis.FruchtFlow.control(document,/^(?:Medien herunterladen|Download media|Télécharger le média|Télécharger le contenu multimédia)$/i))return {ok:false,flow_download:true,generation_submitted:true,error:'Vidéo prête dans Flow : téléchargement du clip original 720p.'};if(v){return await globalThis.FruchtMedia.videoPayload(v)}}else{const candidate=globalThis.FruchtMedia.image(document,task.payload.prompt);const img=candidate&&!oldImages.has(candidate.currentSrc||candidate.src)?candidate:null;if(img&&!/avatar|profile/i.test(img.alt)){await sleep(2000);return await globalThis.FruchtMedia.payload(img)}
+ let previewOpened=false,openedAt=0,lastRefusal=null;const start=Date.now();while(Date.now()-start<480000){blocked();if(isFlow){if(!previewOpened){previewOpened=globalThis.FruchtFlow.openNewVideo(document,oldImages,oldImageElements);if(previewOpened)openedAt=Date.now();}const v=[...document.querySelectorAll('video')].find(v=>(v.currentSrc||v.src)&&!oldVideos.has(v.currentSrc||v.src)&&v.readyState>=1);const flowError=globalThis.FruchtFlow.generationFailure?.(document,flowBefore);if(flowError)throw fail(flowError.kind,'Flow : '+flowError.message,{generation_submitted:true,flow_failed:true});if(!v&&previewOpened&&Date.now()-openedAt>15000&&globalThis.FruchtFlow.control(document,/^(?:Medien herunterladen|Download media|Télécharger le média|Télécharger le contenu multimédia)$/i))return {ok:false,flow_download:true,generation_submitted:true,error:'Vidéo prête dans Flow : téléchargement du clip original 720p.'};if(v){return await globalThis.FruchtMedia.videoPayload(v)}}else{const candidate=globalThis.FruchtMedia.image(document,task.payload.prompt);const img=candidate&&!oldImages.has(candidate.currentSrc||candidate.src)?candidate:null;if(img&&!/avatar|profile/i.test(img.alt)){await sleep(2000);return await globalThis.FruchtMedia.payload(img)}
   // A refusal is confirmed by two identical readings of a NEW reply (P2-03): no 8-minute wait.
   const refusal=globalThis.FruchtComposer.refusal?.(document,oldAssistants)||null;
   if(refusal&&refusal===lastRefusal)throw fail('refusal','ChatGPT refuse cette image (refus de contenu) : '+refusal.slice(0,240));

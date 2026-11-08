@@ -17,9 +17,20 @@ const noop={addListener:()=>{}};
   assert.equal(R.classify({...flow,editor:false,home:true}).state,'ready','home page: the production creates its project');
   const chat={kind:'site',name:'chatgpt',host:'chatgpt.com',expectedHosts:R.HOSTS.chatgpt,editor:true,text:true};
   assert.equal(R.classify(chat).state,'ready');
+  assert.equal(R.classify({...chat,text:false,connected:true}).state,'ready');
   assert.match(R.classify({...chat,signIn:true}).reason,/Connexion requise/);
   assert.match(R.classify({...chat,editor:false}).reason,/Zone de saisie absente/);
   assert.match(R.classify({...chat,text:false,editor:false}).reason,/Page vide/);
+ }
+ // A blank ChatGPT tab cannot hide a second tab with a working session.
+ {const ctx=vm.createContext({URL});vm.runInContext(ext('readiness.js'),ctx);const R=ctx.FruchtReadiness;
+  const tabs=[{id:1,active:true,url:'https://chatgpt.com/'},{id:2,url:'https://chatgpt.com/c/working'}];
+  R.look=async(c,tab)=>tab.id===1?{verdict:{state:'fix',reason:'Page vide ou bloquée'},info:{}}:
+   {verdict:{state:'ready',reason:''},info:{email:'test@example.com'}};
+  R.forget=async()=>{};
+  const result=await R.site({tabs:{query:async()=>tabs}},{},'chatgpt',async()=>{});
+  assert.equal(result.state,'ready');
+  assert.equal(result.email,'test@example.com');
  }
  // 2. ready() fails on a Flow project showing an anti-robot check: the reason is said, the account is « À régler ».
  {const calls=[];
@@ -57,6 +68,21 @@ const noop={addListener:()=>{}};
   await ctx.FruchtReadiness.show(chrome,ws,{type:'show',profile:{id:'b',url:'https://flow.google.com/u/1/project/b'}});
   assert.deepEqual(shown,[[created[1].id,true]]);
  }
+ // An already signed-in account is linked without waiting for a new login.
+ {const tab={id:5,url:'https://chatgpt.com/',windowId:1},store={},calls=[];
+  const chrome={tabs:{query:async()=>[tab],update:async()=>tab},
+   windows:{update:async()=>{}},storage:{local:{get:async()=>store,set:async v=>Object.assign(store,v)}},
+   runtime:{onInstalled:noop,onStartup:noop,onMessage:noop},alarms:{onAlarm:noop}};
+  const ctx=vm.createContext({chrome,URL,Date,FruchtWorkspace:{adopt:async(_,t)=>t},
+   FruchtSites:{list:{chatgpt:{hosts:['chatgpt.com']}}},calls});
+  vm.runInContext(ext('background-worker.js'),ctx);
+  const linked=await vm.runInContext(`loginState=async()=>({connected:true,email:'test@example.com'});
+   call=async(path,body)=>calls.push({path,body});openLogin('chatgpt','gateway')`,ctx);
+  assert.equal(linked,true);
+  assert.equal(calls[0].path,'/api/bridge/sites');
+  assert.equal(calls[0].body.sites.chatgpt.email,'test@example.com');
+  assert.equal(store.pendingLogins.chatgpt.existing,true);
+ }
  // 4. Simple Mes comptes: one line per account, sidebar says the real state.
  {const ctx=vm.createContext({document:{addEventListener(){}},esc:s=>String(s),pill:(c,t)=>`<${c}>${t}`,ico:()=>'',page:'connections',Date,JSON,Set});
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../web/accounts.js'),'utf8'),ctx);
@@ -70,6 +96,9 @@ const noop={addListener:()=>{}};
   assert.equal(o.chat[0].text,'Prêt');assert.equal(o.sum,'1 compte à régler','real case 12:46: never « tout est prêt » with an account to fix');
   assert.match(o.home,/fr•••a@example\.com/);assert.match(o.home,/fr•••b@example\.com/);assert.doesNotMatch(o.home,/fruit\.a@example\.com/,'addresses partly masked');
   assert.match(o.home,/\+ Ajouter un compte/);assert.match(o.home,/Régler maintenant/);assert.match(o.home,/Tout supprimer/);
+  assert.match(o.home,/Actualiser tous les comptes/);
+  assert.match(o.home,/aria-controls="accountPicker"/);
+  assert.match(o.home,/Quel compte veux-tu ajouter/);
   ctx.state.profiles[1].readiness.state='ready';ctx.state.quota_status=[{service:'chatgpt_image',label:'ChatGPT images',blocked:true,retry_at:Date.now()/1000+1800}];
   vm.runInContext('globalThis.sum=accountsSummary()',ctx);assert.match(ctx.sum,/^ChatGPT bloqué jusqu’à \d\d:\d\d$/);
   ctx.state.setup=[{label:'ChatGPT',reason:'aucun compte prêt'}];

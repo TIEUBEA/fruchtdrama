@@ -6,6 +6,7 @@ sys.path.insert(0, str(ROOT))
 import package
 
 
+@unittest.skipUnless((ROOT/'.git').exists(), 'Distribution installée : les tests de packaging exigent le dépôt Git')
 class PackageTests(unittest.TestCase):
     def test_contents(self):
         with tempfile.TemporaryDirectory() as tmp:

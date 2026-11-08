@@ -46,6 +46,13 @@ def queued(j):
 
 
 class FirstStep(unittest.TestCase):
+    def test_stale_flow_session_is_not_counted_as_ready(self):
+        studio(profile('a', 0, state='ready'))
+        s.STATE['clients']['win']['seen']=iso(3600)
+        self.assertFalse(readiness.flow_has_account(s.STATE))
+        s.STATE['clients']['win']['seen']=iso()
+        self.assertTrue(readiness.flow_has_account(s.STATE))
+
     def test_nothing_starts_before_chatgpt_and_a_clip_engine(self):
         studio(chatgpt=None)
         self.assertEqual([m['service'] for m in readiness.setup_missing(s.STATE)], ['chatgpt', 'flow'])
@@ -260,6 +267,84 @@ class Http(unittest.TestCase):
         with urllib.request.urlopen(r) as x:
             self.assertEqual([i['type'] for i in json.load(x)], ['show'])
         self.assertEqual([i['type'] for i in s.STATE['bridge_requests']], ['readiness'])
+
+    def test_flow_gateway_does_not_take_main_window_scan(self):
+        studio(profile('a', 0))
+        s.STATE['clients']['flow'] = {'id': 'flow', 'role': 'flow', 'flow_profile': 'a'}
+        s.profile_by('a')['flow_client'] = 'flow'
+        self.req('/api/sites', {'action': 'scan_flow', 'check_all': True})
+        self.req('/api/sites', {'action': 'fix', 'target': 'flow:a'})
+        dedicated = self.req('/api/bridge/requests?client=flow&light=1', bridge=True)
+        self.assertEqual([item['type'] for item in dedicated], ['show'])
+        self.assertEqual(self.req('/api/bridge/requests?client=flow', bridge=True), [])
+        main = self.req('/api/bridge/requests?client=win', bridge=True)
+        self.assertEqual([item['type'] for item in main], ['scan_flow'])
+        self.assertTrue(main[0]['then_check'])
+        self.assertTrue(main[0]['check_all'])
+
+    def test_recover_one_flow_account_only_in_its_own_browser(self):
+        studio(profile('a', 0), profile('b', 1))
+        s.STATE['clients']['flow'] = {'id': 'flow', 'role': 'flow', 'flow_profile': 'a', 'seen': iso()}
+        s.profile_by('a')['flow_client'] = 'flow'
+        self.req('/api/sites', {'action': 'scan_flow', 'profile': 'a', 'check': True})
+        self.assertEqual(self.req('/api/bridge/requests?client=win', bridge=True), [])
+        request = self.req('/api/bridge/requests?client=flow', bridge=True)[0]
+        self.assertEqual(request['profile'], 'a')
+        accounts = [{'email': 'other@example.com', 'slot': 0, 'balance': 80},
+                    {'email': 'a@example.com', 'slot': 2, 'balance': 35}]
+        with self.assertRaises(urllib.error.HTTPError):
+            self.req('/api/bridge/flow-scan', {'client': 'win', 'profile': 'a', 'accounts': accounts}, bridge=True)
+        self.assertTrue(self.req('/api/bridge/flow-scan', {'client': 'flow', 'profile': 'a', 'accounts': accounts}, bridge=True)['detected'])
+        self.assertEqual((s.profile_by('a')['slot'], s.profile_by('a')['balance']), (2, 35))
+        self.assertEqual((s.profile_by('b')['slot'], len(s.STATE['profiles'])), (1, 2))
+
+    def test_offline_flow_is_not_queued_and_pending_expires(self):
+        studio(profile('a', 0))
+        s.STATE['clients']['old'] = {'id': 'old', 'role': 'flow', 'seen': iso(3600)}
+        s.profile_by('a')['flow_client'] = 'old'
+        s.request_readiness(['chatgpt'], ['a'])
+        self.assertEqual(s.STATE['readiness']['pending'], ['site:chatgpt'])
+        self.assertTrue(s.readiness_tick(time.time() + readiness.CHECK_TIMEOUT + 1))
+        self.assertEqual(s.STATE['readiness']['pending'], [])
+        self.assertEqual(s.STATE['bridge_requests'], [])
+
+    def test_sign_in_replaces_old_blocker_and_registers_the_account_once(self):
+        studio(profile('a', 0), chatgpt='fix')
+        s.STATE['sites'] = {'grok': {'connected': True}}
+        report = {'client': 'win', 'partial': True, 'sites': {'chatgpt': {'connected': True, 'email': 'Olga@example.com'}}}
+        for _ in range(2):
+            self.req('/api/bridge/sites', report, bridge=True)
+        self.assertEqual(readiness.site_entry(s.STATE, 'chatgpt')['state'], 'ready')
+        self.assertEqual([a['email'] for a in s.STATE['identities']], ['olga@example.com'])
+        self.assertTrue(s.STATE['sites']['grok']['connected'])
+        self.assertEqual(readiness.setup_missing(s.STATE), [])
+
+    def test_empty_flow_scan_does_not_enable_rotation(self):
+        studio()
+        s.STATE['settings']['flow_auto'] = False
+        result = self.req('/api/bridge/flow-scan', {'client': 'win', 'accounts': []}, bridge=True)
+        self.assertFalse(result['detected'])
+        self.assertFalse(s.STATE['settings']['flow_auto'])
+        self.assertFalse(s.STATE['bridge_notice']['ok'])
+
+    def test_flow_only_browser_checks_only_its_registered_profile(self):
+        studio(profile('a', 0), profile('b', 1))
+        s.STATE['clients']['flow'] = {'id': 'flow', 'role': 'flow', 'flow_profile': 'b'}
+        s.profile_by('b')['flow_client'] = 'flow'
+        s.request_readiness(['chatgpt'], ['a', 'b'])
+
+        def requests(client):
+            req = urllib.request.Request(self.base + '/api/bridge/requests?client=' + client,
+                                         headers={'Authorization': 'Bearer ' + s.STATE['token']})
+            with urllib.request.urlopen(req) as response:
+                return json.load(response)[0]
+
+        flow = requests('flow')
+        main = requests('win')
+        self.assertEqual(flow['sites'], [])
+        self.assertEqual([p['id'] for p in flow['profiles']], ['b'])
+        self.assertEqual(main['sites'], ['chatgpt'])
+        self.assertEqual([p['id'] for p in main['profiles']], ['a'])
 
     def test_remove_all_of_one_service(self):
         studio(profile('a', 0), profile('b', 1))

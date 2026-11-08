@@ -34,6 +34,24 @@ class ThumbTests(unittest.TestCase):
 
 
 class FigureTests(unittest.TestCase):
+    def test_failed_cover_does_not_discard_figures_or_avatar(self):
+        item = {'id': '7689550752078908705', 'statsV2': {'playCount': '12345'},
+                'video': {'originCover': 'https://p16-sign.tiktokcdn.com/c.jpg'},
+                'author': {'avatarThumb': 'https://p16-sign.tiktokcdn.com/a.jpg'}}
+
+        def fetch(url):
+            if url.endswith('/c.jpg'):
+                raise OSError('cover unavailable')
+            if url.endswith('/a.jpg'):
+                return JPEG, 'image/jpeg'
+            data = {'__DEFAULT_SCOPE__': {'webapp.video-detail': {'itemInfo': {'itemStruct': item}}}}
+            return ('<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__">' + json.dumps(data) + '</script>').encode(), 'text/html'
+
+        with tempfile.TemporaryDirectory() as folder:
+            thumbs.refresh(URL, folder, fetch)
+            self.assertEqual(thumbs.all_figures(folder)[item['id']]['views'], 12345)
+            self.assertIsNotNone(thumbs.get(URL, folder, fetch, kind='avatar'))
+
     def test_page_figures_history_and_growth(self):
         item = {'id': '7689550752078908705', 'desc': 'Une fraise #fruitstory', 'createTime': '1000', 'textLanguage': 'fr',
                 'statsV2': {'playCount': '10000', 'diggCount': '600', 'commentCount': '30', 'shareCount': '20', 'collectCount': '5'},

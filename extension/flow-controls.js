@@ -82,10 +82,18 @@ globalThis.FruchtFlow={
   const options=()=>[...doc.querySelectorAll('[role="radio"],[role="option"],[role="menuitem"],button')].filter(b=>this.visible(doc,b)&&!b.disabled&&this.labelMatches(b,pattern)&&parse(b.innerText||b.getAttribute('aria-label')||'')===desired);
   let matches=options();
   if(matches.length!==1){
-   const controls=[...doc.querySelectorAll('[role="combobox"]')].filter(b=>this.visible(doc,b)&&pattern.test((b.innerText||b.getAttribute('aria-label')||'').trim()));
+   const semantic=kind==='resolution'?/resolution|résolution|auflösung/i:/duration|durée|dauer/i;
+   const controls=[...doc.querySelectorAll('[role="combobox"],button,[role="button"]')].filter(b=>{
+    if(!this.visible(doc,b)||b.disabled)return false;
+    const label=[b.innerText,b.getAttribute('aria-label')].filter(Boolean).join(' ').trim();
+    return semantic.test(label)||((b.getAttribute('aria-haspopup')||b.getAttribute('role')==='combobox')&&this.labelMatches(b,pattern));
+   });
    if(controls.length===1){controls[0].click();await pause(400);matches=options();}
   }
-  if(matches.length!==1)throw Error('Flow : réglage '+kind+' non reconnu ; aucun envoi effectué.');
+  if(matches.length!==1){
+   const seen=[...doc.querySelectorAll('[role="combobox"],button,[role="button"],[role="radio"],[role="option"],[role="menuitem"]')].filter(b=>this.visible(doc,b)).map(b=>(b.innerText||b.getAttribute('aria-label')||'').replace(/\s+/g,' ').trim()).filter(t=>/\b(?:360|720|1080|2160)p\b|resolution|résolution|auflösung|duration|durée|dauer/i.test(t)).slice(-12);
+   throw Error('Flow : réglage '+kind+' '+desired+' indisponible ou ambigu ; aucun envoi effectué. Vu : '+seen.join(' | ').slice(0,600));
+  }
   this.activate(doc,matches[0]);await pause(400);
   if(this.currentSetting(doc,pattern,parse)!==desired)throw Error('Flow : réglage '+kind+' non confirmé ; aucun envoi effectué.');
  },
@@ -189,9 +197,20 @@ globalThis.FruchtFlow={
  },
  // Flow writes why a generation failed on the page (owner 06/11/2026: « lis aussi le message d'erreur dans Flow »):
  // a NEW line with a failure wording, absent before the click, ends the wait at once with Flow's own words.
+ generationSnapshot(doc){
+  const counts=new Map();
+  for(const line of String(doc.body?.innerText||'').split('\n').map(x=>x.trim()))counts.set(line,(counts.get(line)||0)+1);
+  return counts;
+ },
  generationError(doc,before){
-  const lines=String(doc.body?.innerText||'').split('\n').map(x=>x.trim()).filter(x=>x&&x.length<400&&!(before&&before.has(x)));
-  return lines.find(x=>/impossible de générer|n.a pas pu|non conforme|a échoué|échec de (?:la )?génération|activité inhabituelle|pourrait enfreindre|enfreint|règles|policy|violat|couldn.t generate|could not generate|generation failed|failed to generate|unusual activity|try again|réessaie|réessayez|something went wrong|une erreur s.est produite/i.test(x))||null;
+  const counts=this.generationSnapshot(doc);
+  const lines=[...counts.keys()].filter(x=>x&&x.length<400&&(!before||!before.has(x)||(typeof before.get==='function'&&counts.get(x)>before.get(x))));
+  return lines.find(x=>/impossible de générer|n.a pas pu|non conforme|a échoué|échec de (?:la )?génération|activité inhabituelle|pourrait enfreindre|enfreint|règles|policy|violat|couldn.t generate|could not generate|generation failed|failed to generate|unusual activity|try again|réessaie|réessayez|something went wrong|une erreur s.est produite|(?:generierung|erstellung).*fehlgeschlagen|(?:video|clip|inhalt).*konnte.*nicht.*(?:generiert|erstellt)|(?:konnte|kann).*nicht.*generiert|gegen.*richtlinien|drittanbieter|ungewöhnliche aktivität|etwas ist schiefgelaufen/i.test(x))||null;
+ },
+ generationFailure(doc,before){
+  const message=this.generationError(doc,before);if(!message)return null;
+  const refusal=/non conforme|pourrait enfreindre|enfreint|règles|policy|violat|richtlinien|drittanbieter|contenu.*(?:tiers|refusé)|content.*(?:refused|moderated)/i.test(message);
+  return {kind:refusal?'refusal':'other',message};
  },
  openNewVideo(doc,oldImages,oldElements){
   const images=[...doc.images].filter(img=>img.complete&&/^(?:Miniaturansicht des erstellten Videos|Generated video thumbnail|Miniature de la vidéo générée)$/i.test(img.alt||'')&&!oldImages.has(img.currentSrc||img.src)&&!oldElements.has(img)&&img.getClientRects().length);
