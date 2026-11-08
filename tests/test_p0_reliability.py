@@ -137,9 +137,11 @@ class PromptTests(Base):
     def test_announced_word_limit_matches_validator(self):
         j = make_job(editorial_version=2, retention_version=1, hook_version=1, selected={'title': 'x', 'url': 'https://www.tiktok.com/@a/video/1'})
         prompt = s.script_prompt(j)
-        self.assertIn('Au plus 20 mots parlés par scène', prompt); self.assertNotIn('Au plus 25 mots', prompt)
+        self.assertIn('Au plus 24 mots parlés par scène', prompt)
         legacy = make_job(selected={'title': 'x', 'url': 'https://www.tiktok.com/@a/video/1'})
-        self.assertIn('Au plus 25 mots parlés par scène', s.script_prompt(legacy))
+        self.assertIn('Au plus 24 mots parlés par scène', s.script_prompt(legacy))
+        j['config']['video_engine'] = 'grok'
+        self.assertIn('Au plus 18 mots parlés par scène', s.script_prompt(j))
 
 
 class ScriptRetryTests(Base):
