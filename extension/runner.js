@@ -24,8 +24,14 @@ globalThis.fruchtRunnerHandler=(m,s,reply)=>{
 }
 async function collectScenario(task){
  const n=task.payload.scene_count;let previous='',stable=0,maximumLength=0;const start=Date.now();
- while(Date.now()-start<(task.kind==='chat_collect'?20000:240000)){
+ // Real case 09/11/2026: a 7-scene scenario (30 000 characters) took more than 4 min to stream and was dropped as
+ // « non détectée ». The wait goes on while the reply still grows (or the provider still shows its stop button), up to 15 min.
+ let grownAt=Date.now(),longest=0;
+ const writing=()=>!!document.querySelector('[data-testid="stop-button"],button[aria-label*="Stop" i],button[aria-label*="Arrêter" i],button[aria-label*="Stopp" i]');
+ const limit=task.kind==='chat_collect'?20000:240000;
+ while(Date.now()-start<limit||(task.kind!=='chat_collect'&&Date.now()-start<900000&&(Date.now()-grownAt<45000||writing()))){
   requireLiveExtension();const candidate=globalThis.FruchtResponse.extract(document,n,task.payload.expected_job,task.payload.expected_task,task.payload.response_kind);
+  const size=Math.max(0,...globalThis.FruchtResponse.candidates(document).map(x=>x.length));if(size>longest){longest=size;grownAt=Date.now();}
   if(candidate){maximumLength=Math.max(maximumLength,candidate.length);stable=candidate===previous?stable+1:0;previous=candidate;if(stable>=2)return {ok:true,text:candidate};}
   else{stable=0;previous='';}
   await new Promise(r=>setTimeout(r,1500));

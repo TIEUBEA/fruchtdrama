@@ -9,6 +9,10 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 
 
+## 0.1.96.24 (09/11/2026)
+**Corrigé**
+- **Scénario « Réponse JSON complète non détectée »** : la lecture abandonnait après 4 min alors qu'un scénario de 7 scènes (30 000 caractères) met plus de 5 min à s'écrire dans ChatGPT. Elle attend maintenant tant que la réponse grandit ou que ChatGPT écrit encore, jusqu'à 15 min.
+
 ## 0.1.96.23 (09/11/2026) — vitesse
 Retour du propriétaire : « notre FruchtDrama est beaucoup plus lent que l'Atelier Gourmand ». Cas réel : un épisode a attendu 19 min derrière un autre mis en pause.
 
