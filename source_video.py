@@ -233,7 +233,7 @@ def beats(transcript: str, duration: float | None, scenes: int) -> list[list[str
 
 
 def guidance(mode: str, analysis: dict | None, captures_count: int = 0, scenes: int = 0, clip_seconds: int = 10,
-             language: str = 'Français (fr-FR)') -> str:
+             language: str = 'Français (fr-FR)', style: dict | None = None) -> str:
     """What the writing AI is told about the video to redo."""
     analysis = analysis or {}
     seen = []
@@ -254,7 +254,7 @@ def guidance(mode: str, analysis: dict | None, captures_count: int = 0, scenes: 
         # Moteur V09 (owner, 09/11/2026): the faithful copy of fruit-france (MOTEUR §S), plan by plan with the source
         # times; same story, same lines translated, only the characters become fruits.
         import moteur_v09
-        text += '\n' + moteur_v09.guidance(analysis, scenes, clip_seconds, language)
+        text += '\n' + moteur_v09.guidance(analysis, scenes, clip_seconds, language, style)
     else:
         text += ('\nINSPIRÉE de cette vidéo : garde sa mécanique émotionnelle (le même type de victime et d’antagoniste, la même injustice, '
                  'le même genre de retournement, la même fin et la même émotion, le même rythme et le même type d’accroche), '

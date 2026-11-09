@@ -121,7 +121,7 @@ class ScheduleV09(unittest.TestCase):
         self.assertEqual(t['payload']['seconds'], 10)
         prompt = t['payload']['prompt']
         self.assertIn('10 seconds', prompt); self.assertIn('Only the character who speaks moves his or her lips', prompt)
-        self.assertIn('Bodies 100 % fruit', prompt); self.assertIn('Language: Français (fr-FR) only', prompt)
+        self.assertIn('never human skin', prompt); self.assertIn('Language: Français (fr-FR) only', prompt)
         deliver(j, t)
         t = queued(j)[0]; self.assertEqual((t['slot'], engine_of(t)), ('clip:1', 'flow'))
         self.assertEqual((t['payload']['model'], t['payload']['seconds'], t['payload']['cost'], t['payload']['resolution']), (engines.OMNI_12, 10, 30, '720p'))
@@ -151,3 +151,32 @@ class ScheduleV09(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class CharacterStyles(unittest.TestCase):
+    def test_at_least_ten_styles_from_tiktok_and_never_twice_in_a_row(self):
+        import character_styles as cs
+        self.assertGreaterEqual(len(cs.STYLES), 10)
+        for k, v in cs.STYLES.items():
+            self.assertTrue(v['source'].startswith('https://www.tiktok.com/@'), k)
+            self.assertFalse(moteur_v09.BRANDS.search(v['make']), k)
+        self.assertEqual(cs.pick('chats', ['chats']), 'chats', 'the owner may choose the same style on purpose')
+        recent = []
+        for _ in range(12):
+            recent.insert(0, cs.pick('auto', recent))
+        self.assertEqual(len(set(recent)), 12, 'auto goes through every style before repeating one')
+        self.assertNotEqual(cs.pick('auto', ['verre_liquide']), 'verre_liquide')
+        with self.assertRaises(ValueError):
+            cs.pick('sora', [])
+
+    def test_style_reaches_writer_boards_and_clips(self):
+        s.STATE = state()
+        j = clip_job(); j['config']['character_style'] = 'verre_liquide'
+        s.STATE['jobs'].remove(j); s.STATE['jobs'].append(j)
+        j['source_analysis'] = {'duration': 30, 'transcript': TRANSCRIPT}
+        prompt = s.script_prompt(j)
+        self.assertIn('personnages en verre', prompt); self.assertIn('STYLE DES PERSONNAGES IMPOSÉ', prompt)
+        self.assertNotIn('humanoïde-fruit : la tête EST le fruit', prompt)
+        self.assertIn('transparent glossy glass body', s.plan_image_block(j, j['scenes'][0]))
+        self.assertIn('transparent glossy glass body', s.sheet_prompt(j))
+        self.assertIn('transparent glossy glass body', s.clip_prompt(j, 1, 'flow'))

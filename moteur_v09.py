@@ -20,7 +20,7 @@ import re
 # Closing block of every V09 clip prompt (videos/V09-la-bouteille/phase2.json, prompt_clip), language made generic.
 CLIP_END = ('Only the character who speaks moves his or her lips; the others keep their mouths closed. '
             'Lines follow each other with no silence. High-end 3D animated feature-film render. '
-            'Bodies 100 % fruit: hands, fingers, arms and neck covered with the same fruit skin, never human skin. '
+            'Bodies exactly as described in the cast, hands included, as in the images. '
             'Same faces, outfits, place and light as in the images. No brand logos. '
             'Characters speak on screen with lip sync, no narrator, no voice-over, no music, no subtitles, no added text. '
             'Language: {language} only, natural native accent.')
@@ -73,9 +73,13 @@ def decoupage(transcript: str, source_seconds: float, clip_seconds: int, scenes:
     return rows
 
 
-def guidance(analysis: dict, scenes: int, clip_seconds: int, language: str) -> str:
+def guidance(analysis: dict, scenes: int, clip_seconds: int, language: str, style: dict | None = None) -> str:
     """What the writer is told in « Recréer à l'identique » (V09 engine, MOTEUR §S)."""
     analysis = analysis or {}
+    style = style or {}
+    body = style.get('writer') or ('humanoïde-fruit : la tête EST le fruit, corps 100 % fruit (cou, bras, mains et doigts à la peau du fruit, '
+                                   'jamais de main humaine), vrais vêtements')
+    names = style.get('name_rule') or 'qui évoque le fruit (jeu de mots, son ou couleur : Prunelle pour une prune, Goyo pour une goyave)'
     if scenes < 2:
         scenes = scene_count(analysis.get('duration') or 0, clip_seconds)
     total = analysis.get('duration') or (scenes - 1) * clip_seconds
@@ -86,7 +90,7 @@ def guidance(analysis: dict, scenes: int, clip_seconds: int, language: str) -> s
 On reproduit l’histoire de la vidéo d’origine À L’IDENTIQUE ; on ne change QUE les personnages.
 1. Histoire identique : mêmes scènes, même ordre, mêmes actions, mêmes gestes, mêmes objets, mêmes retournements, mêmes répliques, même rythme, même cadrage, mêmes décors, même fin, même émotion. N’invente rien : aucun autre conflit, aucun personnage principal en plus, aucun secret, aucun objet, aucun lieu que la vidéo ne montre pas. Ne retire aucun événement. Toute différence avec l’original est une erreur, sauf les personnages.
 2. Répliques : celles de l’original, dans le même ordre, dites par le même rôle, traduites fidèlement en {language} parlé naturel (même sens, même force, mêmes mots forts ; seulement adoucir un juron ou une insulte trop crue). Les noms propres de l’original sont remplacés par les nouveaux noms.
-3. Personnages : chaque rôle de l’original garde son rôle, son âge, son métier, son lien avec les autres, sa tenue, sa coiffure et ses signes distinctifs, mais devient un humanoïde-fruit : la tête EST le fruit, corps 100 % fruit (cou, bras, mains et doigts à la peau du fruit, jamais de main humaine), vrais vêtements. Choisis le fruit selon le rôle (piquant, doux, abîmé, précieux…), jamais deux fois le même fruit. Nouveau prénom qui évoque le fruit (jeu de mots, son ou couleur : Prunelle pour une prune, Goyo pour une goyave). Dans appearance : âge ADULTE explicite pour tout adulte, le fruit de la tête décrit (couleur, matière, tige, feuille), la tenue de l’original.
+3. Personnages : chaque rôle de l’original garde son rôle, son âge, son métier, son lien avec les autres, sa tenue, sa coiffure et ses signes distinctifs, mais devient un personnage du STYLE IMPOSÉ pour cette vidéo : {body}. Choisis la variante (fruit, animal, légume, couleur…) selon le rôle, jamais deux fois la même. Nouveau prénom : {names}. Dans appearance : âge ADULTE explicite pour tout adulte, le corps décrit dans ce style (matière, couleur, signe distinctif), la tenue de l’original.
 4. Découpage plan par plan : la source est coupée en fenêtres consécutives de {clip_seconds} secondes, une scène par fenêtre, dans l’ordre ci-dessous. Chaque scène a le champ ref (temps de la source, recopié tel quel) et reproduit SA fenêtre seconde par seconde : lieu, qui est où, posture, geste, objet, cadrage, mouvement de caméra, répliques, émotion. Regarde les images jointes au même temps pour le décor, les places, les gestes et les cadrages.
 {plan}
 Scène {scenes} — APPEL À L’ACTION (pas de ref) : un personnage principal se tourne vers la caméra et parle au spectateur, une ou deux phrases. Si l’histoire porte une prière, une foi ou une émotion forte (trahison, injustice, larmes), il demande d’écrire « Amen » en commentaire s’il est d’accord (c’est ce qui a fait percer V09) ; sinon, un appel du même genre adapté à l’histoire (« Tu veux la suite ? Écris SUITE en commentaire »). Dans cette scène seulement, le regard caméra est voulu.
@@ -97,7 +101,7 @@ Scène {scenes} — APPEL À L’ACTION (pas de ref) : un personnage principal s
 9. Décors : ceux de l’original (même pièce, même lumière, mêmes objets), sans enseigne ni logo.'''
 
 
-def clip_prompt(j: dict, s: dict, seconds: int, cast: str, dialog: str, language: str) -> str:
+def clip_prompt(j: dict, s: dict, seconds: int, cast: str, dialog: str, language: str, make: str | None = None) -> str:
     """V09 clip prompt: the writer's timed beats, the cast lock, the exact lines, then the V09 closing block."""
     video = BRANDS.sub('3D animated', str(s.get('video_prompt') or ''))
     if not re.search(r'\bseconds?\b', video[:200], re.I):
@@ -105,6 +109,6 @@ def clip_prompt(j: dict, s: dict, seconds: int, cast: str, dialog: str, language
     else:
         video = re.sub(r'\b(?:6|8|10|15)\s+seconds\b', f'{seconds} seconds', video, count=1)
     return (f"Animate this exact image (first frame). {video}\n\n"
-            f"Cast (identity lock, keep exactly as in the image):\n{cast}\n{BODY}\n\n"
+            f"Cast (identity lock, keep exactly as in the image):\n{cast}\n{make or BODY}\n\n"
             f"Exact dialogue in this order; only the named speaker moves their lips:\n{dialog}\n\n"
             + CLIP_END.format(language=language))
