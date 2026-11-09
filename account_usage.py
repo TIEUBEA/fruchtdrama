@@ -48,6 +48,8 @@ def what(task, job=None):
         text = 'Clip ' + str(int(rest) + 1)
     elif name == 'image' and rest.isdigit():
         text = 'Planche ' + str(int(rest) + 1)
+    elif name == 'image_end' and rest.isdigit():
+        text = 'Planche de fin ' + str(int(rest) + 1)
     elif name == 'character':
         text = 'Personnage'
     elif name == 'state':

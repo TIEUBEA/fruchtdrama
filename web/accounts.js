@@ -76,7 +76,7 @@ function usageBanner(svc,rows){const now=usageOf(svc);if(!now.length&&!rows.leng
 // Episode page (0.1.95): « IA : Flow · compte 2 (ar•••5@example.com, 38 crédits) » or « IA : ChatGPT » for each task at work.
 function usageAI(u){if(u.service==='flow')return `Flow · compte ${u.number||'?'} (${accMask(u.email||'')}, ${u.credits} crédit${Math.abs(u.credits)>1?'s':''})`;
  return (ENGINE_NAMES[u.service]||u.label)+(u.email?' · '+accMask(u.email):'');}
-const TRACK_OF=slot=>{slot=String(slot||'');return slot.startsWith('clip:')?3:slot.startsWith('image:')||slot==='board_review'?2:slot.startsWith('character')||slot.startsWith('state:')?1:['cover','cover_review','quality_review','rewrite_meta'].includes(slot)?4:0;};
+const TRACK_OF=slot=>{slot=String(slot||'');return slot.startsWith('clip:')?3:slot.startsWith('image')||slot==='board_review'?2:slot.startsWith('character')||slot.startsWith('state:')?1:['cover','cover_review','quality_review','rewrite_meta'].includes(slot)?4:0;};
 function trackAI(j,i){const rows=accUsage().in_use.filter(u=>u.job===j.id&&TRACK_OF(u.slot)===i);if(!rows.length)return '';
  return `<div class="track-ai">${rows.map(u=>`<p><span class="acc-dot" aria-hidden="true"></span><span>${esc(u.short||u.what)} · <b>IA : ${esc(usageAI(u))}</b></span></p>`).join('')}</div>`;}
 // Under a received clip: the engine and the account that made it (scenes[i].engine since 0.1.93, .account since 0.1.95).
