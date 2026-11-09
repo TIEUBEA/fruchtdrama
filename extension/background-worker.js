@@ -326,15 +326,15 @@ async function begin(task,tab,cfg,key=LANE_KEY[laneOf(task)]){
  let previous;
  // A fresh Grok navigation can replace the document just after injection. Establish
  // the receiver before loading/uploading the image; reconnect only before dispatch.
- for(let attempt=0;attempt<3;attempt++){
-  await inject();
-  try{previous=await chrome.tabs.sendMessage(tab.id,{type:'frucht-status'});break;}
+ const reloading=/Could not establish connection|Receiving end does not exist|Frame with ID \d+ was removed|No frame with id|frame was removed/i;
+ for(let attempt=0;attempt<(task.kind==='tiktok_search'?5:3);attempt++){
+  try{await inject();previous=await chrome.tabs.sendMessage(tab.id,{type:'frucht-status'});break;}
   catch(e){
    // TikTok reloads its search page right after it opens (real case 09/11/2026: « Receiving end does not exist », the
    // Filon never refreshed): the receiver is established again, like for Grok.
    if(!['engine_video','tiktok_search'].includes(task.kind))break;
-   if(!/Could not establish connection|Receiving end does not exist/i.test(e.message)||attempt===2)throw e;
-   await delay(750);await ready(tab.id,task,targetUrl);
+   if(!reloading.test(e.message)||attempt===(task.kind==='tiktok_search'?4:2))throw e;
+   await delay(task.kind==='tiktok_search'?2000:750);await ready(tab.id,task,targetUrl);
   }
  }
  // A lost acknowledgement must never dispatch this task twice.
@@ -384,8 +384,8 @@ async function begin(task,tab,cfg,key=LANE_KEY[laneOf(task)]){
   try{response=await chrome.tabs.sendMessage(tab.id,{type:'frucht-run',task:executionTask,attachments});break;}
   catch(e){
    // A message that never reached the page started nothing: for a TikTok search it is simply sent again.
-   if(task.kind!=='tiktok_search'||attempt>=3||!/Could not establish connection|Receiving end does not exist/i.test(e.message))throw e;
-   await delay(1500);await ready(tab.id,task,targetUrl);await inject();
+   if(task.kind!=='tiktok_search'||attempt>=3||!reloading.test(e.message))throw e;
+   await delay(2000);await ready(tab.id,task,targetUrl);try{await inject();}catch(x){if(!reloading.test(x.message))throw x;}
   }
  }
  if(!response?.accepted)throw Error(response?.error||'Le connecteur de l’onglet ne répond pas.');

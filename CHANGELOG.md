@@ -11,7 +11,7 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 ## 0.1.96.28 (09/11/2026) — parcours menu par menu
 **Corrigé**
-- **Le Filon (veille TikTok)** : la recherche échouait en 3 s (« Receiving end does not exist ») parce que TikTok recharge sa page de recherche juste après l'ouverture. L'extension rétablit la liaison et renvoie la recherche (3 fois au plus).
+- **Le Filon (veille TikTok)** : la recherche échouait en 3 s (« Receiving end does not exist », « Frame with ID 0 was removed ») parce que TikTok recharge sa page de recherche juste après l'ouverture. L'extension rétablit la liaison et renvoie la recherche (3 fois au plus).
 - **Studio** : miniatures cassées des anciens épisodes (fichiers remis en place depuis la sauvegarde du 08/11).
 - **Bandeau « Google Flow bloqué »** : dit qu'un clip se paie sur un seul compte et pourquoi les comptes riches sont écartés.
 
