@@ -22,7 +22,8 @@ Demande du propriétaire : « quand on veut reproduire une vidéo avec notre stu
 - **Clip d'appel** à la fin de chaque copie fidèle : « écris Amen » quand l'histoire porte une prière ou une émotion forte, sinon « écris SUITE ».
 
 **Ajouté**
-- **Style des personnages** : 12 styles relevés sur TikTok (têtes de fruit, fruits mascottes, légumes, chats, animaux, verre et liquide, humains 3D, bébés, insectes, desserts, peaux couleur bonbon, peluches). Choix dans Créer, ou « Au hasard » : jamais le même style deux vidéos de suite.
+- **Transcription de la vidéo d'origine réparée** : un modèle Whisper incomplet donnait une transcription vide sans le dire, et la copie fidèle perdait les répliques. Le modèle est retéléchargé une fois, et le journal prévient si la transcription manque.
+- **Style des personnages** : 14 styles relevés sur TikTok (têtes de fruit, fruits mascottes, légumes, chats, animaux, verre et liquide, humains 3D, bébés, insectes, desserts, peaux couleur bonbon, bonbons gélifiés, viennoiseries, bébés singes réalistes ; liste et sources dans docs/STYLES-PERSONNAGES.md). Choix dans Créer, ou « Au hasard » : jamais le même style deux vidéos de suite.
 
 ## 0.1.96 (06/11/2026)
 Cas réel du 06/11 à 15 h 36 : Arena « Page vide ou bloquée » puis Grok « champ d'image introuvable ». Corrigé en regardant les vraies pages (Chrome invisible, profil du propriétaire).

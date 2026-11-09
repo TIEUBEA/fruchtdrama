@@ -176,7 +176,12 @@ def transcribe(video: pathlib.Path, root: pathlib.Path) -> str:
     try:
         sys.path.insert(0, str(root / '.qc-runtime'))
         from faster_whisper import WhisperModel
-        model = WhisperModel('base', download_root=str(models), device='cpu', compute_type='int8', cpu_threads=4, local_files_only=True)
+        try:
+            model = WhisperModel('base', download_root=str(models), device='cpu', compute_type='int8', cpu_threads=4, local_files_only=True)
+        except Exception:
+            # Real case 09/11/2026: an interrupted install left the model cache incomplete and every faithful copy lost
+            # the lines of the source. The model is fetched again once (about 150 MB) instead of giving up in silence.
+            model = WhisperModel('base', download_root=str(models), device='cpu', compute_type='int8', cpu_threads=4)
         segments, _ = model.transcribe(str(video), beam_size=1, vad_filter=True)
         # Tenth of a second, like the Atelier: the writer can match each line with the stamped frames.
         lines = [f'[{int(s.start // 60):02d}:{s.start % 60:04.1f}] {s.text.strip()}' for s in segments]

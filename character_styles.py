@@ -19,7 +19,7 @@ AUTO = 'auto'
 STYLES = {
     'tete_fruit': {
         'label': 'Têtes de fruit', 'hint': 'la tête EST le fruit, corps humain habillé (V09)',
-        'source': 'https://www.tiktok.com/@mgengwy/video/7692444951853960479',
+        'source': 'https://www.tiktok.com/@fruit.storie/video/7698383062920351009',
         'writer': 'humanoïdes-fruits : la tête EST le fruit (taille d’une tête humaine, visage formé dans la peau du fruit), cou, bras, mains et doigts à la peau du même fruit, jamais de main humaine, vrais vêtements',
         'make': 'Fruit humanoids: the head IS the fruit (same size as a human head, face formed in the fruit skin), neck, arms, hands and fingers covered with the same fruit skin, never human skin, human proportions, real fabric clothes.',
         'name_rule': 'un prénom qui évoque le fruit (Prunelle pour une prune, Goyo pour une goyave)',
@@ -53,7 +53,7 @@ STYLES = {
         'name_rule': 'un prénom d’animal familier (Rex, Biscotte, Nala)',
     },
     'verre_liquide': {
-        'label': 'Verre et liquide', 'hint': 'corps en verre transparent rempli de liquide coloré, comme une bouteille',
+        'label': 'Verre et liquide', 'hint': 'corps en verre transparent rempli de liquide coloré, comme une bouteille (d’après les fruits en verre ASMR)',
         'source': 'https://www.tiktok.com/@hjs_ai/video/7518487475505876246',
         'writer': 'personnages en verre : corps de verre transparent et brillant comme une bouteille, rempli d’un liquide coloré qui bouge (jus, sirop, lait…), visage gravé dans le verre, bouchon ou capsule en guise de chapeau, vêtements légers par-dessus ; le niveau ou la couleur du liquide montre l’émotion',
         'make': 'Glass characters: a transparent glossy glass body shaped like a bottle, filled with a coloured liquid that sloshes when they move (juice, syrup, milk…), a face sculpted in the glass, a cork or cap as a hat, light clothes on top; the liquid level and colour show the emotion; refractions, caustics, high-end 3D render.',
@@ -89,17 +89,31 @@ STYLES = {
     },
     'peau_bonbon': {
         'label': 'Peaux couleur bonbon', 'hint': 'humanoïdes à peau violette, verte, rose gélatine',
-        'source': 'https://www.tiktok.com/@mommyyame1/video/7649489303176809741',
+        'source': 'https://www.tiktok.com/@mgengwy/video/7692444951853960479',
         'writer': 'humanoïdes à peau couleur bonbon : peau unie très vive et brillante comme de la gélatine (violet, vert pomme, rose, bleu), une couleur par personnage, cheveux stylisés, grands yeux, vrais vêtements',
         'make': 'Candy-skinned humanoids: smooth, very bright glossy jelly-like skin in one bold colour per character (purple, apple green, pink, blue), stylised hair, big eyes, real clothes; high-end 3D animation.',
         'name_rule': 'un prénom qui évoque sa couleur (Violette, Menthe, Rosine)',
     },
-    'peluches': {
-        'label': 'Peluches et jouets', 'hint': 'doudous et jouets vivants, tissu cousu',
-        'source': 'https://www.tiktok.com/@vlllad99/video/7628326426197986592',
-        'writer': 'peluches vivantes : ours, lapins, doudous en tissu cousu (coutures, boutons pour les yeux ou yeux brodés, rembourrage visible quand ils sont abîmés), vêtements de poupée',
-        'make': 'Living plush toys: teddy bears, rabbits, soft toys made of stitched fabric (visible seams, button or embroidered eyes, stuffing showing when damaged), doll clothes; tactile high-end 3D render.',
-        'name_rule': 'un nom de doudou (Nounours, Pompon)',
+    'gelee': {
+        'label': 'Bonbons gélifiés', 'hint': 'petits personnages en gélatine translucide, tiennent dans une main',
+        'source': 'https://www.tiktok.com/@jellybabiesfun1/video/7660495767232187670',
+        'writer': 'personnages en gélatine : corps de bonbon gélifié translucide et brillant (rose, rouge, bleu, vert, une couleur par personnage), lumière qui traverse le corps, petites bulles à l’intérieur, grands yeux, ils tiennent dans la paume d’une main et vivent dans un monde à leur échelle (objets du quotidien géants autour d’eux)',
+        'make': 'Jelly-candy characters: translucent glossy gummy bodies (pink, red, blue, green, one colour per character), light shining through, tiny bubbles inside, big eyes, palm-sized, living among giant everyday objects; macro photography look, high-end 3D render.',
+        'name_rule': 'un prénom sucré (Gommy, Fraisette)',
+    },
+    'viennoiseries': {
+        'label': 'Viennoiseries et pains', 'hint': 'croissants, brioches, baguettes humanoïdes (boulangerie)',
+        'source': 'https://www.tiktok.com/@croquedrama21/video/7699836178089921824',
+        'writer': 'viennoiseries humanoïdes : la tête est un croissant, une brioche, une baguette ou un pain au chocolat doré et feuilleté, visage dans la croûte, miettes et farine, corps habillé, mains à la texture de la pâte',
+        'make': 'Bakery humanoids: the head is a golden flaky croissant, brioche, baguette or chocolate bun with a face formed in the crust, crumbs and flour dust, dressed body, hands with the dough texture; warm bakery light, high-end 3D animation.',
+        'name_rule': 'un prénom de boulangerie (Croissantine, Briochon)',
+    },
+    'singes': {
+        'label': 'Bébés singes réalistes', 'hint': 'petits singes photoréalistes habillés, en ville ou dans la jungle',
+        'source': 'https://www.tiktok.com/@omnia.ai/video/7621954208689949953',
+        'writer': 'bébés singes photoréalistes : vrais petits singes (macaques, capucins) au pelage réaliste, grands yeux humides, habillés de petits vêtements, qui marchent debout ; les rôles adultes sont des singes adultes habillés',
+        'make': 'Photorealistic baby monkeys: real small monkeys (macaques, capuchins) with realistic fur and big wet eyes, wearing small clothes, walking upright; adult roles are dressed adult monkeys; cinematic photorealistic look.',
+        'name_rule': 'un petit nom de singe (Kiki, Bongo)',
     },
 }
 

@@ -1200,7 +1200,9 @@ def prepare_source(id):
         try:analysis['sheets']=source_video.frame_sheets(d/'source.mp4',d,info['duration'])
         except Exception as e:log_error('Images de la vidéo d’origine',e)
         analysis['transcript']=source_video.transcribe(d/'source.mp4',ROOT)
-        message='Vidéo d’origine analysée : '+(f"{sum(1 for x in analysis['sheets'])} images (début, une toutes les 6 s, chaque changement de plan)" if analysis.get('sheets') else 'planche des moments clés' if analysis.get('board') else 'description')+(' et transcription' if analysis.get('transcript') else '')+' transmises à l’IA.'
+        if j.get('config',{}).get('recreate')=='identical' and not analysis['transcript']:
+            log_error('Transcription de la vidéo d’origine',RuntimeError('transcription vide (contrôle local absent ou modèle incomplet)'))
+        message='Vidéo d’origine analysée : '+(f"{sum(1 for x in analysis['sheets'])} images (début, une toutes les 6 s, chaque changement de plan)" if analysis.get('sheets') else 'planche des moments clés' if analysis.get('board') else 'description')+(' et transcription' if analysis.get('transcript') else '')+' transmises à l’IA.'+('' if analysis.get('transcript') or j.get('config',{}).get('recreate')!='identical' else ' Attention : aucune transcription (contrôle local à installer ou à réparer avec Installer-Controle-Qualite) ; les répliques de l’original seront devinées sur les images, la copie sera moins fidèle.')
     except Exception as e:
         analysis['error']=str(e)[:200];message='Vidéo d’origine non récupérée ('+str(e)[:160]+') : l’histoire s’appuie sur '+('tes captures et ' if j.get('source_captures') else '')+'son lien seulement.'
     with LOCK:
