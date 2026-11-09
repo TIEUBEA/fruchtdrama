@@ -302,3 +302,8 @@ body.dark .run-bar.blocked{background:#3b1414}body.dark .run-bar.stopped{backgro
 .run-widget button.blocked{border:2px solid #c62828;background:#fde8e6;color:#5c1010}.run-widget button.paused{border:2px solid #b26a00;background:#fff4dc;color:#4d3300}
 body.dark .run-widget button.blocked{background:#3b1414;color:#ffd9d6}body.dark .run-widget button.paused{background:#3a2a0c;color:#ffe2b0}
 .notice.failed-clips{border:2px solid #c62828}.notice.failed-clips button{margin-left:6px}
+
+/* FRUIT-Z: what the studio keeps from the given video (0.1.108). */
+.recreate-modes{border:1px solid var(--line,#ddd);border-radius:10px;padding:10px 12px;margin:10px 0;display:grid;gap:8px}
+.recreate-modes legend{font-weight:600;padding:0 4px}
+.recreate-modes .check{align-items:flex-start}

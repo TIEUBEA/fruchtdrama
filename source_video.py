@@ -260,6 +260,10 @@ def guidance(mode: str, analysis: dict | None, captures_count: int = 0, scenes: 
         # times; same story, same lines translated, only the characters become fruits.
         import moteur_v09
         text += '\n' + moteur_v09.guidance(analysis, scenes, clip_seconds, language, style)
+    elif mode == 'mecanique':
+        # Moteur FRUIT-Z (owner, 09/11/2026, MOTEUR §Z): only the mechanics of this video; the rules come with moteur_z.
+        import moteur_z
+        text += '\n' + moteur_z.guidance(analysis, language, style, has_source=True, transcript_given=True)
     else:
         text += ('\nINSPIRÉE de cette vidéo : garde sa mécanique émotionnelle (le même type de victime et d’antagoniste, la même injustice, '
                  'le même genre de retournement, la même fin et la même émotion, le même rythme et le même type d’accroche), '

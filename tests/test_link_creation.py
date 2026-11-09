@@ -46,7 +46,7 @@ class LinkTests(unittest.TestCase):
             return json.load(x)
 
     def test_link_skips_research_and_drops_tracking(self):
-        self.req({'brief': '', 'source_url': 'https://www.tiktok.com/@oma/video/7312345678901234567?is_from_webapp=1&sender=x', 'config': {}})
+        self.req({'brief': '', 'source_url': 'https://www.tiktok.com/@oma/video/7312345678901234567?is_from_webapp=1&sender=x', 'config': {'recreate': 'inspired'}})
         j = s.STATE['jobs'][0]
         self.assertEqual(j['stage'], 'script'); self.assertEqual(j['selected']['url'], 'https://www.tiktok.com/@oma/video/7312345678901234567')
         task = self.script_task()
@@ -72,10 +72,19 @@ class LinkTests(unittest.TestCase):
         self.assertEqual(s.captures_of(j), [f"/media/{j['id']}/source_capture_1.png"])
 
     def test_video_not_fetched_still_writes(self):
-        self.req({'brief': '', 'source_url': 'https://www.tiktok.com/@broken/video/7312345678901234567', 'config': {}})
+        self.req({'brief': '', 'source_url': 'https://www.tiktok.com/@broken/video/7312345678901234567', 'config': {}})  # FRUIT-Z by default
         task = self.script_task(); j = s.STATE['jobs'][0]
         self.assertNotIn('attachments', task['payload']); self.assertIn('seul son lien est connu', task['payload']['prompt'])
         self.assertTrue(any('Vidéo d’origine non récupérée' in e['text'] for e in j['events']))
+
+    def test_link_defaults_to_fruit_z_mechanics(self):
+        self.req({'brief': 'Plutôt à Lyon.', 'source_url': 'https://www.tiktok.com/@oma/video/7312345678901234567', 'config': {}})
+        j = s.STATE['jobs'][0]
+        self.assertEqual(j['config']['recreate'], 'mecanique'); self.assertEqual(j['config']['moteur'], 'fruit_z')
+        self.assertEqual(j['config']['scene_count'], 8); self.assertEqual(j['config']['flow_cost'], 30)
+        prompt = self.script_task()['payload']['prompt']
+        self.assertIn('MOTEUR FRUIT-Z', prompt); self.assertIn('La pomme cache une lettre', prompt); self.assertIn('Plutôt à Lyon.', prompt)
+        self.assertNotIn('INSPIRÉE de cette vidéo', prompt)
 
     def test_bad_capture_refused(self):
         with self.assertRaises(urllib.error.HTTPError) as e:

@@ -17,7 +17,7 @@ MAX_FIXES = 3
 WINDOW = 6 * 3600
 QUIET = {'research': 8, 'ideas': 10, 'sheet': 10, 'script': 25, 'characters': 15, 'images': 20, 'cover': 15,
          'quality': 20, 'clips': 40, 'edit': 30}  # minutes without news before a « running » episode is looked at
-CHAT_SLOTS = re.compile(r'^(?:script|ideas|sheet|characters|character:.*|state:.*|image:\d+|cover|cover_review|board_review|quality_review|meta|research|flow_rewrite:\d+)$')
+CHAT_SLOTS = re.compile(r'^(?:script|ideas|sheet|characters|character:.*|state:.*|image:\d+|image_end:\d+|cover|cover_review|board_review|quality_review|meta|research|flow_rewrite:\d+)$')
 # Technical failures that happen before anything is paid, or on free services.
 TECHNICAL = re.compile(r'Réponse JSON complète non détectée|Receiving end does not exist|Could not establish connection|'
                        r'Frame with ID \d+ was removed|No tab with id|Extension context invalidated|Suivi interrompu|'

@@ -11,7 +11,7 @@ import quality
 import errors
 import engines
 import engine_chain
-import montage, source_video, moteur_v09, character_styles, robot
+import montage, source_video, moteur_v09, moteur_z, character_styles, robot
 import story_backup
 import board_check
 import engine_accounts
@@ -1150,6 +1150,15 @@ def flow_resolution_of(j):
     cfg=j.get('config') or {}
     return '720p' if cfg.get('flow_model','gemini_omni_flash')=='gemini_omni_flash' else cfg.get('flow_resolution','720p')
 
+def fruit_z(j):
+    """Episode made with the FRUIT-Z engine (MOTEUR §Z, 09/11/2026): 7 sequences of 10 s + call, opening and closing
+    image per sequence, Flow only."""
+    return (j.get('config') or {}).get('moteur')=='fruit_z'
+
+def is_mecanique(j):
+    """FRUIT-Z from a viral video: only its mechanics are kept, the story is new."""
+    return ((j.get('selected') or {}).get('source')=='owner_link' and j['config'].get('recreate')=='mecanique')
+
 def is_identical(j):
     return ((j.get('selected') or {}).get('source')=='owner_link' and j['config'].get('recreate')=='identical')
 
@@ -1196,7 +1205,13 @@ def script_prompt(j):
     # Use the same dialogue budget in the prompt and in validation.
     word_limit=engines.word_limit(j)
     schema['scenes'][0]['deplacement']='Facultatif : personnage, point de départ, trajet et destination'
-    if identical:
+    mecanique=is_mecanique(j)
+    if fruit_z(j):moteur_z.schema_extras(schema)
+    if mecanique:
+        # FRUIT-Z from a viral video: the §Z rules replace the concept comparison and the plan rules (they make the reply
+        # long); the source reaches the writer as its transcription and key frames, for its mechanics only.
+        guidance=''  # the §Z rules come with the reference below (source_video.guidance, mode « mecanique »)
+    elif identical:
         # A faithful remake never receives the originality rules (five new concepts, history to avoid): they made the
         # writer invent another story (real case 05/11/2026: a maid hiding her poverty became two sisters and a pendant).
         # Moteur V09 (09/11/2026): not the retention rules either (they rewrite the opening); the V09 rules come with the
@@ -1211,14 +1226,15 @@ def script_prompt(j):
         schema['story_signature']={'relationship':'short English relationship','setting':'short English setting','central_object':'short English object','twist_mechanism':'short English plot mechanism'}
         guidance=editorial.instructions(j,STATE['jobs'])+'\nRéférences comparées : '+json.dumps(j.get('candidates',[])[:6],ensure_ascii=False)+'\nCorrections demandées : '+json.dumps(j.get('editorial_feedback',[]),ensure_ascii=False)
     else:guidance=editorial.STORY_CRAFT
-    if identical and j.get('editorial_feedback'):guidance+='\nCorrections demandées : '+json.dumps(j['editorial_feedback'],ensure_ascii=False)
-    if not identical:
+    if (identical or mecanique) and j.get('editorial_feedback'):guidance+='\nCorrections demandées : '+json.dumps(j['editorial_feedback'],ensure_ascii=False)
+    if fruit_z(j) and not mecanique and not identical:guidance+='\n'+moteur_z.guidance(None,language,character_styles.get(j),has_source=False)
+    if not identical and not mecanique:
         # Moteur V09: these rules ask for new framings, invented outfits and settings: never in a faithful copy.
         guidance+=PLAN_RULES
         if engines.of(j)=='flow' or engine_chain.flow_grok_policy(STATE.get('settings'),j['config']) or engine_chain.v09_policy(STATE.get('settings'),j['config']):
             guidance+=FLOW_SCENE_RULES
     schema['scenes'][0]['critical_mark']='Facultatif : inscription exacte et emplacement précis sur un objet ou un personnage, seulement si nécessaire à l’intrigue'
-    if not identical:
+    if not identical and not mecanique:
         guidance+=(
             '\nDramaturgie : suis un seul protagoniste et rends visible ce qu’il veut dès l’ouverture. '
             'Place l’anomalie dans les cinq premiers mots de la première réplique. Montre la règle qui fait obstacle par une action. '
@@ -1251,7 +1267,8 @@ def script_prompt(j):
              'image_prompt 55 mots ; video_prompt 70 mots (temps « [00:00-00:05] » compris) ; montre, cadre, camera, apporte, meaning : 18 mots chacun ; '
              'actions : 3 éléments de 10 mots ; appearance 35 mots ; image_prompt d’un personnage 35 mots ; voice, veut, tenue, detail, place : 12 mots ; '
              'lieu 25 mots ; chaque entrée de lieux 20 mots ; su_du_public 20 mots ; description 45 mots'
-             +(' ; creative_selection : 12 mots par champ' if 'creative_selection' in schema else '')+'. Ne répète pas dans un champ ce qu’un autre dit déjà.')
+             +(' ; creative_selection : 12 mots par champ' if 'creative_selection' in schema else '')
+             +(' ; end_image_prompt 45 mots ; mecanique : 15 mots par point' if 'mecanique' in schema else '')+'. Ne répète pas dans un champ ce qu’un autre dit déjà.')
     return f'''Crée une mini-fiction animée {'qui refait fidèlement la vidéo indiquée' if identical else 'entièrement ORIGINALE'}. Langue demandée pour les dialogues, les voix, les textes de couverture, la description et les prompts (sauf les clés techniques et la signature narrative) : {language}. La langue demandée prime sur la langue française des instructions et des descriptions du schéma. Aucune traduction ni réplique dans une autre langue. Les personnages parlent avec des voix natives de la langue demandée. Réponds UNIQUEMENT avec du JSON valide, sans explication. Conserve les clés techniques du schéma en anglais. {reference if reference else 'Référence comme indice de tendance seulement, jamais copier les répliques ou les plans : '+json.dumps(ref,ensure_ascii=False)+'.'} Idée : {j['brief']}. Exactement {n} scènes de {engines.spec(j)['seconds']} secondes, {'les mêmes personnages que la vidéo d’origine (8 au plus : laisse en figurant muet les rôles sans réplique)' if identical else '2 à 5 personnages (au moins 3 quand l’histoire le permet : héros, adversaire, témoin ou figurant)'}. Au plus {word_limit} mots parlés par scène pour les langues avec espaces ; dans toutes les langues, vérifie que la scène peut être jouée au rythme naturel dans la durée du clip. {'Les répliques de l’original dans la fenêtre de la scène, au plus quatre répliques et trois locuteurs par scène.' if identical else 'Jusqu’à trois répliques, avec au maximum deux locuteurs par scène.'} {'HOOK : garde l’ouverture de la vidéo d’origine (elle a déjà prouvé qu’elle accroche) ; sa première réplique, traduite fidèlement, est dite dans la première seconde ; hook_text pose une question résolue seulement à la fin.' if identical else 'HOOK OBLIGATOIRE : la scène 1 s’ouvre sur l’instant le plus fort (danger, injustice, secret révélé), la première réplique est une phrase choc de moins de 10 mots dite dans les 2 premières secondes, et hook_text pose une question résolue seulement à la fin.'} {'Cadrages, mouvements de caméra, gestes et lieux : ceux de l’original, plan par plan (aucun lieu ni plan ajouté).' if identical else 'Mouvement : chaque scène a un cadrage différent (gros plan, plan large, plongée), un mouvement de caméra motivé (travelling, panoramique, zoom), des gestes précis et un arrière-plan vivant par les objets, la lumière ou la météo ; au moins deux lieux différents dans l’épisode.'} Retournement visible, conclusion satisfaisante. Pas de présentation comme fait réel. Animation 3D premium, personnages dans le style imposé ci-dessous, vêtements couvrants sans logos, grands visages expressifs, {'mêmes décors que la vidéo d’origine' if identical else 'décor cohérent avec l’intrigue choisie et différent des épisodes récents'}, vertical 9:16. Même identité et tenue partout, aucune voix de narrateur, personnages parlant à l'écran, caméra en mouvement continu dans chaque clip. Sous-titres ajoutés au montage.{style_rule} {guidance}{concise} Champ state_changes FACULTATIF : seulement si l’histoire change vraiment l’apparence visible d’un personnage (blessure, vêtement déchiré, objet perdu, maquillage coulé…), de 0 à 3 entrées, from_scene = numéro de la première scène (1 à {n}) où le changement se voit, character = identifiant du personnage, change = description courte ; sinon une liste vide []. Le champ cover_title doit être une accroche de couverture de 3 à 5 mots maximum dans la langue demandée, sans révéler la fin. Schéma : {json.dumps(schema,ensure_ascii=False)}'''
 
 def horizontal(j): return (j.get('config') or {}).get('format')=='horizontal'
@@ -1570,16 +1587,32 @@ def schedule_images(j):
             if not s.get('image'):
                 attachments,states=scene_references(j,i)
                 add_task(j,'chat_image',{'provider':'chatgpt','prompt':s['image_prompt']+plan_image_block(j,s)+' Use attached character references. Same identity and outfit, 9:16. Dynamic cinematic composition with a camera angle different from the other scenes, characters caught in action, detailed living background. Highest resolution available (at least 1024×1536), ultra sharp, no blur.'+state_note(j,states)+correction(j.get('corrections',{}).get(f'image:{i}')),'attachments':attachments},f'image:{i}');break
+            if needs_end_image(j,i):
+                # FRUIT-Z (MOTEUR §Z 6): the closing image of the sequence, drawn from its opening image (same place, same
+                # cast), the end frame of the Flow clip (Début + Fin).
+                attachments,states=scene_references(j,i)
+                add_task(j,'chat_image',{'provider':'chatgpt','prompt':end_image_prompt(j,i)+state_note(j,states)+correction(j.get('corrections',{}).get(f'image_end:{i}')),'attachments':attachments+[asset_url(j,s['image'])]},f'image_end:{i}');break
         else:
             if not board_gate(j):
                 # Every board drawn and validated: the clips stage waits for a clip still in progress, then goes on.
                 j['stage']='clips';j.pop('early_clips_off',None);j['alerts']=[a for a in j.get('alerts',[]) if a.get('stage')!='images'];schedule(j);return
     if j['stage']=='images' and (j['status']=='running' or (j['status']=='waiting_quota' and j.get('quota_lane')=='chat')):early_clip(j)
 
+def needs_end_image(j,i):
+    s=j['scenes'][i]
+    return fruit_z(j) and bool(str(s.get('end_image_prompt') or '').strip()) and bool(s.get('image')) and not s.get('end_image')
+
+def end_image_prompt(j,i):
+    s=j['scenes'][i]
+    return (str(s['end_image_prompt'])+' This is the LAST frame of a 10-second shot whose FIRST frame is the last attached image: '
+            'same place, same light, same characters with the same identity, outfit and body, same camera style; only the poses, '
+            'positions and expressions reached at the end of the action change. Use the attached character references. 9:16, '
+            'highest resolution available (at least 1024×1536), ultra sharp, no blur, no text.')
+
 def board_ready(j,i):
     """Board i may be animated: it is drawn and, when the board check is on, the check has given its verdict.
     The check looks at all boards together, so before its verdict no board counts as validated."""
-    if j['scenes'][i].get('flow_rewrite_pending') or not j['scenes'][i].get('image'):return False
+    if j['scenes'][i].get('flow_rewrite_pending') or not j['scenes'][i].get('image') or needs_end_image(j,i):return False
     return j['config'].get('board_controls','none')=='none' or bool(j.get('board_checked'))
 
 def held_clips(j):
@@ -1703,6 +1736,8 @@ def clip_engine_for(j,i,early=False):
     s=j['scenes'][i];chain=engine_chain.order(STATE.get('settings'),j['config'])
     if engine_chain.v09_policy(STATE.get('settings'),j['config']):
         # Moteur V09: clip 1 on Grok when it is ready (else Flow), clips 2 and later on Flow only, never Grok.
+        # FRUIT-Z (MOTEUR §Z 7): Flow only, no Grok for clip 1, no Vidogrid; a refusal gets one adapted Flow retry.
+        if fruit_z(j):return engine_chain.v09_next(s,i,False,False)
         return engine_chain.v09_next(s,i,i==0 and engine_ready(j,'grok'),engine_ready(j,'vidogrid'))
     if engine_chain.flow_grok_policy(STATE.get('settings'),j['config']):
         return engine_chain.flow_grok_next(s)
@@ -1827,7 +1862,7 @@ def schedule_flow_clip(j,i,early=False,parallel=False):
     if p['id']!=j.get('flow_profile') and not parallel:
         previous=profile_by(j.get('flow_profile'))
         j['flow_profile']=p['id'];account_usage.number_flow(STATE);event(j,account_usage.switch_line(previous,p,cost))
-    payload={'prompt':clip_prompt(j,i,'flow'),'attachments':[asset_url(j,flow_reference(j,s['image']))],'cost':cost,'balance':p['balance'],'seconds':engines.flow_seconds(j),**({'model':j['config']['flow_model'],'resolution':flow_resolution_of(j)} if j['config'].get('flow_model') else {})}
+    payload={'prompt':clip_prompt(j,i,'flow'),'attachments':[asset_url(j,flow_reference(j,s['image']))],**({'end_attachment':asset_url(j,flow_reference(j,s['end_image']))} if fruit_z(j) and s.get('end_image') else {}),'cost':cost,'balance':p['balance'],'seconds':engines.flow_seconds(j),**({'model':j['config']['flow_model'],'resolution':flow_resolution_of(j)} if j['config'].get('flow_model') else {})}
     if j['config'].get('dry_run'):payload['dry_run']=True
     target=flow_accounts.route(p) if STATE.get('settings',{}).get('flow_auto') else None
     if target:
@@ -1872,7 +1907,7 @@ def clip_failed(j,t,result,kind):
             else:STATE.setdefault('engine_walls',{})[engine]=moment+(errors.retry_after(result) or engine_accounts.DEFAULT_WALL)
         if engine in ('grok','vidogrid'):note_not_ready(t,result)
         engine_chain.record(scene,engine,kind,reason,now())
-        nxt=engine_chain.v09_next(scene,i,False,engine_ready(j,'vidogrid'))
+        nxt=engine_chain.v09_next(scene,i,False,False if fruit_z(j) else engine_ready(j,'vidogrid'))
         t['status']='failed';j['status']='running'
         if engine=='flow' and kind=='refusal' and nxt=='flow':
             scene['flow_rewrite_pending']=True;j['stage']='images'
@@ -1883,7 +1918,7 @@ def clip_failed(j,t,result,kind):
         if not nxt:
             scene['engine_exhausted']=True
             if engine=='flow':j['status']='attention'
-            alert(j,'action',f'Clip {i+1} : Flow'+(' et Vidogrid n’ont' if any(x.get('engine')=='vidogrid' for x in scene.get('engine_tries') or []) else ' n’a')+f' pas livré le clip ({engine_chain.short(reason)}). '+('Grok ne fait que le clip 1 : ' if i else '')+'modifie la scène (« Refaire » avec une consigne) ou importe un clip, puis Reprendre. Les autres clips continuent.')
+            alert(j,'action',f'Clip {i+1} : Flow'+(' et Vidogrid n’ont' if any(x.get('engine')=='vidogrid' for x in scene.get('engine_tries') or []) else ' n’a')+f' pas livré le clip ({engine_chain.short(reason)}). '+('Grok ne fait que le clip 1 : ' if i and not fruit_z(j) else '')+'modifie la scène (« Refaire » avec une consigne) ou importe un clip, puis Reprendre. Les autres clips continuent.')
         schedule(j);return True
     if engine_chain.flow_grok_policy(STATE.get('settings'),j['config']):
         engine_chain.record(scene,engine,kind,reason,now())
@@ -1942,6 +1977,7 @@ def redraw_refused_board(j,i):
     if not any(THIRD_PARTY.search(str(x.get('reason',''))) for x in sc.get('engine_tries') or []) or sc.get('third_party_redraws',0)>=2:return False
     sc['third_party_redraws']=sc.get('third_party_redraws',0)+1
     if sc.get('image'):j.setdefault('redo_history',[]).append({'slot':f'image:{i}','file':sc.pop('image'),'note':'refus contenu tiers','at':now()})
+    if sc.get('end_image'):j.setdefault('redo_history',[]).append({'slot':f'image_end:{i}','file':sc.pop('end_image'),'note':'refus contenu tiers','at':now()})
     j.setdefault('corrections',{})[f'image:{i}']=THIRD_PARTY_NOTE;engine_chain.reset(sc);j.pop('early_clips_off',None)
     j['stage']='images';j['status']='running'
     event(j,f'Clip {i+1} : la planche ressemble trop à un contenu existant pour Flow → planche redessinée (autre cadrage, autre pose, autre fond), puis nouvel essai du clip.')
@@ -2021,6 +2057,20 @@ def redo(j,slot,note='',include_clip=False,start=True):
     slot=str(slot);note=' '.join(str(note or '').split())[:500]
     j.get('refusal_levels',{}).pop(slot,None)  # a new owner instruction restarts the rewording (P2-05)
     kind=slot.split(':')[0]
+    m=re.fullmatch(r'image_end:(\d+)',slot)
+    if m:
+        # FRUIT-Z closing image: drawn again from its opening image; the clip made from it is made again too.
+        index=int(m.group(1))
+        if index>=len(j.get('scenes') or []) or not j['scenes'][index].get('end_image'):raise ValueError('Rien à refaire : image de fin pas encore créée')
+        if any(t['job']==j['id'] and t['status'] in ('queued','claimed') for t in STATE['tasks']):raise ValueError('Une tâche est en cours sur cette production : attendez sa fin')
+        sc=j['scenes'][index];history=j.setdefault('redo_history',[])
+        history.append({'slot':slot,'file':sc.pop('end_image'),'note':note,'at':now()})
+        if sc.get('clip'):history.append({'slot':f'clip:{index}','file':sc.pop('clip'),'note':note,'at':now()});engine_chain.reset(sc)
+        if note:j.setdefault('corrections',{})[slot]=note
+        j['stage']='images';j['status']='running'
+        event(j,f'Image de fin de la scène {index+1} à refaire'+(f' : {note}' if note else '')+'.')
+        if start:schedule(j)
+        return
     if kind not in REDO_STAGES or not re.fullmatch(r'(?:cover|characters|character:[a-z][a-z0-9_]{0,24}|state:\d+|image:\d+|clip:\d+)',slot):raise ValueError('Élément à refaire inconnu')
     if j.get('status')=='rendering' or j['id'] in BUSY:raise ValueError('Montage en cours : attendez sa fin avant de refaire un élément')
     # 0.1.97: a clip set aside (« clip à refaire ») is redone while the other clips go on; anything else waits.
@@ -2230,7 +2280,7 @@ def store_script(j,s):
     identical=is_identical(j)
     if isinstance(s,dict):
         # 0.1.102: scenes a little too long are shortened here, no rewrite asked to the AI (5 to 7 min each).
-        fixed=editorial.fit_dialogue(s,max(engines.word_limit(j),int(3*engines.spec(j)['seconds'])) if is_identical(j) else engines.word_limit(j),3 if is_identical(j) else 2)
+        fixed=editorial.fit_dialogue(s,max(engines.word_limit(j),int(3*engines.spec(j)['seconds'])) if is_identical(j) or fruit_z(j) else engines.word_limit(j),3 if is_identical(j) or fruit_z(j) else 2)
         if fixed:j.setdefault('events',[]);event(j,'Répliques raccourcies par le studio (scène(s) '+', '.join(map(str,fixed))+') pour tenir dans les clips, sans réécriture.')
     validate_script(s,j['config']['scene_count'],check_size=not identical,word_limit=engines.word_limit(j),max_chars=8 if identical else 5)
     if identical:
@@ -2249,6 +2299,10 @@ def store_script(j,s):
             scene['ref']=_txt(ref,40) if isinstance(ref,str) and ref.strip() else None
             if not scene['ref']:scene.pop('ref')
         if problems:raise ValueError(' ; '.join(problems))
+    elif is_mecanique(j):
+        # FRUIT-Z from a viral video: the §Z rules replace the editorial plan (concepts, opening plan); validate_script
+        # above already checked the cast, the lines and their length. The mechanics are kept for the episode page.
+        if not isinstance(s.get('mecanique'),dict):s.pop('mecanique',None)
     else:
         if j.get('sheet_approved'):
             editorial.restore_approved_choices(s,j)
@@ -2482,6 +2536,10 @@ def accept_task_result(t,result):
             if base and (job_dir(j)/base).is_file() and image_fingerprint(j,file)==image_fingerprint(j,base):raise ValueError('Feuille d’état rejetée : copie exacte de la feuille de référence. Attente de la feuille modifiée.')
             j['state_sheets']=[x for x in j.get('state_sheets') or [] if x is not state_entry(j,change)]+[{**change,'file':file}]
             j['state_sheets'].sort(key=lambda x:x['from_scene'])
+        elif slot.startswith('image_end:'):
+            index=int(slot.split(':')[1])
+            if duplicate_scene_source(j,file,-1):raise ValueError('Image de fin rejetée : copie exacte d’une référence ou d’une autre scène. Attente de la véritable image générée.')
+            j['scenes'][index]['end_image']=file
         elif slot.startswith('image:'):
             index=int(slot.split(':')[1])
             if duplicate_scene_source(j,file,index):raise ValueError('Image rejetée : copie exacte d’une référence ou d’une autre scène. Attente de la véritable image générée.')
@@ -2512,7 +2570,7 @@ def accept_task_result(t,result):
             j['cover_file']=file;j['cover']=asset_url(j,file)
         # Atelier-like progress line (« Planche 6 reçue ») instead of a file name (owner 09/11/2026, UI review).
         kind,_,num=slot.partition(':')
-        label={'image':f'Planche {int(num)+1} reçue' if num.isdigit() else 'Planche reçue','clip':f'Clip {int(num)+1} reçu' if num.isdigit() else 'Clip reçu',
+        label={'image':f'Planche {int(num)+1} reçue' if num.isdigit() else 'Planche reçue','image_end':f'Planche de fin {int(num)+1} reçue' if num.isdigit() else 'Planche de fin reçue','clip':f'Clip {int(num)+1} reçu' if num.isdigit() else 'Clip reçu',
                'cover':'Miniature reçue','characters':'Feuille des personnages reçue','character':'Fiche personnage reçue',
                'state':'Feuille d’état reçue'}.get(kind,'Média reçu')
         event(j,label+(f" ({engines.ENGINES.get(sc.get('engine'),{}).get('label','')})" if kind=='clip' and num.isdigit() and (sc:=j['scenes'][int(num)]).get('engine') else '')+'.')
@@ -3431,6 +3489,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     # Owner 09/11/2026: the character style changes from one video to the next (chosen, or least used lately).
                     cfg['character_style']=character_styles.pick(req.get('character_style'),[x.get('config',{}).get('character_style') for x in STATE['jobs']])
                     source=str(b.get('source_url','')).strip()
+                    # FRUIT-Z (owner 09/11/2026, the one engine): every new episode, unless « Recréer à l'identique » (V09 copy)
+                    # is chosen on purpose: 7 sequences of 10 s + call, Flow Omni 1.2 only, opening and closing images.
+                    recreate=req.get('recreate') if req.get('recreate') in ('mecanique','identical','inspired') else ('mecanique' if source else None)
+                    # An engine or a Flow model chosen on purpose (Grok, Veo…) keeps the older rules of that choice.
+                    custom=req.get('video_engine','flow')!='flow' or req.get('flow_model',engines.OMNI_12)!=engines.OMNI_12
+                    cfg['moteur']='v09' if recreate=='identical' or req.get('moteur')=='v09' or custom else 'fruit_z'
+                    if cfg['moteur']=='fruit_z':
+                        cfg.update(flow_model=engines.OMNI_12,flow_cost=engines.FLOW_MODELS[engines.OMNI_12]['costs'][0],flow_resolution='720p',
+                                   video_engine='flow',clip_routing=engine_chain.V09,clip_seconds=moteur_z.SECONDS,scene_count=moteur_z.SCENES,duration=moteur_z.SCENES*moteur_z.SECONDS)
                     captures=source_video.decode_captures(b.get('captures')) if source else []
                     if source:
                         # Atelier-like "create from a link": the given TikTok video replaces the research step.
@@ -3448,11 +3515,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     STATE['jobs'].insert(0,j)
                     if source:
                         j['selected']={'title':'Vidéo fournie par le propriétaire','url':urllib.parse.urlunparse(('https',u.hostname,u.path,'','','')),'source':'owner_link'};thumbs.warm([j['selected']['url']],DATA);j['stage']='script'
-                        j['config']['recreate']='identical' if req.get('recreate')=='identical' else 'inspired'
+                        j['config']['recreate']=recreate
                         j['source_captures']=source_video.save_captures(captures,job_dir(j))
                         # The video is fetched and analysed first (key frames, transcription): the AI sees it, not only its link.
                         j['status']='waiting_source';threading.Thread(target=prepare_source,args=(j['id'],),daemon=True).start()
-                        event(j,'Projet créé d’après le lien fourni : recherche sautée. '+('Copie fidèle (moteur V09) : même histoire, mêmes répliques traduites, seuls les personnages changent.' if j['config']['recreate']=='identical' else 'Histoire originale inspirée de cette vidéo (sans copier dialogues ni plans).')+(f" {len(j['source_captures'])} capture(s) jointe(s)." if j['source_captures'] else ''))
+                        event(j,'Projet créé d’après le lien fourni : recherche sautée. '+{'identical':'Copie fidèle (moteur V09) : même histoire, mêmes répliques traduites, seuls les personnages changent.',
+                              'mecanique':'Moteur FRUIT-Z : seule la mécanique de cette vidéo est reprise ; histoire, personnages et dialogues neufs, 7 séquences de 10 s + l’appel, images d’ouverture et de fermeture, tout sur Flow.'}.get(j['config']['recreate'],'Histoire originale inspirée de cette vidéo (sans copier dialogues ni plans).')+(f" {len(j['source_captures'])} capture(s) jointe(s)." if j['source_captures'] else ''))
                     mode=b.get('mode')
                     if mode not in (None,'','link','ideas','idea','research'):raise ValueError('Option de création inconnue')
                     cfg['auto_sheet']=bool(b.get('config',{}).get('auto_sheet',False));cfg['niche']=str(b.get('config',{}).get('niche','Fruits'))[:40]
