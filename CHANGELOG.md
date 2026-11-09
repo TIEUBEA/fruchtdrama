@@ -9,6 +9,10 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 
 
+## 0.1.96.27 (09/11/2026)
+**Corrigé**
+- **Compte Flow pas prêt** (réglages jamais affichés) : le compte est marqué « À régler » dans Mes comptes avec ce que la page montre, et le clip passe au compte suivant, au lieu d'échouer deux fois sur le même compte.
+
 ## 0.1.96.26 (09/11/2026)
 **Corrigé**
 - **Compte Google neuf dans Flow** : la fenêtre d'accueil cachait les réglages et le clip échouait en 3 s (« Paramètres Flow indisponibles »). L'extension attend jusqu'à 15 s et ferme les fenêtres d'accueil simples (jamais une acceptation de conditions).

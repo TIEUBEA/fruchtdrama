@@ -169,7 +169,14 @@ globalThis.FruchtFlow={
  async configure(doc,pause,cost,model,resolution='720p',seconds=8,aspect='9:16'){
   let settings=this.settingsButton(doc);
   for(let k=0;k<30&&!settings;k++){this.dismissWelcome(doc);await pause(500);settings=this.settingsButton(doc);}
-  if(!settings)throw Error('Paramètres Flow indisponibles après 15 s ; aucun envoi effectué.');
+  if(!settings){
+   // This Google account is not ready in Flow (terms, onboarding, access): it is marked « À régler » with what the page
+   // shows, and the next account takes the clip (real case 09/11/2026, newly detected account 16, twice).
+   const seen=[...doc.querySelectorAll('[role="dialog"] button,[role="alertdialog"] button,main button,h1,h2')].filter(x=>this.visible(doc,x)).map(x=>(x.innerText||x.getAttribute('aria-label')||'').replace(/\s+/g,' ').trim()).filter(Boolean).slice(0,12).join(' | ').slice(0,300);
+   const error=Error('Paramètres Flow indisponibles après 15 s sur ce compte ; aucun envoi effectué.'+(seen?' Vu : '+seen:''));
+   error.flowBlocked='not_ready';error.notReady={state:'fix',reason:'Flow ne montre pas ses réglages sur ce compte (accueil, conditions ou accès à valider)'+(seen?' — vu : '+seen.slice(0,160):'')};
+   throw error;
+  }
   // A panel left open by an earlier try in this tab doubled every option (06/11/2026: « Réglage Flow vidéo / 9:16 / x1
   // non reconnu » on every account): only the most recent settings panel counts.
   const radios=()=>{const all=[...doc.querySelectorAll('[role="radio"]')].filter(b=>this.visible(doc,b));const panes=[...new Set(all.map(b=>b.closest?.('.cdk-overlay-pane,[role="dialog"],[role="menu"]')).filter(Boolean))];return panes.length>1?all.filter(b=>b.closest('.cdk-overlay-pane,[role="dialog"],[role="menu"]')===panes[panes.length-1]):all;};
