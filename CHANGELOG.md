@@ -9,6 +9,21 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 
 
+## 0.1.96.21 (09/11/2026) — moteur V09
+Demande du propriétaire : « quand on veut reproduire une vidéo avec notre studio, il produit carrément autre chose ». Le studio applique maintenant la logique du moteur V09 (fruit-france, MOTEUR.md §S).
+
+**Corrigé**
+- **Recréer à l'identique** produit la même histoire : découpage de la vidéo d'origine en tranches de 10 s (une scène par tranche, champ `ref`), mêmes scènes, même ordre, mêmes répliques traduites, mêmes décors et cadrages, même fin. Seuls les personnages changent. Les règles d'originalité (nouveaux décors, cadrages variés, tenues inventées, répliques reformulées) ne s'appliquent plus à une copie fidèle.
+
+**Amélioré**
+- **Moteurs des clips** : clip 1 sur Grok (10 s) ; si Grok n'est pas disponible (pas de compte prêt, limite, connexion, refus), le clip 1 part sur Flow. Clips 2 à la fin : Flow uniquement. Grok ne fait jamais les clips 2 et suivants. Si Flow refuse une scène deux fois, Vidogrid est essayé une ou deux fois. Arena est retiré.
+- **Flow** : Omni 1.2 Flash, 720p, 9:16, 10 s (30 crédits) par défaut ; le curseur « Longueur » est réglé sur 10 s.
+- **Prompts de clip au format V09** : plan continu, temps « [00:00-00:05] », répliques exactes, bloc de fin V09 (lèvres, corps, pas de narrateur, pas de musique, pas de sous-titres, langue).
+- **Clip d'appel** à la fin de chaque copie fidèle : « écris Amen » quand l'histoire porte une prière ou une émotion forte, sinon « écris SUITE ».
+
+**Ajouté**
+- **Style des personnages** : 12 styles relevés sur TikTok (têtes de fruit, fruits mascottes, légumes, chats, animaux, verre et liquide, humains 3D, bébés, insectes, desserts, peaux couleur bonbon, peluches). Choix dans Créer, ou « Au hasard » : jamais le même style deux vidéos de suite.
+
 ## 0.1.96 (06/11/2026)
 Cas réel du 06/11 à 15 h 36 : Arena « Page vide ou bloquée » puis Grok « champ d'image introuvable ». Corrigé en regardant les vraies pages (Chrome invisible, profil du propriétaire).
 
