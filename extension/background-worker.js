@@ -630,7 +630,7 @@ async function tabForTask(task,cfg,key){
  }else if(FruchtChats.isAI(task)){
   tab=await FruchtChats.tabFor(task,cfg,chrome);
  }else{
-  const url='https://www.tiktok.com/search?q='+encodeURIComponent(task.payload.query);
+  const url='https://www.tiktok.com/search/video?q='+encodeURIComponent(task.payload.query);  // « Vidéos » tab: a growing grid (the « Top » tab mixes 12 videos and accounts, 09/11/2026)
   const saved=cfg.researchTab;let previous;
   if(saved)try{previous=await chrome.tabs.get(saved);}catch{}
   // In the foreground of the FruchtDrama window during the search (about 30 s): TikTok loads the next results only in a

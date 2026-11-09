@@ -15,6 +15,7 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 - **Le Filon, trop peu de vidéos** : la recherche ne lisait que le premier écran (12 vidéos). Elle fait défiler les résultats (150 vidéos au plus, une trentaine de secondes) et le Filon en garde jusqu'à 150 par relevé.
 - **Le Filon vide avec le filtre « 24 h »** : une période choisie qui cache toutes les vidéos passe seule à « 7 jours » ou « Tout », et le choix repart de zéro à chaque changement de niche.
 - **Le Filon, onglet de recherche au premier plan** pendant la recherche (une trentaine de secondes) : TikTok ne charge la suite des résultats que dans un onglet visible, avec son bouton « Charger plus » (cliqué automatiquement) ; l’onglet précédent revient ensuite.
+- **Le Filon, onglet « Vidéos » de TikTok** : la recherche ouvrait l'onglet « Top » (12 vidéos mêlées à des comptes) ; elle ouvre la grille « Vidéos » qui s'allonge. Le journal du relevé dit combien de vidéos chaque passage a ajouté.
 - **Studio** : miniatures cassées des anciens épisodes (fichiers remis en place depuis la sauvegarde du 08/11).
 - **Bandeau « Google Flow bloqué »** : dit qu'un clip se paie sur un seul compte et pourquoi les comptes riches sont écartés.
 
