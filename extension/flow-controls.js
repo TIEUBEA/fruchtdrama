@@ -56,7 +56,9 @@ globalThis.FruchtFlow={
   return [el.getAttribute('aria-label'),el.innerText].filter(Boolean).some(v=>[v,...v.split('\n')].some(line=>pattern.test(line.replace(/^(?:videocam|movie|image|crop_portrait|crop_landscape|crop_9_16|crop_16_9)\s+/i,'').trim())));
  },
  modelPattern(model){
-  if(model==='gemini_omni_flash')return /\b(?:Gemini\s+)?Omni(?:\s+1\.1)?\s*[-–]?\s*Flash(?:\s+1\.1)?\b/i;
+  // Moteur V09 (09/11/2026): Omni 1.2 Flash, 10 s clips (« Longueur » slider). Omni 1.1 never matches a 1.2 label.
+  if(model==='gemini_omni_flash_1_2')return /\b(?:Gemini\s+)?Omni\s*1\.2\s*[-–]?\s*Flash\b|\b(?:Gemini\s+)?Omni\s*[-–]?\s*Flash\s*1\.2\b/i;
+  if(model==='gemini_omni_flash')return /\b(?:Gemini\s+)?Omni(?:\s+1\.1)?\s*[-–]?\s*Flash(?!\s*1\.2)(?:\s+1\.1)?\b/i;
   if(model==='veo_3_1_lite')return /\bVeo\s*3\.1\s*[-–]?\s*Lite\b/i;
   if(model==='veo_3_1_fast')return /\bVeo\s*3\.1\s*[-–]?\s*Fast\b/i;
   if(model==='veo_3_1_quality')return /\bVeo\s*3\.1\s*[-–]?\s*(?:Quality|Qualität|Qualité)\b/i;
@@ -75,7 +77,40 @@ globalThis.FruchtFlow={
  },
  resolution(text){const values=[...String(text).matchAll(/\b(360|720|1080|2160)p\b/gi)].map(x=>x[1]+'p');return values.length&&new Set(values).size===1?values[0]:null;},
  seconds(text){const values=[...String(text).replace(/(\d\s*s)(x[1-4]\b)/gi,'$1 $2').matchAll(/\b(4|6|8|10)\s*(?:s(?:ec(?:onds?|ondes?)?)?\.?|Sek(?:unden)?\.?)\b/gi)].map(x=>Number(x[1]));return values.length&&new Set(values).size===1?values[0]:null;},
+ // Omni 1.2 Flash has no « 8 s / 10 s » buttons: a « Longueur » slider (pulled to the end = 10 s, owner 09/11/2026).
+ slider(doc){const all=[...doc.querySelectorAll('[role="slider"],input[type="range"]')].filter(b=>this.visible(doc,b)||(b.tagName==='INPUT'&&b.closest?.('[role="slider"],.mdc-slider,mat-slider')&&this.visible(doc,b.closest('[role="slider"],.mdc-slider,mat-slider'))));return all.length?all[all.length-1]:null;},
+ sliderSeconds(doc){
+  const s=this.slider(doc);if(!s)return null;
+  const box=s.closest?.('.cdk-overlay-pane,[role="dialog"],[role="menu"]')||doc.body;
+  const m=String(box?.innerText||'').match(/(?:Longueur|Length|Länge|Durée|Duration|Dauer)\s*:?\s*(4|6|8|10)\s*(?:s|sec|Sek)/i);
+  if(m)return Number(m[1]);
+  const v=this.seconds(s.getAttribute('aria-valuetext')||'');return v;
+ },
+ async setSlider(doc,pause,desired){
+  const s=this.slider(doc);if(!s)return false;
+  const input=s.tagName==='INPUT'?s:s.querySelector?.('input[type="range"]');
+  if(input){
+   const view=doc.defaultView,setter=Object.getOwnPropertyDescriptor(view.HTMLInputElement.prototype,'value').set;
+   const lo=Number(input.min||0),hi=Number(input.max||100),step=Number(input.step||1)||1;
+   // Highest value first: « tirer jusqu'au bout = 10 s »; then every value down until the label says the wanted length.
+   for(let v=hi;v>=lo;v-=step){
+    setter.call(input,String(v));input.dispatchEvent(new view.Event('input',{bubbles:true}));input.dispatchEvent(new view.Event('change',{bubbles:true}));await pause(250);
+    if(this.sliderSeconds(doc)===desired)return true;
+   }
+   return false;
+  }
+  const view=doc.defaultView;s.focus?.();
+  s.dispatchEvent(new view.KeyboardEvent('keydown',{key:'End',code:'End',bubbles:true}));await pause(300);
+  for(let k=0;k<12&&this.sliderSeconds(doc)!==desired;k++){s.dispatchEvent(new view.KeyboardEvent('keydown',{key:'ArrowLeft',code:'ArrowLeft',bubbles:true}));await pause(250);}
+  return this.sliderSeconds(doc)===desired;
+ },
  async chooseSetting(doc,pause,desired,kind){
+  const buttonFor=()=>[...doc.querySelectorAll('[role="radio"],[role="option"],[role="menuitem"],button')].some(x=>this.visible(doc,x)&&/^(?:4|6|8|10)\s*(?:s|Sek\.?)$/i.test((x.innerText||'').trim()));
+  if(kind==='seconds'&&this.slider(doc)&&!buttonFor()){
+   if(this.sliderSeconds(doc)===desired)return;
+   if(await this.setSlider(doc,pause,desired))return;
+   throw Error('Flow : curseur « Longueur » '+desired+' s non confirmé ; aucun envoi effectué.');
+  }
   const parse=kind==='resolution'?t=>this.resolution(t):t=>this.seconds(t);
   const pattern=kind==='resolution'?/^(?:360|720|1080|2160)p$/i:/^(?:4|6|8|10)\s*(?:s(?:ec(?:onds?|ondes?)?)?\.?|Sek(?:unden)?\.?)$/i;
   if(this.currentSetting(doc,pattern,parse)===desired)return;
@@ -104,7 +139,8 @@ globalThis.FruchtFlow={
   const control=this.modelControl(doc);
   if(!control||!this.modelPattern(model).test(control.innerText||control.getAttribute('aria-label')||''))throw Error('Flow : modèle demandé non confirmé ; aucun envoi effectué.');
   if(this.currentSetting(doc,/^(?:360|720|1080|2160)p$/i,t=>this.resolution(t))!==resolution)throw Error('Flow : résolution demandée non confirmée ; aucun envoi effectué.');
-  if(this.currentSetting(doc,/^(?:4|6|8|10)\s*(?:s(?:ec(?:onds?|ondes?)?)?\.?|Sek(?:unden)?\.?)$/i,t=>this.seconds(t))!==seconds)throw Error('Flow : durée demandée non confirmée ; aucun envoi effectué.');
+  const length=this.currentSetting(doc,/^(?:4|6|8|10)\s*(?:s(?:ec(?:onds?|ondes?)?)?\.?|Sek(?:unden)?\.?)$/i,t=>this.seconds(t));
+  if(length!==seconds&&this.sliderSeconds(doc)!==seconds)throw Error('Flow : durée demandée non confirmée ; aucun envoi effectué.');
  },
  async prepareFrames(doc,pause,cost,model,resolution,seconds,aspect='9:16'){
   if(/Einstellungen für KI-Agenten|AI agent settings|Paramètres (?:de l.agent|des agents IA)/i.test(doc.body?.innerText||'')){

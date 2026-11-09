@@ -30,7 +30,7 @@ def active():
 class UnitTests(unittest.TestCase):
     def test_choose_rotates_and_waits(self):
         st = {}
-        a = ea.add(st, 'grok', 'A', 'A@x.com'); b = ea.add(st, 'grok', 'B', 'b@x.com'); ea.add(st, 'arena', 'C', 'c@x.com')
+        a = ea.add(st, 'grok', 'A', 'A@x.com'); b = ea.add(st, 'grok', 'B', 'b@x.com'); ea.add(st, 'vidogrid', 'C', 'c@x.com')
         self.assertEqual(a['email'], 'a@x.com')
         self.assertEqual(ea.choose(st, 'grok', None, 100)['id'], a['id'])
         ea.wall(a, 100, 60); self.assertEqual(ea.choose(st, 'grok', a['id'], 120)['id'], b['id'])
@@ -65,8 +65,8 @@ class FlowTests(unittest.TestCase):
         self.assertEqual(active()[-1]['payload']['account']['email'], 'second@x.com')
 
     def test_all_accounts_walled_waits_then_wakes(self):
-        a = ea.add(s.STATE, 'arena', 'Only', 'only@x.com')
-        j = clip_job('arena'); t = self.claim(j)
+        a = ea.add(s.STATE, 'vidogrid', 'Only', 'only@x.com')
+        j = clip_job('vidogrid'); t = self.claim(j)
         s.accept_task_result(t, {'ok': False, 'error_kind': 'quota', 'error': 'limit', 'retry_after': 120})
         self.assertEqual(j['status'], 'waiting_quota'); self.assertEqual(active(), [])
         self.assertEqual(s.wake_waiting(time.time() + 10), [], 'not before the renewal')

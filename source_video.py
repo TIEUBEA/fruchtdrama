@@ -3,7 +3,8 @@
 Before, the AI only received the link. Now the studio fetches the public video once, makes one board of
 key frames and a local transcription, and the writing AI receives both. Two ways to redo it:
 - inspired (default): an original story that keeps what made the video work;
-- identical ("Recréer à l'identique"): same scenes in the same order, every line reworded.
+- identical ("Recréer à l'identique"): the V09 engine (moteur_v09.py): same story, same lines translated, only the
+  characters change.
 The video stays in the episode folder and is never published or sent anywhere else.
 Standard library only (urllib, cookies); ffmpeg for the board; faster-whisper only if already installed.
 """
@@ -231,7 +232,8 @@ def beats(transcript: str, duration: float | None, scenes: int) -> list[list[str
     return groups
 
 
-def guidance(mode: str, analysis: dict | None, captures_count: int = 0, scenes: int = 0) -> str:
+def guidance(mode: str, analysis: dict | None, captures_count: int = 0, scenes: int = 0, clip_seconds: int = 10,
+             language: str = 'Français (fr-FR)') -> str:
     """What the writing AI is told about the video to redo."""
     analysis = analysis or {}
     seen = []
@@ -249,19 +251,10 @@ def guidance(mode: str, analysis: dict | None, captures_count: int = 0, scenes: 
     if analysis.get('transcript'):
         text += '\nCe qui y est dit (transcription automatique, peut contenir des erreurs) :\n' + analysis['transcript']
     if mode == 'identical':
-        # Like the Atelier « Recréer à l'identique »: same characters, outfits, marks and settings as the original;
-        # only the lines are reworded in simple words, as close to the script as possible.
-        text += ('\nMODE RECRÉER À L’IDENTIQUE, choisi par le propriétaire. C’est LA MÊME HISTOIRE : mêmes personnages et mêmes rôles '
-                 '(même métier, même âge, même lien entre eux, même méchant, même victime), mêmes lieux, mêmes objets, mêmes événements dans le même ordre, '
-                 'même accroche, même retournement, même fin et même émotion. N’invente aucun autre conflit, aucun autre personnage principal, aucun secret, '
-                 'aucun objet que la vidéo ne montre pas. Les personnages deviennent des fruits anthropomorphes qui gardent les vêtements, signes distinctifs et '
-                 'attitudes de l’original. Seules les répliques sont reformulées en mots simples, au plus près du sens de l’original (jamais mot pour mot), '
-                 'et les prénoms changent.')
-        groups = beats(analysis.get('transcript', ''), analysis.get('duration'), scenes)
-        if any(groups):
-            text += ('\nDÉCOUPAGE OBLIGATOIRE : chaque scène reprend les moments de l’original indiqués ci-dessous (condense en gardant chaque '
-                     'événement et chaque émotion ; si une scène n’a pas de réplique, montre l’action correspondante de la planche) :\n'
-                     + '\n'.join(f'Scène {k + 1} : ' + (' / '.join(g) if g else '(action visible sur la planche à ce moment)') for k, g in enumerate(groups)))
+        # Moteur V09 (owner, 09/11/2026): the faithful copy of fruit-france (MOTEUR §S), plan by plan with the source
+        # times; same story, same lines translated, only the characters become fruits.
+        import moteur_v09
+        text += '\n' + moteur_v09.guidance(analysis, scenes, clip_seconds, language)
     else:
         text += ('\nINSPIRÉE de cette vidéo : garde sa mécanique émotionnelle (le même type de victime et d’antagoniste, la même injustice, '
                  'le même genre de retournement, la même fin et la même émotion, le même rythme et le même type d’accroche), '

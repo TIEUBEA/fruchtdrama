@@ -66,7 +66,7 @@ class LinkTests(unittest.TestCase):
         task = self.script_task()
         self.assertEqual(task['payload']['attachments'], [f"/media/{j['id']}/source_board.jpg", f"/media/{j['id']}/source_capture_1.png"])
         prompt = task['payload']['prompt']
-        self.assertIn('RECRÉER À L’IDENTIQUE', prompt); self.assertIn('jamais mot pour mot', prompt); self.assertNotIn('entièrement ORIGINALE', prompt)
+        self.assertIn('MOTEUR V09 — COPIE FIDÈLE', prompt); self.assertIn('traduites fidèlement', prompt); self.assertNotIn('entièrement ORIGINALE', prompt)
         self.assertIn('Mets ma tête à la place du père.', prompt)
         self.assertIn('owner instructions: Mets ma tête', s.capture_note(j))
         self.assertEqual(s.captures_of(j), [f"/media/{j['id']}/source_capture_1.png"])

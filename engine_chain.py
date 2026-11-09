@@ -4,6 +4,11 @@ Owner, 06/11/2026, after an hour lost on a Flow clip that failed again and again
 priorité ; ça ne marche pas → un essai sur Arena ; ça ne marche pas → un essai sur Vidogrid ; en dernier recours →
 Grok lui-même. Si rien ne marche, modifier un peu la scène pour que le moteur l'accepte. »
 
+Moteur V09 (owner, 09/11/2026): clip 1 is made by Grok; if Grok is not available (no ready account, limit, sign-in,
+refusal, failure) clip 1 goes to Flow. Clips 2 to the end are made by Flow only: Grok NEVER makes clip 2 or later.
+Flow uses Omni 1.2 Flash (engines.OMNI_12). When Flow refuses a scene, Vidogrid gets one or two tries. Arena was
+removed and is never part of a chain again.
+
 Round 0: one try per engine, in the chosen order, engines without a ready account skipped.
 Round 1: the video prompt is softened (refusal.py vocabulary, video frame) and ONE more try is made on the first
 ready engine (Flow when it can pay). After that the clip waits for the owner, with the reason given by each engine.
@@ -14,8 +19,10 @@ import re
 
 import refusal
 
-DEFAULT = ('flow', 'arena', 'vidogrid', 'grok')
-LABELS = {'flow': 'Flow', 'arena': 'Arena', 'vidogrid': 'Vidogrid', 'grok': 'Grok'}
+DEFAULT = ('flow', 'vidogrid', 'grok')
+V09 = 'v09_grok_first'
+VIDOGRID_TRIES = 2  # owner 09/11/2026: « essaye avec Vidogrid une ou deux fois »
+LABELS = {'flow': 'Flow', 'grok': 'Grok', 'vidogrid': 'Vidogrid', 'arena': 'Arena'}  # Arena: logs of old clips
 FINAL_ROUND = 1
 VERBS = {'refusal': 'a refusé', 'quota': 'est à sa limite', 'timeout': 'n’a pas rendu le clip à temps',
          'login': 'demande une connexion', 'challenge': 'demande une vérification anti-robot',
@@ -35,8 +42,41 @@ VIDEO_WORDS = (
 )
 
 
+def routing(settings, cfg=None):
+    """Clip routing of an episode: its own setting, else the studio setting (V09 since the 09/11/2026 migration of
+    server.read_state, and on every new episode), else the older chain."""
+    return (cfg or {}).get('clip_routing') or (settings or {}).get('clip_routing') or 'chain'
+
+
+def v09_policy(settings, cfg=None):
+    return routing(settings, cfg) == V09
+
+
+def v09_next(scene, index, grok_ready, vidogrid_ready=False):
+    """Engine of the next try of clip `index` (0-based) under the V09 engine, or None when nothing is left to try.
+
+    Clip 1: Grok first when it is ready, Flow when Grok is not available or failed. Every clip: Flow, with one adapted
+    retry after a confirmed refusal. Owner 09/11/2026: when Flow still refuses the scene (« les vidéos dérangent »),
+    Vidogrid is tried once or twice (VIDOGRID_TRIES). Grok is never returned for index >= 1. Arena is never used."""
+    tries = scene.get('engine_tries') or []
+    flow = [a for a in tries if a.get('engine') == 'flow']
+    vido = [a for a in tries if a.get('engine') == 'vidogrid']
+    if index == 0 and not tries and grok_ready:
+        return 'grok'
+    if not flow:
+        return 'flow'
+    if flow[-1].get('kind') == 'refusal' and len(flow) == 1 and not vido:
+        return 'flow'
+    refused = flow[-1].get('kind') == 'refusal' or (vido and vido[-1].get('kind') == 'refusal')
+    if refused and vidogrid_ready and len(vido) < VIDOGRID_TRIES and (not vido or vido[-1].get('kind') not in ('quota', 'login', 'challenge', 'credits')):
+        return 'vidogrid'
+    return None
+
+
 def order(settings, cfg=None):
-    """Engines in the owner's order. An episode made for one engine (« Moteur des clips ») tries it first."""
+    """Engines in the owner's order. An episode made for one engine (« Moteur des clips ») tries it first.
+    Engines removed with the V09 engine (Arena, Vidogrid) found in old settings are ignored."""
+    if v09_policy(settings,cfg):return ['flow','grok','vidogrid']
     if flow_grok_policy(settings,cfg):return ['flow','grok']
     raw = (cfg or {}).get('engine_chain') or (settings or {}).get('engine_chain') or DEFAULT
     out = [e for e in dict.fromkeys(raw if isinstance(raw, (list, tuple)) else DEFAULT) if e in DEFAULT] or list(DEFAULT)
@@ -47,7 +87,7 @@ def order(settings, cfg=None):
 
 
 def flow_grok_policy(settings, cfg=None):
-    return ((cfg or {}).get('clip_routing') or (settings or {}).get('clip_routing'))=='flow_grok_per_clip'
+    return routing(settings, cfg)=='flow_grok_per_clip'
 
 
 def flow_grok_next(scene):

@@ -34,8 +34,10 @@ class StoryQualityTests(unittest.TestCase):
         p = s.script_prompt(job('identical'))
         for banned in ('CINQ concepts', 'HISTORIQUE', 'Ne recopie pas', 'creative_selection'):
             self.assertNotIn(banned, p)
-        self.assertIn('LA MÊME HISTOIRE', p); self.assertIn('DÉCOUPAGE OBLIGATOIRE', p); self.assertIn('Scène 4 : ', p)
-        self.assertIn('garde l’ouverture de la vidéo d’origine', p)
+        self.assertIn('MOTEUR V09 — COPIE FIDÈLE', p); self.assertIn('Découpage plan par plan', p); self.assertIn('Scène 4 — APPEL', p)
+        self.assertIn('ref 00:00-', p); self.assertIn('Amen', p); self.assertIn('garde l’ouverture de la vidéo d’origine', p)
+        for banned in ('invente leurs vêtements', 'au moins deux lieux différents', 'Varie le cadrage'):
+            self.assertNotIn(banned, p)
 
     def test_identical_script_is_not_rejected_for_being_close_to_the_source(self):
         j = job('identical')
@@ -78,7 +80,7 @@ class StoryQualityTests(unittest.TestCase):
         video = s.clip_prompt(j, 0, 'grok')
         self.assertIn('SILENT, MOUTH CLOSED: Paul', video)
         self.assertNotIn('Absent', video)
-        self.assertIn('6 seconds', video)
+        self.assertIn('10 seconds', video)
         scene.pop('critical_mark')
         self.assertIn('No text, letters, numbers', s.clip_prompt(j, 0, 'flow'))
 

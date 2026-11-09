@@ -11,7 +11,7 @@ import quality
 import errors
 import engines
 import engine_chain
-import montage, source_video
+import montage, source_video, moteur_v09
 import story_backup
 import board_check
 import engine_accounts
@@ -68,13 +68,17 @@ def creation_language(value):
 def now(): return dt.datetime.now(dt.timezone.utc).isoformat()
 def uid(): return uuid.uuid4().hex[:16]
 def fresh():
-    return {'version':1, 'token':secrets.token_urlsafe(32), 'pair_code':secrets.token_hex(4), 'jobs':[], 'profiles':[], 'clients':{}, 'tasks':[], 'settings':{'provider':'chatgpt','language':'Deutsch (de-DE)','scene_count':4,'clip_seconds':8,'flow_model':'gemini_omni_flash','flow_resolution':'720p','flow_cost':12,'query':'KI Früchte Geschichten deutsch','daily_budget':50}}
+    return {'version':1, 'token':secrets.token_urlsafe(32), 'pair_code':secrets.token_hex(4), 'jobs':[], 'profiles':[], 'clients':{}, 'tasks':[], 'settings':{'provider':'chatgpt','language':'Deutsch (de-DE)','scene_count':4,'clip_seconds':10,'flow_model':engines.OMNI_12,'flow_resolution':'720p','flow_cost':30,'query':'KI Früchte Geschichten deutsch','daily_budget':50}}
 def read_state():
     DATA.mkdir(parents=True, exist_ok=True)
     p=DATA/'state.json'
     state=json.loads(p.read_text('utf-8')) if p.exists() else fresh()
     if 'flow_model' not in state['settings']:
-        state['settings'].update(flow_model='gemini_omni_flash',flow_resolution='720p',flow_cost=12)
+        state['settings'].update(flow_model=engines.OMNI_12,flow_resolution='720p',flow_cost=30)
+    if not state['settings'].get('v09_engine'):
+        # Moteur V09 (owner, 09/11/2026): new episodes use Omni 1.2 Flash in 10 s, Grok for clip 1 only, Flow for the rest.
+        state['settings'].update(v09_engine=1,flow_model=engines.OMNI_12,flow_resolution='720p',flow_cost=30,clip_seconds=10,clip_routing=engine_chain.V09)
+        if [e for e in state['settings'].get('engine_chain') or [] if e not in engines.AVAILABLE]:state['settings']['engine_chain']=list(engine_chain.DEFAULT)
     return state
 STATE=read_state()
 if not os.environ.get('FRUCHT_NO_THUMBS'):
@@ -859,6 +863,11 @@ def plan_video_block(j,s):
     parts.append('Use the gestures specified for this shot. Silent characters react with eyes, brows and hands, lips closed. Only add tears, sweat or screams when explicitly directed. Start from the positions shown in the reference frame. Preserve identity and outfit as characters move. Deliver the exchange at a natural pace with clear turns.')
     parts.append(scene_lettering(s))
     return '\n'+'\n'.join(parts)
+def plan_mute_block(j,s):
+    silent=set(s.get('characters') or [])-{line['speaker'] for line in s.get('dialogue',[])}
+    mute=[c['name'] for c in j.get('characters',[]) if c.get('id') in silent]
+    return ('\nSILENT, MOUTH CLOSED: '+', '.join(mute) if mute else '')+scene_lettering(s).join(['\n',''])
+
 def dialogue_lines(j,s):
     out=[]
     for x in s['dialogue']:
@@ -875,11 +884,11 @@ def size_problems(chars):
         if found:out.append(f"Le détail de {c.get('name','un personnage')} : « {', '.join(found)} » fait grossir le personnage dans la vidéo. Décris le détail sans parler de sa taille.")
     return out
 
-def validate_script(s, n, check_size=True, word_limit=25):
+def validate_script(s, n, check_size=True, word_limit=25, max_chars=5):
     if not isinstance(s,dict): raise ValueError('Objet JSON attendu')
     chars=s.get('characters',[]); scenes=s.get('scenes',[])
     # Name the count actually received: the rewrite request and the journal must say what to fix.
-    if not 1<=len(chars)<=5: raise ValueError(f'{len(chars)} personnage(s) reçu(s), il en faut 1 à 5 : fusionner ou retirer les personnages secondaires')
+    if not 1<=len(chars)<=max_chars: raise ValueError(f'{len(chars)} personnage(s) reçu(s), il en faut 1 à {max_chars} : fusionner ou retirer les personnages secondaires')
     if len(scenes)!=n: raise ValueError(f'{len(scenes)} scène(s) reçue(s), il en faut exactement {n}')
     def character_id(value):
         return value.strip().lower() if isinstance(value,str) else ''
@@ -1007,7 +1016,10 @@ def script_prompt(j):
     if identical:
         # A faithful remake never receives the originality rules (five new concepts, history to avoid): they made the
         # writer invent another story (real case 05/11/2026: a maid hiding her poverty became two sisters and a pendant).
-        guidance=editorial.retention_instructions(j)
+        # Moteur V09 (09/11/2026): not the retention rules either (they rewrite the opening); the V09 rules come with the
+        # reference below. Each scene keeps the time of the source it reproduces.
+        guidance=''
+        schema['scenes'][0]={'ref':'00:00-00:10 (temps de la source reproduit par cette scène ; vide pour l’appel final)',**schema['scenes'][0]}
     elif j.get('editorial_version')==2:
         if not j.get('sheet_approved'):
             schema['creative_selection']={'candidates':[{'title':'Titre du concept','hook':'Première réplique','conflict':'Conflit','setting':'Décor','twist':'Retournement','ending':'Fin','scores':{'hook':4,'clarity':4,'emotion':4,'novelty':5}} for _ in range(5)],'selected_index':0,'reason':'Justification éditoriale, pas une prédiction de vues'}
@@ -1017,9 +1029,11 @@ def script_prompt(j):
         guidance=editorial.instructions(j,STATE['jobs'])+'\nRéférences comparées : '+json.dumps(j.get('candidates',[])[:6],ensure_ascii=False)+'\nCorrections demandées : '+json.dumps(j.get('editorial_feedback',[]),ensure_ascii=False)
     else:guidance=editorial.STORY_CRAFT
     if identical and j.get('editorial_feedback'):guidance+='\nCorrections demandées : '+json.dumps(j['editorial_feedback'],ensure_ascii=False)
-    guidance+=PLAN_RULES
-    if engines.of(j)=='flow' or engine_chain.flow_grok_policy(STATE.get('settings'),j['config']):
-        guidance+=FLOW_SCENE_RULES
+    if not identical:
+        # Moteur V09: these rules ask for new framings, invented outfits and settings: never in a faithful copy.
+        guidance+=PLAN_RULES
+        if engines.of(j)=='flow' or engine_chain.flow_grok_policy(STATE.get('settings'),j['config']) or engine_chain.v09_policy(STATE.get('settings'),j['config']):
+            guidance+=FLOW_SCENE_RULES
     schema['scenes'][0]['critical_mark']='Facultatif : inscription exacte et emplacement précis sur un objet ou un personnage, seulement si nécessaire à l’intrigue'
     if not identical:
         guidance+=(
@@ -1045,8 +1059,8 @@ def script_prompt(j):
             'Dans le dernier plan, prononce l’appel choisi avec le personnage prévu. '
             'Dans dialogue[0].text, écris uniquement les paroles de la première réplique, sans le nom du locuteur ni son jeu.'
         )
-    reference=(source_video.guidance(j['config'].get('recreate','inspired'),j.get('source_analysis'),len(j.get('source_captures') or []),n)+(f"\nInstructions en plus du propriétaire (à respecter) : {j['brief']}" if j.get('brief','').strip() else '')) if owner_link else None
-    return f'''Crée une mini-fiction de fruits {'qui refait fidèlement la vidéo indiquée' if identical else 'entièrement ORIGINALE'}. Langue demandée pour les dialogues, les voix, les textes de couverture, la description et les prompts (sauf les clés techniques et la signature narrative) : {language}. La langue demandée prime sur la langue française des instructions et des descriptions du schéma. Aucune traduction ni réplique dans une autre langue. Les personnages parlent avec des voix natives de la langue demandée. Réponds UNIQUEMENT avec du JSON valide, sans explication. Conserve les clés techniques du schéma en anglais. {reference if reference else 'Référence comme indice de tendance seulement, jamais copier les répliques ou les plans : '+json.dumps(ref,ensure_ascii=False)+'.'} Idée : {j['brief']}. Exactement {n} scènes de {engines.spec(j)['seconds']} secondes, {'les mêmes personnages que la vidéo d’origine (5 au plus : fusionne ou laisse en figurant muet les rôles secondaires)' if identical else '2 à 5 personnages (au moins 3 quand l’histoire le permet : héros, adversaire, témoin ou figurant)'}. Au plus {word_limit} mots parlés par scène pour les langues avec espaces ; dans toutes les langues, vérifie que la scène peut être jouée au rythme naturel dans la durée du clip. Jusqu’à trois répliques, avec au maximum deux locuteurs par scène. {'HOOK : garde l’ouverture de la vidéo d’origine (elle a déjà prouvé qu’elle accroche) ; sa première réplique, reformulée, est dite dans les 2 premières secondes ; hook_text pose une question résolue seulement à la fin.' if identical else 'HOOK OBLIGATOIRE : la scène 1 s’ouvre sur l’instant le plus fort (danger, injustice, secret révélé), la première réplique est une phrase choc de moins de 10 mots dite dans les 2 premières secondes, et hook_text pose une question résolue seulement à la fin.'} Mouvement : chaque scène a un cadrage différent (gros plan, plan large, plongée), un mouvement de caméra motivé (travelling, panoramique, zoom), des gestes précis et un arrière-plan vivant par les objets, la lumière ou la météo ; au moins deux lieux différents dans l’épisode. Retournement visible, conclusion satisfaisante. Pas de présentation comme fait réel. Animation 3D premium, fruits anthropomorphes avec peau de fruit aussi sur les mains, vêtements couvrants sans logos, grands visages expressifs, {'mêmes décors que la vidéo d’origine' if identical else 'décor cohérent avec l’intrigue choisie et différent des épisodes récents'}, vertical 9:16. Même identité et tenue partout, aucune voix de narrateur, personnages parlant à l'écran, caméra en mouvement continu dans chaque clip. Sous-titres ajoutés au montage. {guidance} Champ state_changes FACULTATIF : seulement si l’histoire change vraiment l’apparence visible d’un personnage (blessure, vêtement déchiré, objet perdu, maquillage coulé…), de 0 à 3 entrées, from_scene = numéro de la première scène (1 à {n}) où le changement se voit, character = identifiant du personnage, change = description courte ; sinon une liste vide []. Le champ cover_title doit être une accroche de couverture de 3 à 5 mots maximum dans la langue demandée, sans révéler la fin. Schéma : {json.dumps(schema,ensure_ascii=False)}'''
+    reference=(source_video.guidance(j['config'].get('recreate','inspired'),j.get('source_analysis'),len(j.get('source_captures') or []),n,clip_seconds=engines.spec(j)['seconds'],language=language)+(f"\nInstructions en plus du propriétaire (à respecter) : {j['brief']}" if j.get('brief','').strip() else '')) if owner_link else None
+    return f'''Crée une mini-fiction de fruits {'qui refait fidèlement la vidéo indiquée' if identical else 'entièrement ORIGINALE'}. Langue demandée pour les dialogues, les voix, les textes de couverture, la description et les prompts (sauf les clés techniques et la signature narrative) : {language}. La langue demandée prime sur la langue française des instructions et des descriptions du schéma. Aucune traduction ni réplique dans une autre langue. Les personnages parlent avec des voix natives de la langue demandée. Réponds UNIQUEMENT avec du JSON valide, sans explication. Conserve les clés techniques du schéma en anglais. {reference if reference else 'Référence comme indice de tendance seulement, jamais copier les répliques ou les plans : '+json.dumps(ref,ensure_ascii=False)+'.'} Idée : {j['brief']}. Exactement {n} scènes de {engines.spec(j)['seconds']} secondes, {'les mêmes personnages que la vidéo d’origine (8 au plus : laisse en figurant muet les rôles sans réplique)' if identical else '2 à 5 personnages (au moins 3 quand l’histoire le permet : héros, adversaire, témoin ou figurant)'}. Au plus {word_limit} mots parlés par scène pour les langues avec espaces ; dans toutes les langues, vérifie que la scène peut être jouée au rythme naturel dans la durée du clip. {'Les répliques de l’original dans la fenêtre de la scène, au plus quatre répliques et trois locuteurs par scène.' if identical else 'Jusqu’à trois répliques, avec au maximum deux locuteurs par scène.'} {'HOOK : garde l’ouverture de la vidéo d’origine (elle a déjà prouvé qu’elle accroche) ; sa première réplique, traduite fidèlement, est dite dans la première seconde ; hook_text pose une question résolue seulement à la fin.' if identical else 'HOOK OBLIGATOIRE : la scène 1 s’ouvre sur l’instant le plus fort (danger, injustice, secret révélé), la première réplique est une phrase choc de moins de 10 mots dite dans les 2 premières secondes, et hook_text pose une question résolue seulement à la fin.'} {'Cadrages, mouvements de caméra, gestes et lieux : ceux de l’original, plan par plan (aucun lieu ni plan ajouté).' if identical else 'Mouvement : chaque scène a un cadrage différent (gros plan, plan large, plongée), un mouvement de caméra motivé (travelling, panoramique, zoom), des gestes précis et un arrière-plan vivant par les objets, la lumière ou la météo ; au moins deux lieux différents dans l’épisode.'} Retournement visible, conclusion satisfaisante. Pas de présentation comme fait réel. Animation 3D premium, fruits anthropomorphes avec peau de fruit aussi sur les mains, vêtements couvrants sans logos, grands visages expressifs, {'mêmes décors que la vidéo d’origine' if identical else 'décor cohérent avec l’intrigue choisie et différent des épisodes récents'}, vertical 9:16. Même identité et tenue partout, aucune voix de narrateur, personnages parlant à l'écran, caméra en mouvement continu dans chaque clip. Sous-titres ajoutés au montage. {guidance} Champ state_changes FACULTATIF : seulement si l’histoire change vraiment l’apparence visible d’un personnage (blessure, vêtement déchiré, objet perdu, maquillage coulé…), de 0 à 3 entrées, from_scene = numéro de la première scène (1 à {n}) où le changement se voit, character = identifiant du personnage, change = description courte ; sinon une liste vide []. Le champ cover_title doit être une accroche de couverture de 3 à 5 mots maximum dans la langue demandée, sans révéler la fin. Schéma : {json.dumps(schema,ensure_ascii=False)}'''
 
 def horizontal(j): return (j.get('config') or {}).get('format')=='horizontal'
 def frame_size(j): return (1920,1080) if horizontal(j) else (1080,1920)  # best resolution for TikTok (owner priority)
@@ -1057,7 +1071,7 @@ def normalize_flow_resolution(cfg):
     Also protects jobs sent by an already-open older form and restored productions.
     Keep the requested value as evidence instead of letting an unsupported setting block paid work.
     """
-    if cfg.get('flow_model') in ('gemini_omni_flash','veo_3_1_lite') and cfg.get('flow_resolution')=='1080p':
+    if cfg.get('flow_model') in engines.NATIVE_720 and cfg.get('flow_resolution')=='1080p':
         cfg['flow_resolution_requested']='1080p';cfg['flow_resolution']='720p';return True
     return False
 def check_publish_size(probe,path,expected):
@@ -1189,6 +1203,12 @@ def prepare_source(id):
         j=job_by(id)
         if not j:return
         j['source_analysis']=analysis
+        if j['config'].get('recreate')=='identical' and analysis.get('duration'):
+            # Moteur V09: one scene per window of the source (one clip length) plus the call clip.
+            n=moteur_v09.scene_count(analysis['duration'],engines.spec(j)['seconds'])
+            if n!=j['config'].get('scene_count'):
+                j['config']['scene_count']=n
+                event(j,f"Copie fidèle (moteur V09) : vidéo d’origine de {analysis['duration']} s → {n-1} scènes de {engines.spec(j)['seconds']} s + 1 clip d’appel.")
         if j.get('status')=='waiting_source':j['status']='running'
         event(j,message);schedule(j);save()
 
@@ -1434,7 +1454,7 @@ def engine_ready(j,engine,moment=None):
     if engine not in engines.AVAILABLE:return False
     if engine=='flow':return flow_can_pay(j)
     # Owner 06/11/2026: Grok is costly, never used without their go-ahead (« Utiliser Grok » on the episode).
-    if engine=='grok' and not (j.get('grok_ok') or STATE.get('settings',{}).get('grok_auto') or engine_chain.flow_grok_policy(STATE.get('settings'),j['config'])):return False
+    if engine=='grok' and not (j.get('grok_ok') or STATE.get('settings',{}).get('grok_auto') or engine_chain.flow_grok_policy(STATE.get('settings'),j['config']) or engine_chain.v09_policy(STATE.get('settings'),j['config'])):return False
     own=engine==engines.of(j)
     if j['config'].get('dry_run') and not own:return False  # a dry run checks the episode's engine only
     if (STATE.get('engine_walls') or {}).get(engine,0)>moment:return False
@@ -1451,6 +1471,9 @@ def engine_ready(j,engine,moment=None):
 def clip_engine_for(j,i,early=False):
     """Engine of the next try of clip i, or None when every engine has been tried (the clip waits for the owner)."""
     s=j['scenes'][i];chain=engine_chain.order(STATE.get('settings'),j['config'])
+    if engine_chain.v09_policy(STATE.get('settings'),j['config']):
+        # Moteur V09: clip 1 on Grok when it is ready (else Flow), clips 2 and later on Flow only, never Grok.
+        return engine_chain.v09_next(s,i,i==0 and engine_ready(j,'grok'),engine_ready(j,'vidogrid'))
     if engine_chain.flow_grok_policy(STATE.get('settings'),j['config']):
         return engine_chain.flow_grok_next(s)
     if j['config'].get('dry_run'):return engines.of(j)
@@ -1474,7 +1497,11 @@ def clip_prompt(j,i,engine):
     s=j['scenes'][i]
     visible=s.get('characters') or [c['id'] for c in j['characters']]
     cast='\n'.join(c['id']+': '+c['appearance']+' Voice: '+c['voice'] for c in j['characters'] if c['id'] in visible)
-    dialog=dialogue_lines(j,s);language=j['config'].get('language','Deutsch (de-DE)');seconds=engines.ENGINES[engine]['seconds']
+    dialog=dialogue_lines(j,s);language=j['config'].get('language','Deutsch (de-DE)');seconds=engines.seconds(j,engine)
+    if is_identical(j):
+        # Moteur V09: the writer's timed beats, cast lock and exact lines, then the closing block of the V09 clips.
+        prompt=moteur_v09.clip_prompt(j,s,seconds,cast,dialog,language)+plan_mute_block(j,s)+correction(j.get('corrections',{}).get(f'clip:{i}'))
+        return engine_chain.soften(prompt) if engine_chain.round_of(s)>=engine_chain.FINAL_ROUND else prompt
     prompt=(f"One continuous shot, {seconds} seconds, portrait 9:16. Animate the attached image with the directed camera motion and gestures. "
             f"No music. Spoken language ONLY: {language}. Natural native voices, no translation or extra narration. "
             f"Only the following cast appears. Preserve their identity.\n{cast}\n{s['video_prompt']}{plan_video_block(j,s)}\n"
@@ -1507,7 +1534,7 @@ def schedule_engine_clip(j,i,engine,early=False,parallel=False):
     # P5-06: Grok / Arena / Vidogrid. No credit balance to reserve; quotas are handled per account.
     s=j['scenes'][i]
     if parallel and engine_busy(engine):return False
-    seconds=engines.ENGINES[engine]['seconds']
+    seconds=engines.seconds(j,engine)
     payload={'engine':engine,'prompt':clip_prompt(j,i,engine),'attachments':[asset_url(j,flow_reference(j,s['image']))],'seconds':seconds}
     if engine_accounts.accounts(STATE,engine) and not j['config'].get('dry_run'):
         moment=time.time();account=engine_accounts.choose(STATE,engine,current_account(j,engine),moment)
@@ -1528,7 +1555,7 @@ def schedule_engine_clip(j,i,engine,early=False,parallel=False):
     if j['config'].get('dry_run'):payload['dry_run']=True
     if horizontal(j):payload['aspect']='16:9'
     words=sum(len(x['text'].split()) for x in s.get('dialogue') or [])
-    if engine!=engines.of(j) and words>engines.words_for(engine):
+    if engine!=engines.of(j) and words>engines.words_for(engine,j=j):
         event(j,f'Clip {i+1} sur {engines.ENGINES[engine]["label"]} : {seconds} s pour {words} mots écrits pour un clip plus long, la fin de la réplique peut être coupée.')
     add_task(j,'engine_video',payload,f'clip:{i}');return True
 
@@ -1564,7 +1591,7 @@ def schedule_flow_clip(j,i,early=False,parallel=False):
     if p['id']!=j.get('flow_profile') and not parallel:
         previous=profile_by(j.get('flow_profile'))
         j['flow_profile']=p['id'];account_usage.number_flow(STATE);event(j,account_usage.switch_line(previous,p))
-    payload={'prompt':clip_prompt(j,i,'flow'),'attachments':[asset_url(j,flow_reference(j,s['image']))],'cost':cost,'balance':p['balance'],'seconds':8,**({'model':j['config']['flow_model'],'resolution':j['config'].get('flow_resolution','720p')} if j['config'].get('flow_model') else {})}
+    payload={'prompt':clip_prompt(j,i,'flow'),'attachments':[asset_url(j,flow_reference(j,s['image']))],'cost':cost,'balance':p['balance'],'seconds':engines.flow_seconds(j),**({'model':j['config']['flow_model'],'resolution':j['config'].get('flow_resolution','720p')} if j['config'].get('flow_model') else {})}
     if j['config'].get('dry_run'):payload['dry_run']=True
     target=flow_accounts.route(p) if STATE.get('settings',{}).get('flow_auto') else None
     if target:
@@ -1595,6 +1622,28 @@ def clip_failed(j,t,result,kind):
             schedule(j);return True
         if result.get('flow_blocked') in ('credits','unavailable','not_ready') and (t.get('payload') or {}).get('flow_route'):
             return False  # this Google account, not Flow itself: the next Flow account, then the next engine (schedule_clip)
+    if engine_chain.v09_policy(STATE.get('settings'),j['config']):
+        # Moteur V09: Grok failed on clip 1 (limit, sign-in, refusal…) → Flow at once; Flow refused → one adapted retry.
+        if kind=='quota' and engine in ('grok','vidogrid'):
+            moment=time.time();email=((t.get('payload') or {}).get('account') or {}).get('email')
+            account=next((a for a in engine_accounts.accounts(STATE,engine) if a['email']==email),None) or engine_accounts.by_id(STATE,current_account(j,engine))
+            if account:engine_accounts.wall(account,moment,errors.retry_after(result),reason)
+            else:STATE.setdefault('engine_walls',{})[engine]=moment+(errors.retry_after(result) or engine_accounts.DEFAULT_WALL)
+        if engine in ('grok','vidogrid'):note_not_ready(t,result)
+        engine_chain.record(scene,engine,kind,reason,now())
+        nxt=engine_chain.v09_next(scene,i,False,engine_ready(j,'vidogrid'))
+        t['status']='failed';j['status']='running'
+        if engine=='flow' and kind=='refusal' and nxt=='flow':
+            scene['flow_rewrite_pending']=True;j['stage']='images'
+            event(j,f'Clip {i+1} : refus confirmé de Flow. Adaptation de la scène avant le deuxième essai sur Flow.')
+            schedule(j);return True
+        event(j,engine_chain.line(i,engine,kind,reason,nxt))
+        if not nxt and redraw_refused_board(j,i):schedule(j);return True
+        if not nxt:
+            scene['engine_exhausted']=True
+            if engine=='flow':j['status']='attention'
+            alert(j,'action',f'Clip {i+1} : Flow'+(' et Vidogrid n’ont' if any(x.get('engine')=='vidogrid' for x in scene.get('engine_tries') or []) else ' n’a')+f' pas livré le clip ({engine_chain.short(reason)}). '+('Grok ne fait que le clip 1 : ' if i else '')+'modifie la scène (« Refaire » avec une consigne) ou importe un clip, puis Reprendre. Les autres clips continuent.')
+        schedule(j);return True
     if engine_chain.flow_grok_policy(STATE.get('settings'),j['config']):
         engine_chain.record(scene,engine,kind,reason,now())
         nxt=engine_chain.flow_grok_next(scene)
@@ -1639,9 +1688,9 @@ THIRD_PARTY_NOTE=('Video engine refusal: this board looks too close to existing 
 
 def ask_grok(j,i):
     """Every free engine failed: offer Grok, once per episode, never used before the owner says yes."""
-    if j.get('grok_ok') or 'grok' not in engine_chain.order(STATE.get('settings'),j['config']) or j.get('grok_asked'):return
+    if j.get('grok_ok') or 'grok' not in engine_chain.order(STATE.get('settings'),j['config']) or j.get('grok_asked') or engine_chain.v09_policy(STATE.get('settings'),j['config']):return
     j['grok_asked']=True
-    alert(j,'action',f'Clip {i+1} : Flow, Arena et Vidogrid n’y arrivent pas. Grok peut essayer, mais il consomme beaucoup : valide pour l’utiliser sur cet épisode.')
+    alert(j,'action',f'Clip {i+1} : Flow n’y arrive pas. Grok peut essayer, mais il consomme beaucoup : valide pour l’utiliser sur cet épisode.')
     j['alerts'][-1]['command']='allow_grok';j['alerts'][-1]['label']='Utiliser Grok pour cet épisode'
 
 def redraw_refused_board(j,i):
@@ -1932,18 +1981,22 @@ def edit_script(j,changes):
 def store_script(j,s):
     if s.get('production_id') and s['production_id']!=j['id']:raise ValueError('Ce scénario appartient à une autre production')
     identical=is_identical(j)
-    validate_script(s,j['config']['scene_count'],check_size=not identical,word_limit=engines.word_limit(j))
+    validate_script(s,j['config']['scene_count'],check_size=not identical,word_limit=engines.word_limit(j),max_chars=8 if identical else 5)
     if identical:
         # Faithful remake: no concept comparison, no novelty check against the history; only what fits in the clips.
         # Like the Atelier, every defect is listed in one refusal: one rewrite fixes them all (one per refusal cost 5 min each).
         problems=size_problems(s['characters'])
         # The prompt asks for word_limit; the refusal only falls past 3 words a second (the Atelier refuses 22 words in 6 s,
         # not 21): a rewrite costs 5 to 7 min, one word over is not worth it.
-        limit=max(engines.word_limit(j),int(3*engines.spec(j)['seconds']))
+        # Moteur V09: the lines of the source window (up to 4 turns, 3 voices), about 3 words a second.
+        limit=max(engines.word_limit(j),int(3*engines.spec(j)['seconds']))+3
         for i,scene in enumerate(s['scenes']):
             lines=scene.get('dialogue',[]);words=sum(len(x['text'].split()) for x in lines)
-            if len(lines)>engines.MAX_DIALOGUE_TURNS or len({line['speaker'] for line in lines})>2 or words>limit:
-                problems.append(f"Scène {i+1} : {len(lines)} réplique(s) et {words} mots, trois répliques entre deux personnages et {limit} mots au plus pour tenir dans le clip de {engines.spec(j)['seconds']} secondes ; enlève des mots, n'allonge rien")
+            if len(lines)>4 or len({line['speaker'] for line in lines})>3 or words>limit:
+                problems.append(f"Scène {i+1} : {len(lines)} réplique(s) et {words} mots, quatre répliques entre trois personnages et {limit} mots au plus pour tenir dans le clip de {engines.spec(j)['seconds']} secondes ; enlève des mots, n'allonge rien")
+            ref=scene.get('ref')
+            scene['ref']=_txt(ref,40) if isinstance(ref,str) and ref.strip() else None
+            if not scene['ref']:scene.pop('ref')
         if problems:raise ValueError(' ; '.join(problems))
     else:
         if j.get('sheet_approved'):
@@ -2490,7 +2543,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             if t['kind']=='engine_video' and any(o.get('kind')=='engine_video' and (o.get('payload') or {}).get('engine')==t['payload'].get('engine') for o in STATE['tasks'] if o['status']=='claimed'):continue
                         if t['kind']=='flow_video':
                             if normalize_flow_resolution(j['config']):event(j,'Ancien réglage 1080p corrigé en 720p avant attribution du clip Flow.')
-                            if t.get('payload',{}).get('model') in ('gemini_omni_flash','veo_3_1_lite') and t['payload'].get('resolution')=='1080p':
+                            if t.get('payload',{}).get('model') in engines.NATIVE_720 and t['payload'].get('resolution')=='1080p':
                                 t['payload']['resolution']='720p';t['payload']['resolution_requested']='1080p'
                             # Never two clips on the same account at once: one reservation per account, one tab per project.
                             if any(other['kind'] in ('flow_video','flow_collect') and other['status']=='claimed' and (other.get('profile')==t.get('profile') or not lane) for other in STATE['tasks']):continue
@@ -2954,7 +3007,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         # 0.1.93: order of the clip engines (one try each per clip); an engine left out is never used.
                         STATE['settings']['engine_chain']=engine_chain.validate(b['engine_chain'])
                     if 'clip_routing' in b:
-                        if b['clip_routing'] not in ('flow_grok_per_clip','chain'):raise ValueError('Mode de bascule inconnu')
+                        if b['clip_routing'] not in (engine_chain.V09,'flow_grok_per_clip','chain'):raise ValueError('Mode de bascule inconnu')
                         target=job_by(b.get('job')) if b.get('job') else None
                         if b.get('job') and not target:raise ValueError('Production inconnue')
                         if target and any(t['job']==target['id'] and t['status'] in ('queued','claimed') for t in STATE['tasks']):raise ValueError('Attendez la fin de la tâche avant de changer de bascule')
@@ -2964,7 +3017,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             target['config']['clip_routing']=b['clip_routing']
                             for sc in target.get('scenes') or []:
                                 if not sc.get('clip'):engine_chain.reset(sc)
-                            event(target,'Bascule par clip : Flow en premier, Grok seulement après un refus confirmé, puis retour à Flow pour le clip suivant.')
+                            event(target,'Moteur V09 : Grok pour le clip 1 (Flow s’il n’est pas disponible), Flow pour les clips 2 à la fin.' if b['clip_routing']==engine_chain.V09 else 'Bascule par clip : Flow en premier, Grok seulement après un refus confirmé, puis retour à Flow pour le clip suivant.')
                     if 'follow' in b:
                         # Followed TikTok accounts in Le Filon (star), like the Atelier.
                         name=str(b['follow']).strip().lstrip('@')[:60];followed=STATE['settings'].setdefault('filon_follow',[])
@@ -2985,11 +3038,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 elif path=='/api/job':
                     LICENCE.require()
                     cfg={**STATE['settings'],**b.get('config',{})}; cfg['scene_count']=int(cfg['scene_count']); cfg['flow_cost']=int(cfg['flow_cost'])
-                    cfg['flow_model']=b.get('config',{}).get('flow_model','gemini_omni_flash')
-                    if cfg['flow_model'] not in ('gemini_omni_flash','veo_3_1_lite','veo_3_1_fast','veo_3_1_quality'):raise ValueError('Modèle Flow non pris en charge')
+                    cfg['flow_model']=b.get('config',{}).get('flow_model',engines.DEFAULT_FLOW_MODEL)
+                    if cfg['flow_model'] not in engines.FLOW_MODELS:raise ValueError('Modèle Flow non pris en charge')
+                    # Moteur V09 for every new episode: Grok for clip 1, Flow (Omni 1.2 Flash, 10 s) for the rest.
+                    cfg['clip_routing']=engine_chain.V09 if b.get('config',{}).get('clip_routing') in (None,'',engine_chain.V09) else b['config']['clip_routing']
+                    if cfg['clip_routing'] not in (engine_chain.V09,'flow_grok_per_clip','chain'):raise ValueError('Mode de bascule inconnu')
                     cfg['video_engine']=engines.validate(b.get('config',{}).get('video_engine','flow'))
                     if cfg['video_engine'] not in engines.AVAILABLE:raise ValueError('Connecteur '+engines.ENGINES[cfg['video_engine']]['label']+' pas encore livré : choisissez Google Flow.')
-                    cfg['flow_resolution']='1080p' if b.get('config',{}).get('flow_resolution')=='1080p' else '720p';cfg['clip_seconds']=engines.ENGINES[cfg['video_engine']]['seconds']
+                    cfg['flow_resolution']='1080p' if b.get('config',{}).get('flow_resolution')=='1080p' else '720p';cfg['clip_seconds']=engines.seconds({'config':cfg},cfg['video_engine'])
                     normalize_flow_resolution(cfg)
                     duration=b.get('config',{}).get('duration')
                     if duration is not None:
@@ -2999,8 +3055,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         # Durée garantie: enough plans for the target (more than 60 s for "1 min"), fades included.
                         fade=montage.FADES[montage.validate({},STATE['settings'].get('montage'))['transition']]
                         cfg['scene_count']=montage.scenes_for(int(duration),cfg['clip_seconds'],fade)
-                    cfg['flow_cost']=int(b.get('config',{}).get('flow_cost',{'gemini_omni_flash':12,'veo_3_1_lite':10,'veo_3_1_fast':20,'veo_3_1_quality':100}[cfg['flow_model']]))
-                    if cfg['flow_cost'] not in {'gemini_omni_flash':(12,), 'veo_3_1_lite':(10,5), 'veo_3_1_fast':(20,10), 'veo_3_1_quality':(100,)}[cfg['flow_model']]:raise ValueError('Coût incompatible avec le modèle Flow choisi. Le coût réel sera vérifié avant tout envoi.')
+                    cfg['flow_cost']=int(b.get('config',{}).get('flow_cost',engines.FLOW_MODELS[cfg['flow_model']]['costs'][0]))
+                    if cfg['flow_cost'] not in engines.FLOW_MODELS[cfg['flow_model']]['costs']:raise ValueError('Coût incompatible avec le modèle Flow choisi. Le coût réel sera vérifié avant tout envoi.')
                     cfg['language']=creation_language(cfg.get('language','Deutsch (de-DE)'))
                     # Claude model and effort: request first, then the last choice kept in the settings.
                     for k in CLAUDE_DEFAULTS:cfg[k]=claude_choice(k,cfg.get(k))
@@ -3045,7 +3101,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         j['source_captures']=source_video.save_captures(captures,job_dir(j))
                         # The video is fetched and analysed first (key frames, transcription): the AI sees it, not only its link.
                         j['status']='waiting_source';threading.Thread(target=prepare_source,args=(j['id'],),daemon=True).start()
-                        event(j,'Projet créé d’après le lien fourni : recherche sautée. '+('Recréation à l’identique : mêmes scènes, répliques reformulées.' if j['config']['recreate']=='identical' else 'Histoire originale inspirée de cette vidéo (sans copier dialogues ni plans).')+(f" {len(j['source_captures'])} capture(s) jointe(s)." if j['source_captures'] else ''))
+                        event(j,'Projet créé d’après le lien fourni : recherche sautée. '+('Copie fidèle (moteur V09) : même histoire, mêmes répliques traduites, seuls les personnages changent.' if j['config']['recreate']=='identical' else 'Histoire originale inspirée de cette vidéo (sans copier dialogues ni plans).')+(f" {len(j['source_captures'])} capture(s) jointe(s)." if j['source_captures'] else ''))
                     mode=b.get('mode')
                     if mode not in (None,'','link','ideas','idea','research'):raise ValueError('Option de création inconnue')
                     cfg['auto_sheet']=bool(b.get('config',{}).get('auto_sheet',False));cfg['niche']=str(b.get('config',{}).get('niche','Fruits'))[:40]

@@ -301,9 +301,9 @@ class HTTPTests(unittest.TestCase):
         old=job();before=copy.deepcopy(old)
         self.req('/api/job',{'brief':'A family secret','config':{'scene_count':4,'provider':'chatgpt','language':'Deutsch (de-DE)'}})
         new=s.STATE['jobs'][0]
-        self.assertEqual(new['config']['flow_model'],'gemini_omni_flash')
-        self.assertEqual(new['config']['flow_cost'],12);self.assertEqual(new['config']['flow_resolution'],'720p')
-        self.assertEqual(new['config']['clip_seconds'],8);self.assertEqual(old,before)
+        self.assertEqual(new['config']['flow_model'],'gemini_omni_flash_1_2')
+        self.assertEqual(new['config']['flow_cost'],30);self.assertEqual(new['config']['flow_resolution'],'720p')
+        self.assertEqual(new['config']['clip_seconds'],10);self.assertEqual(new['config']['clip_routing'],'v09_grok_first');self.assertEqual(old,before)
         count=len(s.STATE['jobs'])
         with self.assertRaises(urllib.error.HTTPError):
             self.req('/api/job',{'brief':'test','config':{'flow_model':'gemini_omni_flash','flow_cost':10}})

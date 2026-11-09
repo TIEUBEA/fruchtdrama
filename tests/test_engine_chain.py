@@ -1,4 +1,4 @@
-"""0.1.93: bascule de moteur par clip (Flow, Arena, Vidogrid, Grok), prompt adouci au dernier tour, clip mis de côté
+"""0.1.93: bascule de moteur par clip (Flow, Vidogrid, Grok ; Arena retiré le 09/11/2026), prompt adouci au dernier tour, clip mis de côté
 sans bloquer les autres, moteur gardé par clip pour le montage (owner 06/11/2026: « un essai par cas »)."""
 import datetime as dt, importlib.util, json, os, pathlib, shutil, subprocess, sys, tempfile, time, unittest
 
@@ -11,7 +11,7 @@ s = importlib.util.module_from_spec(SPEC); SPEC.loader.exec_module(s)
 import engine_chain, engines
 
 
-def fresh(sites=('chatgpt', 'arena', 'vidogrid', 'grok')):
+def fresh(sites=('chatgpt', 'vidogrid', 'grok')):
     state = s.fresh(); at = dt.datetime.now(dt.timezone.utc).isoformat()
     state['readiness'] = {'sites': {n: {'state': 'ready', 'reason': '', 'at': at} for n in sites}, 'pending': []}
     return state
@@ -58,23 +58,26 @@ def deliver(j, t):
 
 class ChainUnitTests(unittest.TestCase):
     def test_order_and_validation(self):
-        self.assertEqual(engine_chain.order({}), ['flow', 'arena', 'vidogrid', 'grok'])
-        self.assertEqual(engine_chain.order({'engine_chain': ['arena', 'flow']}, {'video_engine': 'flow'}), ['arena', 'flow'], 'Flow is the default, not a choice')
-        self.assertEqual(engine_chain.order({}, {'video_engine': 'grok'}), ['grok', 'flow', 'arena', 'vidogrid'], 'the episode engine first')
+        self.assertEqual(engine_chain.order({}), ['flow', 'vidogrid', 'grok'])
+        self.assertEqual(engine_chain.order({'engine_chain': ['vidogrid', 'flow']}, {'video_engine': 'flow'}), ['vidogrid', 'flow'], 'Flow is the default, not a choice')
+        self.assertEqual(engine_chain.order({}, {'video_engine': 'grok'}), ['grok', 'flow', 'vidogrid'], 'the episode engine first')
+        self.assertEqual(engine_chain.order({'engine_chain': ['arena', 'flow']}), ['flow'], 'Arena (removed) is ignored')
+        with self.assertRaises(ValueError):
+            engine_chain.validate(['arena'])
         self.assertEqual(engine_chain.validate(['grok', 'grok', 'flow']), ['grok', 'flow'])
         for bad in ([], ['sora'], 'flow'):
             with self.assertRaises(ValueError):
                 engine_chain.validate(bad)
 
     def test_pick_advance_and_soften(self):
-        scene = {}; chain = ['flow', 'arena', 'vidogrid', 'grok']
-        ready = lambda e: e != 'vidogrid'
+        scene = {}; chain = ['flow', 'vidogrid', 'grok']
+        ready = lambda e: True
         self.assertEqual(engine_chain.pick(scene, chain, ready), 'flow')
         engine_chain.record(scene, 'flow', 'refusal', 'Flow : refusé. Diagnostic {x}', 'now')
         self.assertEqual(scene['engine_tries'][0]['reason'], 'refusé')
-        self.assertEqual(engine_chain.advance(scene, chain, ready), 'arena')
-        engine_chain.record(scene, 'arena', 'timeout', 'x', 'now')
-        self.assertEqual(engine_chain.advance(scene, chain, ready), 'grok', 'an engine without a ready account is skipped')
+        self.assertEqual(engine_chain.advance(scene, chain, ready), 'vidogrid')
+        engine_chain.record(scene, 'vidogrid', 'timeout', 'x', 'now')
+        self.assertEqual(engine_chain.advance(scene, chain, ready), 'grok')
         engine_chain.record(scene, 'grok', 'other', 'x', 'now')
         self.assertEqual(engine_chain.advance(scene, chain, ready), 'flow', 'last round: Flow again')
         self.assertEqual(engine_chain.round_of(scene), 1)
@@ -85,7 +88,7 @@ class ChainUnitTests(unittest.TestCase):
         self.assertTrue(soft.startswith('All-audiences family animation clip'))
         for word in ('punches', 'knife', 'blood'):
             self.assertNotIn(word, soft.split('\n', 1)[1].split('\nIf a detail')[0])
-        self.assertEqual(engine_chain.line(2, 'flow', 'refusal', 'Contenu non conforme.', 'arena'), 'Clip 3 : Flow a refusé (Contenu non conforme) → essai sur Arena.')
+        self.assertEqual(engine_chain.line(2, 'flow', 'refusal', 'Contenu non conforme.', 'vidogrid'), 'Clip 3 : Flow a refusé (Contenu non conforme) → essai sur Vidogrid.')
 
     def test_montage_length_follows_each_clip_engine(self):
         j = {'config': {'video_engine': 'flow'}}
@@ -167,11 +170,8 @@ class ChainScheduleTests(unittest.TestCase):
         fail(t, {'ok': False, 'generation_submitted': False, 'error': 'Flow : coût affiché différent du budget prévu. Aucun envoi effectué.'})
         self.assertEqual(s.STATE['profiles'][0]['balance'], 100, 'nothing sent: reservation given back')
         self.assertEqual(j['status'], 'running'); self.assertFalse([a for a in j.get('alerts', []) if a['level'] == 'action'], 'no « Action requise »')
-        self.assertIn('Clip 1 : Flow a échoué (coût affiché différent du budget prévu) → essai sur Arena.', [e['text'] for e in j['events']])
-        t = queued(j)[0]; self.assertEqual((t['slot'], engine_of(t)), ('clip:0', 'arena'))
-        self.assertIn('8 seconds', t['payload']['prompt'])
-        fail(t, {'ok': False, 'error_kind': 'refusal', 'generation_submitted': True, 'error': 'LMArena vidéo : génération refusée par la modération.'})
-        t = queued(j)[0]; self.assertEqual(engine_of(t), 'vidogrid'); self.assertIn('10 seconds', t['payload']['prompt'])
+        self.assertIn('Clip 1 : Flow a échoué (coût affiché différent du budget prévu) → essai sur Vidogrid.', [e['text'] for e in j['events']])
+        t = queued(j)[0]; self.assertEqual((t['slot'], engine_of(t)), ('clip:0', 'vidogrid')); self.assertIn('10 seconds', t['payload']['prompt'])
         fail(t, {'ok': False, 'generation_submitted': True, 'error': 'Vidogrid : génération échouée (STATUS 503). Rien à attendre de plus.'})
         t = queued(j)[0]; self.assertEqual(engine_of(t), 'grok')
         self.assertNotIn('All-audiences', t['payload']['prompt'], 'first round: prompt unchanged')
@@ -182,7 +182,7 @@ class ChainScheduleTests(unittest.TestCase):
         fail(t, {'ok': False, 'generation_submitted': False, 'error': 'Flow : image toujours en traitement, rien ne progresse depuis 90 s. Aucun envoi de génération effectué.'})
         self.assertEqual(s.held_clips(j), {0})
         alert = j['alerts'][-1]; self.assertEqual(alert['level'], 'action')
-        for name in ('Flow', 'Arena', 'Vidogrid', 'Grok', 'prompt adouci'):
+        for name in ('Flow', 'Vidogrid', 'Grok', 'prompt adouci'):
             self.assertIn(name, alert['text'])
         # The other clips go on.
         t = queued(j)[0]; self.assertEqual((t['slot'], engine_of(t)), ('clip:1', 'flow')); self.assertEqual(j['status'], 'running')
@@ -199,19 +199,20 @@ class ChainScheduleTests(unittest.TestCase):
         j = clip_job(); s.schedule(j)
         fail(queued(j)[0], {'ok': False, 'generation_submitted': False, 'error': 'Flow : page indisponible.'})
         deliver(j, queued(j)[0])
-        self.assertEqual(j['scenes'][0]['engine'], 'arena'); self.assertNotIn('engine_tries', j['scenes'][0])
+        self.assertEqual(j['scenes'][0]['engine'], 'vidogrid'); self.assertNotIn('engine_tries', j['scenes'][0])
         t = queued(j)[0]; self.assertEqual((t['slot'], engine_of(t)), ('clip:1', 'flow'))
         deliver(j, t); self.assertEqual(j['scenes'][1]['engine'], 'flow')
 
     def test_flow_without_credits_is_skipped_without_a_try(self):
         j = clip_job(balance=0); s.schedule(j)
-        t = queued(j)[0]; self.assertEqual(engine_of(t), 'arena'); self.assertNotEqual(j['status'], 'waiting_credit')
+        t = queued(j)[0]; self.assertEqual(engine_of(t), 'vidogrid'); self.assertNotEqual(j['status'], 'waiting_credit')
         self.assertNotIn('engine_tries', j['scenes'][0])
 
     def test_engine_to_fix_is_skipped(self):
-        s.STATE['readiness']['sites']['arena'] = {'state': 'fix', 'reason': 'Connexion requise', 'at': dt.datetime.now(dt.timezone.utc).isoformat()}
+        s.STATE['readiness']['sites']['vidogrid'] = {'state': 'fix', 'reason': 'Connexion requise', 'at': dt.datetime.now(dt.timezone.utc).isoformat()}
+        s.STATE['settings']['grok_auto'] = True
         j = clip_job(balance=0); s.schedule(j)
-        self.assertEqual(engine_of(queued(j)[0]), 'vidogrid')
+        self.assertEqual(engine_of(queued(j)[0]), 'grok')
 
     def test_nothing_ready_keeps_the_old_wait_for_credits(self):
         s.STATE = fresh(sites=('chatgpt',))
@@ -231,29 +232,30 @@ class ChainScheduleTests(unittest.TestCase):
         j = clip_job(); s.schedule(j)
         fail(queued(j)[0], {'ok': False, 'error_kind': 'refusal', 'generation_submitted': True, 'flow_failed': True, 'error': 'Flow a refusé ce clip : Impossible de générer cette vidéo.'})
         self.assertEqual(s.uncertain_clip_tasks(j), []); self.assertEqual(s.STATE['profiles'][0]['balance'], 100)
-        self.assertEqual(engine_of(queued(j)[0]), 'arena')
-        self.assertIn('Clip 1 : Flow a refusé (Impossible de générer cette vidéo) → essai sur Arena.', [e['text'] for e in j['events']])
+        self.assertEqual(engine_of(queued(j)[0]), 'vidogrid')
+        self.assertIn('Clip 1 : Flow a refusé (Impossible de générer cette vidéo) → essai sur Vidogrid.', [e['text'] for e in j['events']])
 
     def test_quota_walls_the_account_then_next_engine(self):
-        s.engine_accounts.add(s.STATE, 'arena', 'A', 'compte-a@example.com')
+        s.STATE['settings']['grok_auto'] = True
+        s.engine_accounts.add(s.STATE, 'vidogrid', 'A', 'compte-a@example.com')
         j = clip_job(balance=0); s.schedule(j)
         t = queued(j)[0]; self.assertEqual(t['payload']['account']['email'], 'compte-a@example.com')
-        fail(t, {'ok': False, 'error_kind': 'quota', 'retry_after': 3600, 'generation_submitted': True, 'error': 'LMArena vidéo : limite du compte atteinte.'})
-        self.assertTrue(s.engine_accounts.walled(s.engine_accounts.accounts(s.STATE, 'arena')[0], time.time()))
-        self.assertEqual(engine_of(queued(j)[0]), 'vidogrid')
+        fail(t, {'ok': False, 'error_kind': 'quota', 'retry_after': 3600, 'generation_submitted': True, 'error': 'Vidogrid : crédits insuffisants sur ce compte.'})
+        self.assertTrue(s.engine_accounts.walled(s.engine_accounts.accounts(s.STATE, 'vidogrid')[0], time.time()))
+        self.assertEqual(engine_of(queued(j)[0]), 'grok')
 
     def test_quota_with_nothing_else_keeps_the_wait(self):
-        s.STATE = fresh(sites=('chatgpt',)); s.STATE['settings']['engine_chain'] = ['arena']
-        s.engine_accounts.add(s.STATE, 'arena', 'A', 'compte-a@example.com')
-        j = clip_job(balance=0, engine='arena'); s.schedule(j)
+        s.STATE = fresh(sites=('chatgpt',)); s.STATE['settings']['engine_chain'] = ['vidogrid']
+        s.engine_accounts.add(s.STATE, 'vidogrid', 'A', 'compte-a@example.com')
+        j = clip_job(balance=0, engine='vidogrid'); s.schedule(j)
         fail(queued(j)[0], {'ok': False, 'error_kind': 'quota', 'retry_after': 600, 'generation_submitted': True, 'error': 'limite'})
         self.assertEqual(j['status'], 'waiting_quota')
 
     def test_one_clip_at_a_time_per_site(self):
         j = clip_job(balance=0)
-        s.STATE['tasks'].append({'id': 'x', 'job': 'other', 'kind': 'engine_video', 'slot': 'clip:0', 'status': 'claimed', 'payload': {'engine': 'arena'}})
-        self.assertTrue(s.engine_busy('arena')); self.assertFalse(s.engine_busy('vidogrid'))
-        self.assertFalse(s.schedule_engine_clip(j, 1, 'arena', early=True, parallel=True))
+        s.STATE['tasks'].append({'id': 'x', 'job': 'other', 'kind': 'engine_video', 'slot': 'clip:0', 'status': 'claimed', 'payload': {'engine': 'vidogrid'}})
+        self.assertTrue(s.engine_busy('vidogrid')); self.assertFalse(s.engine_busy('grok'))
+        self.assertFalse(s.schedule_engine_clip(j, 1, 'vidogrid', early=True, parallel=True))
 
     def test_engine_order_setting(self):
         s.STATE['settings']['engine_chain'] = engine_chain.validate(['vidogrid', 'flow'])

@@ -100,6 +100,14 @@ globalThis.FruchtEngines={
  problem(text,engine){const s=this.site(engine);if(s.quota.test(text))return 'quota';if(s.refusal.test(text))return 'refusal';return null;},
  // Arena (preload="none") and Grok in a background tab keep readyState 0: an https .mp4 address is enough there.
  // Arena's own promo clip (/videos/cta/) is never ours.
+ // Grok « Video duration » menu (6s / 10s / 15s): the V09 engine asks 10 s for clip 1.
+ async setDuration(doc,seconds,h){
+  const want=String(seconds)+'s',trigger=this.buttons(doc).find(b=>/^Video duration$/i.test(b.getAttribute('aria-label')||''));
+  if(!trigger||(trigger.innerText||'').trim()===want)return;
+  for(const type of ['pointerdown','mousedown','pointerup','mouseup'])trigger.dispatchEvent(new h.Event(type,{bubbles:true}));trigger.click();await h.sleep(700);
+  const pick=[...doc.querySelectorAll('[role="menuitemradio"],[role="menuitem"],[role="radio"],[role="option"]')].find(e=>e.getClientRects().length&&(e.innerText||'').trim()===want);
+  if(pick){pick.click();await h.sleep(500);}
+ },
  newVideo(doc,old){
   return [...doc.querySelectorAll('video')].find(v=>{const src=v.currentSrc||v.src||v.querySelector?.('source')?.src;if(!src||old.has(src)||/\/videos\/cta\//.test(src))return false;
    return (v.readyState>=1&&!(v.duration<2))||/^https:\/\/[^#?]+\.mp4(?:[?#]|$)/i.test(src);})||null;
@@ -228,6 +236,7 @@ globalThis.FruchtEngines={
     if(!uploaded)throw h.fail('interface',site.label+' : image non importée après 60 s. Aucun envoi effectué.');
    }
   }
+  if(engine==='grok'&&task.payload.seconds)await this.setDuration(doc,task.payload.seconds,h);
   const editor=this.editor(doc);if(!editor)throw h.fail('interface',site.label+' : zone de texte introuvable. Aucun envoi effectué.');
   h.fill(editor,task.payload.prompt);await h.sleep(700);
   let send=null;for(let i=0;i<40&&!send;i++){h.blocked();send=this.sendButton(doc,engine);if(!send)await h.sleep(700);}
