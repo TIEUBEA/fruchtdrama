@@ -330,7 +330,9 @@ async function begin(task,tab,cfg,key=LANE_KEY[laneOf(task)]){
   await inject();
   try{previous=await chrome.tabs.sendMessage(tab.id,{type:'frucht-status'});break;}
   catch(e){
-   if(task.kind!=='engine_video')break;
+   // TikTok reloads its search page right after it opens (real case 09/11/2026: « Receiving end does not exist », the
+   // Filon never refreshed): the receiver is established again, like for Grok.
+   if(!['engine_video','tiktok_search'].includes(task.kind))break;
    if(!/Could not establish connection|Receiving end does not exist/i.test(e.message)||attempt===2)throw e;
    await delay(750);await ready(tab.id,task,targetUrl);
   }
@@ -377,7 +379,15 @@ async function begin(task,tab,cfg,key=LANE_KEY[laneOf(task)]){
  const executionTask=executionTaskFor(task);
  if(groupedReview)executionTask.payload.prompt+='\nThe scene sheets are grouped into a few images after the character references. Read each row by its printed Scene index and return one verdict per scene index, including every index.';
  if(task.kind==='engine_video'&&fileClickReady)executionTask.payload={...executionTask.payload,file_click_ready:true};
- const response=await chrome.tabs.sendMessage(tab.id,{type:'frucht-run',task:executionTask,attachments});
+ let response;
+ for(let attempt=0;;attempt++){
+  try{response=await chrome.tabs.sendMessage(tab.id,{type:'frucht-run',task:executionTask,attachments});break;}
+  catch(e){
+   // A message that never reached the page started nothing: for a TikTok search it is simply sent again.
+   if(task.kind!=='tiktok_search'||attempt>=3||!/Could not establish connection|Receiving end does not exist/i.test(e.message))throw e;
+   await delay(1500);await ready(tab.id,task,targetUrl);await inject();
+  }
+ }
  if(!response?.accepted)throw Error(response?.error||'Le connecteur de l’onglet ne répond pas.');
  if(task.kind==='engine_video'){
   await call('/api/bridge/progress',{task:task.id,client:cfg.client,message:'Connecteur vidéo : onglet prêt, préparation de la planche en cours.'}).catch(recordBackgroundError);
