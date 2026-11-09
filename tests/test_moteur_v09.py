@@ -180,3 +180,36 @@ class CharacterStyles(unittest.TestCase):
         self.assertIn('transparent glossy glass body', s.plan_image_block(j, j['scenes'][0]))
         self.assertIn('transparent glossy glass body', s.sheet_prompt(j))
         self.assertIn('transparent glossy glass body', s.clip_prompt(j, 1, 'flow'))
+
+
+class Speed(unittest.TestCase):
+    """Owner 09/11/2026: « notre FruchtDrama est beaucoup plus lent que l'Atelier »."""
+    def setUp(self):
+        s.STATE = state()
+
+    def test_pause_releases_the_chat_lane_but_never_a_clip_sent(self):
+        j = clip_job()
+        s.STATE['tasks'] += [{'id': 'a', 'job': j['id'], 'kind': 'chat_image', 'slot': 'image:1', 'status': 'claimed', 'client': 'w', 'payload': {}},
+                             {'id': 'b', 'job': j['id'], 'kind': 'flow_video', 'slot': 'clip:0', 'status': 'claimed', 'client': 'w', 'payload': {}},
+                             {'id': 'c', 'job': j['id'], 'kind': 'chat_text', 'slot': 'cover', 'status': 'queued', 'payload': {}}]
+        self.assertEqual(s.release_job_chat(j, 'pause'), 2)
+        st = {t['id']: t['status'] for t in s.STATE['tasks'] if t['id'] in 'abc'}
+        self.assertEqual(st, {'a': 'cancelled', 'b': 'claimed', 'c': 'cancelled'})
+
+    def test_lost_chat_task_is_asked_again(self):
+        j = clip_job(); now = s.time.time()
+        old = s.dt.datetime.fromtimestamp(now - 25 * 60, s.dt.timezone.utc).isoformat()
+        fresh_ = s.dt.datetime.fromtimestamp(now - 60, s.dt.timezone.utc).isoformat()
+        s.STATE['tasks'] += [{'id': 'x', 'job': j['id'], 'kind': 'chat_text', 'slot': 'script', 'status': 'claimed', 'claimed': old, 'payload': {}},
+                             {'id': 'y', 'job': j['id'], 'kind': 'chat_image', 'slot': 'image:2', 'status': 'claimed', 'claimed': old, 'progress_at': fresh_, 'payload': {}},
+                             {'id': 'z', 'job': j['id'], 'kind': 'flow_video', 'slot': 'clip:1', 'status': 'claimed', 'claimed': old, 'payload': {}}]
+        self.assertEqual(s.release_lost_chat(now), 1)
+        st = {t['id']: t['status'] for t in s.STATE['tasks'] if t['id'] in 'xyz'}
+        self.assertEqual(st, {'x': 'cancelled', 'y': 'claimed', 'z': 'claimed'}, 'recent news kept; clips never touched')
+
+    def test_journal_gives_the_time_of_each_stage(self):
+        j = {'events': [], 'stage': 'script'}
+        s.event(j, 'a'); j['stage_clock']['at'] = s.dt.datetime.fromtimestamp(s.time.time() - 125, s.dt.timezone.utc).isoformat()
+        j['stage'] = 'characters'; s.event(j, 'b')
+        self.assertTrue(any(e['text'].startswith('Durée de l’étape Scénario : 2 min 0') for e in j['events']))
+        self.assertGreaterEqual(j['stage_durations']['script'], 125)

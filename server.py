@@ -156,7 +156,18 @@ def client_accepts(client,task):
 VIDEO_KINDS=('flow_video','flow_collect','engine_video')
 def lane_of(task): return 'video' if task.get('kind') in VIDEO_KINDS or (not task.get('kind') and str(task.get('slot','')).startswith('clip:')) else 'chat'  # no kind: manual import
 def lane_busy(j,lane): return any(t['job']==j['id'] and t['status'] in ('queued','claimed') and lane_of(t)==lane for t in STATE['tasks'])
-def event(j, text): j['events'].append({'at':now(),'text':text}); j['updated']=now()
+STAGE_NAMES={'research':'Recherche','ideas':'Idées','sheet':'Fiche','script':'Scénario','characters':'Personnages','images':'Planches',
+             'clips':'Clips','quality':'Contrôle qualité','cover':'Miniature','edit':'Montage','done':'Terminé'}
+def event(j, text):
+    # Speed tracking (owner 09/11/2026): the journal says how long each stage took, to compare with the Atelier.
+    clock=j.get('stage_clock');stage=j.get('stage')
+    if clock and stage and clock.get('stage')!=stage:
+        spent=int(time.time()-flow_credits.seconds(clock.get('at')))
+        if 0<=spent<7*86400:
+            j.setdefault('stage_durations',{})[clock['stage']]=j.get('stage_durations',{}).get(clock['stage'],0)+spent
+            j['events'].append({'at':now(),'text':f"Durée de l’étape {STAGE_NAMES.get(clock['stage'],clock['stage'])} : {spent//60} min {spent%60:02d} s."})
+    if stage and (not clock or clock.get('stage')!=stage):j['stage_clock']={'stage':stage,'at':now()}
+    j['events'].append({'at':now(),'text':text}); j['updated']=now()
 
 # Parallel clips (owner 06/11/2026: « deux comptes en même temps »): several Flow clips at once, one per Google account,
 # each in its own tab. Never twice the same account at once, so a reservation is never made twice on the same credits.
@@ -202,18 +213,18 @@ def start_check(j):
     j['accounts_check']={'at':now(),'id':request_readiness(need['sites'],need['profiles'],job=j['id']),
                         'pending':['site:'+n for n in need['sites']]+['flow:'+p for p in need['profiles']]}
     names=[readiness.SITE_LABELS[n] for n in need['sites']]+(['compte(s) Google Flow'] if need['profiles'] else [])
-    event(j,'Vérification des comptes avant de commencer ('+', '.join(names)+') : quelques secondes, sans crédit ni prompt.');return False
+    event(j,'Vérification des comptes en parallèle ('+', '.join(names)+'), sans crédit ni prompt : la production démarre tout de suite.');return True
 
 def end_check(j,timeout=False):
     """The check came back (or never did): start, or stop cleanly with the list of accounts to fix."""
     j.pop('accounts_check',None)
     if j.get('status')!='running':return
     if timeout:
-        event(j,'Vérification des comptes sans réponse : production lancée ; un compte qui ne répond pas sera écarté pendant la production.');schedule(j);return
+        event(j,'Vérification des comptes sans réponse : un compte qui ne répond pas sera écarté pendant la production.');return
     found=gate_blockers(j,setup=False)
     if found:
         j['status']='attention';alert(j,'action','Comptes à régler avant de commencer : '+readiness.describe(found)+'. Ouvre Mes comptes, « Régler maintenant », puis Reprendre.');return
-    event(j,'Comptes prêts : la production démarre.');schedule(j)
+    event(j,'Comptes vérifiés : tous prêts.');schedule(j)
 
 def readiness_tick(moment=None):
     moment=moment or time.time();changed=False
@@ -324,6 +335,32 @@ def release_dead_chat(c):
         t['status']='failed';t['error']='Fenêtre FruchtDrama disparue : étape redemandée par la nouvelle fenêtre.';released+=1
         event(j,'La fenêtre qui faisait « '+t['slot']+' » ne répond plus : la fenêtre FruchtDrama en ligne la reprend (aucun crédit Flow).')
         if j.get('status')=='running':schedule(j)
+    return released
+
+def release_job_chat(j,reason):
+    """Queued tasks of this episode, and its chat-lane tasks in progress, are cancelled (the window clears its binding)."""
+    freed=0
+    for t in STATE['tasks']:
+        if t['job']!=j['id'] or t['status'] not in ('queued','claimed'):continue
+        if t['status']=='claimed' and lane_of(t)!='chat':continue
+        t['status']='cancelled';t['error']=reason;freed+=1
+    return freed
+
+# A chat-lane task (text, board, research) claimed for longer than this without any news is considered lost
+# (window reloaded, tab closed): it is cancelled and asked again, instead of blocking every episode (owner 09/11/2026).
+CHAT_LOST_MINUTES={'chat_text':20,'chat_collect':10,'chat_image':15,'chat_image_collect':10,'tiktok_search':15}
+
+def release_lost_chat(moment=None):
+    moment=moment or time.time();released=0
+    for t in STATE['tasks']:
+        if t['status']!='claimed' or lane_of(t)!='chat':continue
+        last=max(flow_credits.seconds(t.get('claimed')) or 0,flow_credits.seconds(t.get('progress_at')) or 0)
+        if not last or moment-last<CHAT_LOST_MINUTES.get(t.get('kind'),20)*60:continue
+        j=job_by(t['job'])
+        t['status']='cancelled';t['error']='Tâche sans nouvelles : redemandée';released+=1
+        if j:
+            event(j,f"« {t['slot']} » sans nouvelles depuis {CHAT_LOST_MINUTES.get(t.get('kind'),20)} min (fenêtre rechargée ou onglet fermé) : étape redemandée, les autres épisodes ne l’attendent plus.")
+            if j.get('status')=='running':schedule(j)
     return released
 
 def event_all(text):
@@ -619,6 +656,10 @@ def dispatch_once():
     except Exception as e:log_error('File de nuit',e)
     try:wake_waiting()
     except Exception as e:log_error('Réveil des productions en attente',e)
+    try:
+        with LOCK:
+            if release_lost_chat():save()
+    except Exception as e:log_error('Tâches sans nouvelles',e)
     try:
         with LOCK:
             if readiness_tick():save()
@@ -1240,8 +1281,8 @@ def approve_sheet(j,sheet,title_index,hook_index,message,call_index=0):
 def schedule(j):
     # Consultation only (access ended, revoked, unchecked for 3 days): nothing advances, nothing is sent or paid.
     if not LICENCE.allowed(): return
-    # « Préparer mes comptes » before starting: nothing is queued until the check answers (2 min at most).
-    if j.get('accounts_check'): return
+    # Speed (owner 09/11/2026, « beaucoup plus lent que l'Atelier »): the account check runs in parallel; the production
+    # no longer waits up to 2 min for it. An account found « À régler » stops the episode when the answer comes.
     if j['status']=='waiting_quota' and j.get('quota_lane')=='chat' and j['stage']=='images':
         # ChatGPT at its image limit: the boards wait, the clips of the boards already drawn keep going (Flow, Grok).
         early_clip(j);return
@@ -3125,7 +3166,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     id=path.split('/')[-1]; j=job_by(id)
                     if not j: raise ValueError('Projet inconnu')
                     action=b.get('action')
-                    if action=='pause': j['status']='paused';j['autopilot']=False; event(j,'Pause demandée. Une génération déjà envoyée peut continuer chez le fournisseur.')
+                    if action=='pause':
+                        j['status']='paused';j['autopilot']=False
+                        # Real case 09/11/2026: a paused episode kept the ChatGPT lane of the window (« association conservée ») and every
+                        # other episode waited 19 min. Its waiting tasks and its texts/boards in progress are released (nothing paid:
+                        # chat lane only); a clip already sent keeps its follow-up (Flow credits).
+                        freed=release_job_chat(j,'Épisode en pause')
+                        event(j,'Pause demandée.'+(f' {freed} tâche(s) ChatGPT libérée(s) pour les autres épisodes ; elles seront refaites à la reprise.' if freed else '')+' Un clip déjà envoyé peut continuer chez le fournisseur.')
                     elif action=='resume':
                         # "Boucle complète": the studio decides alone at the quality checks and keeps going.
                         if j.get('stage')=='done' and j.get('final'):

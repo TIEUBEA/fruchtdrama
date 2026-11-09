@@ -83,13 +83,13 @@ class Gate(unittest.TestCase):
         studio(profile('a', 0), profile('b', 1), profile('c', 2))
         j = clip_job()
         self.assertEqual(s.gate_blockers(j), [])
-        self.assertFalse(s.start_check(j))
+        self.assertTrue(s.start_check(j), 'speed 09/11/2026: the check runs in parallel, the production starts at once')
         req = s.STATE['bridge_requests'][-1]
         self.assertEqual(req['type'], 'readiness'); self.assertEqual(len(req['profiles']), 2, 'two accounts at most before starting')
         self.assertNotIn('password', json.dumps(req))
         with patch.object(s, 'flow_reference', return_value='r.jpg'):
             s.schedule(j)
-        self.assertEqual(queued(j), [], 'nothing is queued while the check runs')
+        self.assertTrue(queued(j), 'the production does not wait for the check')
 
     def test_check_answer_starts_or_stops_cleanly(self):
         studio(profile('a', 0), profile('b', 1))
@@ -114,7 +114,10 @@ class Gate(unittest.TestCase):
         j['accounts_check']['at'] = iso(readiness.CHECK_TIMEOUT + 5)
         with patch.object(s, 'flow_reference', return_value='r.jpg'):
             self.assertTrue(s.readiness_tick())
-        self.assertNotIn('accounts_check', j); self.assertTrue(queued(j))
+        self.assertNotIn('accounts_check', j)
+        with patch.object(s, 'flow_reference', return_value='r.jpg'):
+            s.schedule(j)
+        self.assertTrue(queued(j))
 
     def test_no_window_online_starts_at_once(self):
         studio(profile('a', 0)); s.STATE['clients']['win']['seen'] = iso(3600)

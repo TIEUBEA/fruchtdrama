@@ -4,14 +4,16 @@ const BASE='http://127.0.0.1:8840';
 // activeTask (chat; also any task saved by 0.1.88 and older) and activeVideoTask (video).
 // 0.1.91, parallel clips: a second video lane (activeVideoTask2) takes another Flow clip on another Google account, in its
 // own tab; the studio never gives two lanes the same account.
-const LANE_KEY={chat:'activeTask',video:'activeVideoTask',video2:'activeVideoTask2',video3:'activeVideoTask3',video4:'activeVideoTask4'};
+// 0.1.99, parallel episodes: chat2 and chat3 take the texts and boards of other episodes, each in its own fresh
+// ChatGPT tab (3 videos launched at once waited 30 min in a single queue, 06/11/2026).
+const LANE_KEY={chat:'activeTask',chat2:'activeChatTask2',chat3:'activeChatTask3',video:'activeVideoTask',video2:'activeVideoTask2',video3:'activeVideoTask3',video4:'activeVideoTask4'};
 const VIDEO_KINDS=['flow_video','flow_collect','engine_video'];
 function laneOf(task){return VIDEO_KINDS.includes(task?.kind)?'video':'chat';}
 function keyOf(active){return active?.key||LANE_KEY.chat;}
 async function saveActive(active,extra={}){await chrome.storage.local.set({[keyOf(active)]:active,...extra});}
 async function loadActive(active){const key=keyOf(active);return (await chrome.storage.local.get(key))[key];}
 async function dropActive(active){await chrome.storage.local.remove(keyOf(active));}
-const busy={chat:false,video:false,video2:false,video3:false,video4:false};
+const busy={chat:false,chat2:false,chat3:false,video:false,video2:false,video3:false,video4:false};
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function call(path,body){
  const cfg=await chrome.storage.local.get('token');
@@ -140,7 +142,7 @@ async function finish(active,result){
  await dropActive(active);
  await chrome.storage.local.set({status:ack.task_status==='failed'?'À vérifier : '+(ack.error||'Scénario refusé par le studio'):result.ok?'Terminé : '+active.task.slot:'À vérifier : '+result.error});
  // Chat tabs are closed by the chat lane only (never two closings of the same list at once).
- if(globalThis.FruchtChats&&laneOf(active.task)==='chat')await FruchtChats.closeCompleted(chrome);
+ if(globalThis.FruchtChats&&keyOf(active)===LANE_KEY.chat)await FruchtChats.closeCompleted(chrome);
 }
 async function protectPendingFlow(active,result){
  if(!active||!['flow_video','flow_collect'].includes(active.task.kind))return;
@@ -559,7 +561,7 @@ async function poll(){
  preparing=true;let ok=false;
  try{ok=await prepare();}finally{preparing=false;}
  // The second clip lane looks after the first one: it sees whether a clip really works there now.
- if(ok)await Promise.all([runLane('chat'),runLane('video').then(()=>runLane('video2')).then(()=>runLane('video3')).then(()=>runLane('video4'))]);
+ if(ok)await Promise.all([runLane('chat').then(()=>runLane('chat2')).then(()=>runLane('chat3')),runLane('video').then(()=>runLane('video2')).then(()=>runLane('video3')).then(()=>runLane('video4'))]);
  if(ok)await soon();
 }
 // The 30 s alarm alone made every board wait up to 30 s to be seen, then up to 30 s more before the next one left
@@ -632,7 +634,11 @@ async function runLane(lane){
  try{
   cfg=await chrome.storage.local.get(null);
   if(!cfg.client||!cfg.token)return;
-  if(/^video[234]$/.test(lane)){
+  if(/^chat[23]$/.test(lane)){
+   // Extra chat lanes: only while the first one works, never a recovery here (the first lane does them).
+   if(cfg[key]){await checkActive(cfg[key]);return;}
+   if(!cfg.enabled||cfg.role==='flow'||!cfg.activeTask||laneOf(cfg.activeTask.task)!=='chat')return;
+  }else if(/^video[234]$/.test(lane)){
    // Extra clip lanes (2 to 4, one Flow account each): never a balance reading or a recovery here.
    if(laneOf(cfg.activeTask?.task)==='video')return;
    if(cfg[key]){await checkActive(cfg[key]);return;}
@@ -664,7 +670,7 @@ async function runLane(lane){
     if(await recoverExistingMedia(cfg))return;
    }
   }
-  claimed=await call('/api/bridge/task?client='+encodeURIComponent(cfg.client)+'&lane='+(lane==='chat'?'chat':'video')+'&v='+encodeURIComponent(chrome.runtime.getManifest?.()?.version||''));if(!claimed)return;
+  claimed=await call('/api/bridge/task?client='+encodeURIComponent(cfg.client)+'&lane='+(lane.startsWith('chat')?'chat':'video')+'&v='+encodeURIComponent(chrome.runtime.getManifest?.()?.version||''));if(!claimed)return;
   // The task is followed under this lane's key, whatever its kind (an older studio may ignore lane).
   // A tab closed under the task before anything was sent (real case 06/11/2026 13:10 « No tab with id ») : open a
   // fresh one and try once more, instead of stopping the episode. Never after a submission.

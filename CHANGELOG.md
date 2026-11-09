@@ -9,6 +9,18 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 
 
+## 0.1.96.23 (09/11/2026) — vitesse
+Retour du propriétaire : « notre FruchtDrama est beaucoup plus lent que l'Atelier Gourmand ». Cas réel : un épisode a attendu 19 min derrière un autre mis en pause.
+
+**Corrigé**
+- **Pause** : un épisode mis en pause libère tout de suite ses tâches ChatGPT (texte, planche) ; avant, la fenêtre gardait sa voie ChatGPT réservée et tous les autres épisodes attendaient. Un clip déjà envoyé garde son suivi (crédits Flow).
+- **Tâche perdue** : une tâche ChatGPT ou TikTok sans nouvelles depuis 10 à 20 min (fenêtre rechargée, onglet fermé) est redemandée seule, au lieu de bloquer la file.
+
+**Amélioré**
+- **Vérification des comptes en parallèle** : la production démarre tout de suite au lieu d'attendre jusqu'à 2 min ; un compte « À régler » arrête l'épisode quand la réponse arrive.
+- **3 voies ChatGPT** (repris de la 0.1.99) : les textes et planches de trois épisodes avancent en même temps, chacun dans son onglet.
+- **Durée de chaque étape** écrite dans le journal (« Durée de l'étape Scénario : 3 min 12 s »), pour comparer avec l'Atelier.
+
 ## 0.1.96.22 (09/11/2026)
 **Corrigé**
 - Mise à jour de l'extension : le Chrome du propriétaire charge l'extension depuis le dossier du Bureau `FruchtDrama-0.1.96/FruchtDrama`, pas depuis `~/FruchtDrama` ; les deux dossiers sont maintenant à jour. Numéro relevé pour que le rechargement automatique ne soit pas bloqué par une tentative déjà faite en 0.1.96.21.
