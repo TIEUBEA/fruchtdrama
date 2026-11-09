@@ -107,6 +107,7 @@ class BridgeTests(unittest.TestCase):
         self.report(t, {'ok': True, 'file': '../evil.png'})
         self.assertEqual(j['last_error']['kind'], 'other')
         j2 = job(); j2['status'] = 'running'; s.schedule(j2); self.claim()
+        s.STATE['clients'].clear()  # the window is gone too: a connected window keeps following its task
         s.recover_after_restart(); self.assertEqual(j2['last_error']['kind'], 'restart')
 
 

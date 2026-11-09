@@ -9,6 +9,11 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 
 
+## 0.1.96.36 — 09/11/2026
+- Robot de surveillance (robot.py) : chaque minute, il relance seul une étape texte/planche/veille arrêtée sur une erreur technique (sans frais), relance un épisode « en cours » resté sans tâche trop longtemps, et refait une actualisation du Filon en échec. Jamais un clip peut-être envoyé à Flow/Grok ; au plus 3 actions par épisode et par 6 h ; chaque action est écrite dans le journal (« Robot : … »).
+- Flow : un compte dont l'accueil n'ouvre pas de nouveau projet (nouvelle interface Flow, accueil à valider) est mis de côté 3 h et le clip passe au compte suivant, au lieu d'être abandonné.
+- Tests alignés sur le comportement voulu (réécriture légère pour tous les modes, redémarrage avec fenêtre fermée).
+
 ## 0.1.96.28 (09/11/2026) — parcours menu par menu
 **Corrigé**
 - **Le Filon (veille TikTok)** : la recherche échouait en 3 s (« Receiving end does not exist », « Frame with ID 0 was removed ») parce que TikTok recharge sa page de recherche juste après l'ouverture. L'extension rétablit la liaison et renvoie la recherche (3 fois au plus).

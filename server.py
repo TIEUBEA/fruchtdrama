@@ -11,7 +11,7 @@ import quality
 import errors
 import engines
 import engine_chain
-import montage, source_video, moteur_v09, character_styles
+import montage, source_video, moteur_v09, character_styles, robot
 import story_backup
 import board_check
 import engine_accounts
@@ -363,6 +363,27 @@ def release_lost_chat(moment=None):
             if j.get('status')=='running':schedule(j)
     return released
 
+ROBOT_LAST=0
+def robot_tick(moment=None):
+    """Robot de surveillance (robot.py): repairs free steps stopped on a technical error and episodes that stall."""
+    global ROBOT_LAST
+    moment=moment or time.time();done=0
+    if moment-ROBOT_LAST<60:return 0
+    ROBOT_LAST=moment
+    for j in list(STATE['jobs']):
+        tasks=[t for t in STATE['tasks'] if t['job']==j['id']]
+        decision=robot.inspect(j,tasks,moment,flow_credits.seconds)
+        if not decision:continue
+        robot.note(j,decision,moment,now());done+=1
+        if decision['action']=='refresh_filon':
+            j['status']='done';event(j,'Robot : '+decision['why'])
+            try:filon_refresh(j['config'].get('language'),j['config'].get('filon_niche'))
+            except ValueError:pass
+            continue
+        j.pop('last_error',None);j['status']='running';event(j,'Robot : '+decision['why'])
+        schedule(j)
+    return done
+
 def event_all(text):
     for j in STATE['jobs']:
         if j.get('status') not in ('done',) and not j.get('filon_only') and any(t['job']==j['id'] and t['status'] in ('queued','claimed') for t in STATE['tasks']):event(j,text)
@@ -662,6 +683,10 @@ def dispatch_once():
         with LOCK:
             if release_lost_chat():save()
     except Exception as e:log_error('Tâches sans nouvelles',e)
+    try:
+        with LOCK:
+            if robot_tick():save()
+    except Exception as e:log_error('Robot de surveillance',e)
     try:
         with LOCK:
             if readiness_tick():save()
@@ -2153,6 +2178,7 @@ def accept_task_result(t,result):
         event(j,f'Réponse de ChatGPT relue par le studio ({len(raw)} caractères, copie {name}).')
         result={'ok':True,'text':repair_json(raw)}
     if not result.get('ok'):
+        account_page_failure(t,result)
         kind=errors.classify(result);t['error_kind']=kind
         if (not was_paused and j.get('autopilot') and t.get('slot')=='cover_review'
                 and kind in errors.RETRYABLE and j.get('cover_file')
@@ -2330,6 +2356,18 @@ def accept_task_result(t,result):
     j.get('refusal_levels',{}).pop(slot,None)
     if was_paused: j['status']='paused'
     schedule(j)
+
+# Real case 09/11/2026 (clip 7 of « La petite banane »): Flow's home page of one Google account did not open a new
+# project (new Flow interface rolled out account by account). Nothing was sent: that account is set aside and the next
+# Flow account takes the clip, instead of the clip being given up.
+ACCOUNT_PAGE=re.compile(r'Ouverture du nouveau projet Flow non terminée|Bouton Nouveau projet absent|Compte Flow non confirmé|Projet Flow sans zone de saisie',re.I)
+
+def account_page_failure(t,result):
+    if t.get('kind')!='flow_video' or result.get('generation_submitted') is not False or result.get('flow_blocked'):return False
+    if not ACCOUNT_PAGE.search(str(result.get('error',''))):return False
+    result['flow_blocked']='not_ready';result['error_kind']='interface'
+    result.setdefault('not_ready',{'state':'fix','reason':'Flow ne s’ouvre pas sur ce compte (nouvelle interface ou accueil à valider) : '+str(result.get('error',''))[:200]})
+    return True
 
 def note_not_ready(t,result):
     """A provider page that did not open (sign-in, anti-robot check, empty page): the account is marked « À régler » in

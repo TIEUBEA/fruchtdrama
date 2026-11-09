@@ -248,3 +248,16 @@ class Concise(unittest.TestCase):
         j = clip_job(); j['source_analysis'] = {'duration': 30, 'transcript': TRANSCRIPT}
         p = s.script_prompt(j)
         self.assertIn('CONCISION', p); self.assertIn('image_prompt 55 mots', p); self.assertIn('video_prompt 70 mots', p)
+
+
+class FlowAccountPageTest(unittest.TestCase):
+    def test_new_project_failure_moves_to_next_account(self):
+        import server
+        r = {'ok': False, 'generation_submitted': False, 'error': 'Ouverture du nouveau projet Flow non terminée. Bouton Nouveau projet absent ou ambigu'}
+        self.assertTrue(server.account_page_failure({'kind': 'flow_video'}, r))
+        self.assertEqual(r['flow_blocked'], 'not_ready')
+
+    def test_sent_clip_is_never_reclassified(self):
+        import server
+        r = {'ok': False, 'generation_submitted': True, 'error': 'Ouverture du nouveau projet Flow non terminée'}
+        self.assertFalse(server.account_page_failure({'kind': 'flow_video'}, r))

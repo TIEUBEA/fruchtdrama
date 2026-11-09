@@ -80,5 +80,7 @@ class LightCorrectionTests(unittest.TestCase):
         self.assertIn('JSON ENTIER', prompt)
         self.assertNotIn('old', prompt)
         j['config']['recreate'] = 'inspired'
+        self.assertTrue(s.correction_ready(j), 'light rewrite for every story mode since 0.1.96')
+        j['editorial_feedback'] = []
         self.assertFalse(s.correction_ready(j))
 
