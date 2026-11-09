@@ -5,6 +5,13 @@ correspondante (P0-xx, P1-x, P2-xx) détaillée dans `docs/sudf/`. Guide pour re
 `docs/sudf/REPRISE.md`. **Mode d'emploi détaillé** (installer, lancer, utiliser), mis à jour à chaque
 version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, version par version).
 
+## 0.1.108 — 09/11/2026 — moteur FRUIT-Z
+Le studio suit maintenant FRUIT-Z (~/Projets/Dev/fruit-france, MOTEUR §Z « mécanique + concept neuf »), le seul moteur d'Arnaud.
+- Création : FRUIT-Z par défaut. D'une vidéo virale, le studio ne garde que la mécanique en 7 points ; histoire, personnages et dialogues sont neufs, dans un cadre réaliste du pays de la langue (France métropolitaine en français). « Recréer à l'identique » (V09) reste un choix explicite.
+- 7 séquences de 10 s + 1 clip d'appel (« Amen » selon l'émotion), Flow Omni 1.2 Flash seulement (30 crédits, ni Grok pour le clip 1, ni Vidogrid).
+- Chaque séquence a une image d'ouverture ET une image de fermeture (dessinée depuis l'ouverture) ; le clip Flow part avec Début + Fin. Fiche de scène : image de fin visible, importable, à refaire.
+- Flow, nouvelle interface : image de fin posée dans « Fin » (vérifié sur la vraie page) ; clip terminé récupéré en survolant sa vignette (la vidéo n'apparaît qu'au survol), au lieu d'attendre une miniature qui n'existe plus.
+
 ## 0.1.107 — 09/11/2026 — moteur V09 + builds 0.1.97 à 0.1.106
 Fusion sélective des builds 0.1.97 à 0.1.106 (06-07/11) dans le moteur V09.
 - Repris : 3 voies ChatGPT ; un redémarrage du studio n'arrête plus aucun épisode ; onglet ChatGPT figé relâché après 4 min ; mise à jour de l'extension retentée toutes les 10 min ; une planche et un montage à la fois ; contrôles secondaires désactivés par défaut ; répliques un peu trop longues raccourcies par le studio (sans réécriture) ; vérification des paroles retirée ; durée de clip hors plage notée, jamais bloquante ; résolution Flow affichée acceptée, coût toujours vérifié ; échec de montage lisible ; page du studio rechargée seule après une mise à jour ; bandeau d'arrêt sur l'épisode ; onglet coupé par une mise à jour de l'extension non compté comme un essai.

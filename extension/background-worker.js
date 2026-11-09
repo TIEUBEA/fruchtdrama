@@ -347,6 +347,7 @@ async function begin(task,tab,cfg,key=LANE_KEY[laneOf(task)]){
   }else throw Error('Une génération précédente reste à vérifier dans cet onglet ; aucun nouveau prompt envoyé.');
  }
  let attachments=await loadAttachments(task.payload.attachments);
+ const endAttachments=task.kind==='flow_video'&&task.payload.end_attachment?await loadAttachments([task.payload.end_attachment]):[];
  let groupedReview=false;
  if(task.slot==='quality_review'){
   const grouped=await groupReviewSheets(attachments);
@@ -358,15 +359,20 @@ async function begin(task,tab,cfg,key=LANE_KEY[laneOf(task)]){
  // In the page's own world, a click on a file input of this tab receives the board directly: no dialog at all.
  // Same for Vidogrid's « Select Files » (0.1.93).
  let fileClickReady=false;
- if(['flow_video','engine_video'].includes(task.kind)&&attachments?.length)fileClickReady=await chrome.scripting.executeScript({target:{tabId:tab.id},world:'MAIN',args:[attachments.map(a=>({name:a.name,mime:a.mime,data:a.data}))],func:files=>{
-  window.__fruchtFiles=files;
+ if(['flow_video','engine_video'].includes(task.kind)&&attachments?.length)fileClickReady=await chrome.scripting.executeScript({target:{tabId:tab.id},world:'MAIN',args:[{start:attachments.map(a=>({name:a.name,mime:a.mime,data:a.data})),end:endAttachments.map(a=>({name:a.name,mime:a.mime,data:a.data}))}],func:files=>{
+  // The files of each frame: the board (Début), and the closing image (Fin, FRUIT-Z). The content script names the frame
+  // being filled in data-frucht-slot (shared DOM): a board already in Flow never shifts the closing image to Début.
+  window.__fruchtSlots=files;
   if(window.__fruchtClickPatched)return;window.__fruchtClickPatched=true;
   const original=HTMLInputElement.prototype.click;
   HTMLInputElement.prototype.click=function(){
-   if(this.type!=='file'||!window.__fruchtFiles?.length)return original.apply(this,arguments);
+   const slot=document.documentElement.dataset.fruchtSlot||'start';
+   const next=window.__fruchtSlots?.[slot];
+   if(this.type!=='file'||!next?.length)return original.apply(this,arguments);
+   window.__fruchtSlots[slot]=null;
    const dt=new DataTransfer();
-   for(const f of window.__fruchtFiles){const bin=atob(f.data);dt.items.add(new File([Uint8Array.from(bin,c=>c.charCodeAt(0))],f.name,{type:f.mime||'image/png'}));}
-   this.files=dt.files;window.__fruchtFiles=null;
+   for(const f of next){const bin=atob(f.data);dt.items.add(new File([Uint8Array.from(bin,c=>c.charCodeAt(0))],f.name,{type:f.mime||'image/png'}));}
+   this.files=dt.files;
    this.dispatchEvent(new Event('input',{bubbles:true}));this.dispatchEvent(new Event('change',{bubbles:true}));
   };
  }}).then(()=>true,()=>false);
@@ -382,7 +388,7 @@ async function begin(task,tab,cfg,key=LANE_KEY[laneOf(task)]){
  if(task.kind==='engine_video'&&fileClickReady)executionTask.payload={...executionTask.payload,file_click_ready:true};
  let response;
  for(let attempt=0;;attempt++){
-  try{response=await chrome.tabs.sendMessage(tab.id,{type:'frucht-run',task:executionTask,attachments});break;}
+  try{response=await chrome.tabs.sendMessage(tab.id,{type:'frucht-run',task:executionTask,attachments,endAttachments});break;}
   catch(e){
    // A message that never reached the page started nothing: for a TikTok search it is simply sent again.
    if(task.kind!=='tiktok_search'||attempt>=3||!reloading.test(e.message))throw e;

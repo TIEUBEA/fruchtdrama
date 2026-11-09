@@ -31,8 +31,8 @@ globalThis.FruchtFlow={
   const keys=[...doc.querySelectorAll('[role="group"],[role="option"],button,[role="button"],[aria-label],[title]')].filter(el=>this.visible(doc,el)&&[el.getAttribute('aria-label'),el.getAttribute('title'),el.innerText].some(v=>v?.trim()===name)).map(el=>this.sourceKey(el.querySelector?.('img'))).filter(Boolean);
   return new Set(keys).size===1?keys[0]:'';
  },
- frameMatches(doc,key){
-  const frame=this.startThumbnail(doc)?.querySelector('img');
+ frameMatches(doc,key,slot='start'){
+  const frame=this.frameThumbnail(doc,slot)?.querySelector('img');
   return !!key&&this.sourceKey(frame)===key;
  },
  closeAccountPanel(doc){
@@ -231,8 +231,23 @@ globalThis.FruchtFlow={
   const labels=[b.getAttribute('aria-label'),b.getAttribute('title'),b.innerText,b.textContent].filter(Boolean);
   return labels.some(label=>[label,...label.split('\n')].some(s=>pattern.test(s.replace(/^(?:upload_file|file_upload|drive_folder_upload|add_photo_alternate|upload)\s+/i,'').replace(/\s+/g,' ').trim())));
  });},
+ // FRUIT-Z (09/11/2026): the closing image goes into « Fin » (real page: chips « Début » ⇄ « Fin », swap button between).
+ frameThumbnail(doc,slot='start'){return slot==='end'?this.endThumbnail(doc):this.startThumbnail(doc);},
+ endThumbnail(doc){
+  const swap=this.control(doc,/^(?:Intervertir les première et dernière images|Swap (?:first and last|start and end) (?:frames|images)|Start- und Endframe tauschen|swap_horiz)$/i,true);
+  if(!swap?.getBoundingClientRect)return null;
+  const sr=swap.getBoundingClientRect();
+  const candidates=[...doc.querySelectorAll('button,[role="button"]')].filter(b=>{
+   if(b===swap||b.disabled||!b.getClientRects().length||b.getAttribute('aria-disabled')==='true'||!b.querySelector('img'))return false;
+   const r=b.getBoundingClientRect();
+   return r.width>=24&&r.width<=120&&r.height>=24&&r.height<=120&&r.left>=sr.right&&r.left-sr.right<160&&Math.abs(r.top-sr.top)<40;
+  });
+  return candidates.length===1?candidates[0]:null;
+ },
+ slotPattern(slot){return slot==='end'?/^(?:\+\s*)?(?:End|End frame|Add end frame|Ende|Endframe(?: hinzufügen)?|Fin|Ajouter une image de fin)$/i:/^(?:\+\s*)?(?:Start|Startframe(?: hinzufügen)?|Start frame|Add start frame|Début|Ajouter une image de début)$/i;},
  startThumbnail(doc){
-  const end=this.control(doc,/^(?:Ende|End|Fin)$/i);
+  // With « Fin » filled (FRUIT-Z), its chip is gone: the swap button between the two frames is the anchor.
+  const end=this.control(doc,/^(?:Ende|End|Fin)$/i)||this.control(doc,/^(?:Intervertir les première et dernière images|Swap (?:first and last|start and end) (?:frames|images)|Start- und Endframe tauschen|swap_horiz)$/i,true);
   if(!end?.getBoundingClientRect)return null;
   const er=end.getBoundingClientRect();
   const candidates=[...doc.querySelectorAll('button,[role="button"]')].filter(b=>{
@@ -272,6 +287,17 @@ globalThis.FruchtFlow={
   const refusal=/non conforme|pourrait enfreindre|enfreint|règles|policy|violat|richtlinien|drittanbieter|contenu.*(?:tiers|refusé)|content.*(?:refused|moderated)/i.test(message);
   return {kind:refusal?'refusal':'other',message};
  },
+ // New Flow interface (real page 09/11/2026): a finished clip is a tile « <title> play_circle » with no image nor video;
+ // its <video> (src flow.google.com/asb/…) only appears while the tile is hovered (FRUIT-Z flow.py survoler_derniere).
+ videoTiles(doc){return [...doc.querySelectorAll('button,[role="button"]')].filter(b=>b.getClientRects().length&&/(?:^|\s)play_circle(?:\s|$)/.test(b.innerText||''));},
+ hoverNewVideo(doc,oldTiles){
+  const fresh=this.videoTiles(doc).filter(b=>!oldTiles.has(b));
+  if(!fresh.length)return false;
+  fresh.sort((a,b)=>{const x=a.getBoundingClientRect(),y=b.getBoundingClientRect();return x.top-y.top||x.left-y.left;});
+  const tile=fresh[0],r=tile.getBoundingClientRect(),at={bubbles:true,clientX:r.left+r.width/2,clientY:r.top+r.height/2};
+  for(const type of ['pointerover','pointerenter','mouseover','mouseenter','mousemove'])tile.dispatchEvent(new (doc.defaultView?.MouseEvent||MouseEvent)(type,at));
+  return true;
+ },
  openNewVideo(doc,oldImages,oldElements){
   const images=[...doc.images].filter(img=>img.complete&&/^(?:Miniaturansicht des erstellten Videos|Generated video thumbnail|Miniature de la vidéo générée)$/i.test(img.alt||'')&&!oldImages.has(img.currentSrc||img.src)&&!oldElements.has(img)&&img.getClientRects().length);
   if(images.length!==1)return false;
@@ -284,7 +310,7 @@ globalThis.FruchtFlow={
    return labels.some(label=>/^(?:Vorschau für|Preview (?:for|of)|Aperçu (?:de|pour))/i.test(label)&&label.includes(name));
   });
  },
- async confirmImport(doc,pause,onProgress=()=>{},expectedName,selection={}){
+ async confirmImport(doc,pause,onProgress=()=>{},expectedName,selection={},slot='start'){
   const pattern=/^(?:Zum Prompt hinzufügen|Add to prompt|Ajouter au prompt|Ajouter à l’invite|Ajouter à l'invite)$/i;
   let selected=!expectedName||selection.existingReference===true;
   let selectedSource=selection.referenceSource||'';
@@ -292,24 +318,24 @@ globalThis.FruchtFlow={
   // before any generation was sent: the clip goes at once to the next engine. The 5 min bound stays for slow uploads.
   let lastSeen=null,lastChange=0;
   for(let n=0;n<600;n++){
-   const seen=this.importSignature(doc,expectedName,selected);
+   const seen=this.importSignature(doc,expectedName,selected,slot);
    if(seen!==lastSeen){lastSeen=seen;lastChange=n;}
    else if(n-lastChange>=180)throw Error('Flow : image toujours en traitement, rien ne progresse depuis 90 s. Aucun envoi de génération effectué.');
    if(this.uploadConsent(doc))await pause(400);
-   if(expectedName&&this.frameMatches(doc,this.referenceKey(doc,expectedName)))return;
+   if(expectedName&&this.frameMatches(doc,this.referenceKey(doc,expectedName),slot))return;
    if(n%20===0)onProgress('Import Flow : traitement de l’image en cours ('+Math.round(n/2)+' s, limite 5 min). Ne relancez pas la production.');
-   if(n===0&&expectedName)onProgress('Diagnostic import Flow : '+JSON.stringify({reference:!!this.referenceKey(doc,expectedName),frame:!!this.startThumbnail(doc),same:this.frameMatches(doc,this.referenceKey(doc,expectedName)),named:[...doc.querySelectorAll('[aria-label],[title]')].filter(el=>[el.getAttribute('aria-label'),el.getAttribute('title')].some(v=>v?.includes(expectedName))).map(el=>({tag:el.tagName,label:el.getAttribute('aria-label')||el.getAttribute('title'),image:!!el.querySelector?.('img')})).slice(0,4)}));
+   if(n===0&&expectedName)onProgress('Diagnostic import Flow : '+JSON.stringify({reference:!!this.referenceKey(doc,expectedName),frame:!!this.frameThumbnail(doc,slot),same:this.frameMatches(doc,this.referenceKey(doc,expectedName),slot),named:[...doc.querySelectorAll('[aria-label],[title]')].filter(el=>[el.getAttribute('aria-label'),el.getAttribute('title')].some(v=>v?.includes(expectedName))).map(el=>({tag:el.tagName,label:el.getAttribute('aria-label')||el.getAttribute('title'),image:!!el.querySelector?.('img')})).slice(0,4)}));
 
    if(!selected){
     const asset=this.existingReference(doc,expectedName);
     if(!asset){await pause(500);continue;}
     selectedSource=this.sourceKey(asset.querySelector?.('img'));asset.click();selected=true;await pause(250);
    }
-   if(expectedName&&!this.control(doc,pattern,true)&&this.frameMatches(doc,selectedSource))return;
+   if(expectedName&&!this.control(doc,pattern,true)&&this.frameMatches(doc,selectedSource,slot))return;
    // Flow shows the frame from a signed CDN address, never the picker's: the addresses cannot match (06/11/2026,
    // clips stuck 5 min with the board already placed). An empty Début that now holds an image, picker closed and no
    // « Ajouter au prompt » left, is the board just chosen.
-   if(selection.existingReference&&selection.startWasEmpty&&!this.control(doc,pattern,true)&&this.startThumbnail(doc)?.querySelector('img')&&this.startThumbnail(doc).getAttribute('aria-busy')!=='true'&&![...doc.querySelectorAll('[role="option"]')].some(el=>this.visible(doc,el)))return;
+   if(selection.existingReference&&selection.startWasEmpty&&!this.control(doc,pattern,true)&&this.frameThumbnail(doc,slot)?.querySelector('img')&&this.frameThumbnail(doc,slot).getAttribute('aria-busy')!=='true'&&![...doc.querySelectorAll('[role="option"]')].some(el=>this.visible(doc,el)))return;
    if(expectedName&&!this.previewMatches(doc,expectedName)){await pause(500);continue;}
    const button=this.control(doc,pattern);
    if(button){
@@ -326,12 +352,12 @@ globalThis.FruchtFlow={
   throw Error(pending?'Flow : image toujours en traitement après 5 minutes ; bouton « Zum Prompt hinzufügen » désactivé. Aucun envoi de génération effectué.':'Flow : bouton « Zum Prompt hinzufügen » absent après 5 minutes. Aucun envoi de génération effectué.');
  },
  // What the import shows now (picker, reference, Début, confirmation, % uploaded): any change is progress.
- importSignature(doc,name,selected){
+ importSignature(doc,name,selected,slot='start'){
   const pattern=/^(?:Zum Prompt hinzufügen|Add to prompt|Ajouter au prompt|Ajouter à l’invite|Ajouter à l'invite)$/i;
   const percent=(String(doc.body?.innerText||'').match(/\d{1,3}\s?%/g)||[]).join(',');
   let reference=false,frame=false,preview=false,confirm=null;
   try{reference=!!(name&&this.referenceKey(doc,name));}catch{}
-  try{frame=!!this.startThumbnail(doc)?.querySelector?.('img');}catch{}
+  try{frame=!!this.frameThumbnail(doc,slot)?.querySelector?.('img');}catch{}
   try{preview=!!(name&&this.previewMatches(doc,name));}catch{}
   try{const c=this.control(doc,pattern,true);confirm=c?(c.disabled||c.getAttribute?.('aria-disabled')==='true'?'off':'on'):null;}catch{}
   return JSON.stringify([selected,reference,frame,preview,confirm,percent]);
@@ -346,13 +372,13 @@ globalThis.FruchtFlow={
   });
   return candidates.length===1?candidates[0]:null;
  },
- async openImport(doc,pause,name){
+ async openImport(doc,pause,name,slot='start'){
   if(name){
-   if(this.frameMatches(doc,this.referenceKey(doc,name)))return {alreadyAttached:true};
+   if(this.frameMatches(doc,this.referenceKey(doc,name),slot))return {alreadyAttached:true};
    const escaped=name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
    const gallery=this.control(doc,new RegExp('^'+escaped+'$'));
    const key=this.sourceKey(gallery?.querySelector?.('img'));
-   if(this.frameMatches(doc,key))return {alreadyAttached:true};
+   if(this.frameMatches(doc,key,slot))return {alreadyAttached:true};
   }
   let startWasEmpty=null;
   const selectExisting=()=>{const asset=this.existingReference(doc,name);if(!asset)return null;const referenceSource=this.sourceKey(asset.querySelector?.('img'));asset.click();return {existingReference:true,referenceSource,startWasEmpty};};
@@ -361,7 +387,7 @@ globalThis.FruchtFlow={
   const uploadPattern=/^(?:\+\s*)?(?:Hochladen|Datei(?:en)? hochladen|Bild(?:er)? hochladen|Medien hochladen|Medien hoch(?:\.{3}|…)|Upload|Upload image|Upload file|Importer|Importer une image|Importer l[’']élément multimédia|Téléverser)$/i;
   // An already open picker must not be closed again by clicking Start underneath it.
   let upload=this.control(doc,uploadPattern);
-  const start=upload?null:(this.control(doc,/^(?:\+\s*)?(?:Start|Startframe(?: hinzufügen)?|Start frame|Add start frame|Début|Ajouter une image de début)$/i)||this.startThumbnail(doc));
+  const start=upload?null:(this.control(doc,this.slotPattern(slot))||this.frameThumbnail(doc,slot));
   const hadThumbnail=!!start?.querySelector?.('img');
   startWasEmpty=!!start&&!hadThumbnail;
   if(start)this.activate(doc,start);
@@ -375,13 +401,13 @@ globalThis.FruchtFlow={
    if(!upload&&!emptyStartClicked&&(hadThumbnail||n>=16)){
     const options=[...doc.querySelectorAll('[role="option"]')].some(el=>this.visible(doc,el));
     const picker=/Bild für Frame auswählen|Select image for frame|Choisir une image pour|Sélectionner une image/i.test(doc.body?.innerText||'');
-    const empty=this.control(doc,/^(?:Start|Start frame|Début)$/i);
+    const empty=this.control(doc,slot==='end'?/^(?:End|End frame|Ende|Fin)$/i:/^(?:Start|Start frame|Début)$/i);
     if(!options&&!picker&&empty&&!empty.querySelector?.('img')){this.activate(doc,empty);emptyStartClicked=true;}
    }
    await pause(250);
   }
   const buttons=[...doc.querySelectorAll('button,[role="button"]')].filter(b=>b.getClientRects().length).map(b=>(b.getAttribute('aria-label')||b.innerText||'').trim()).filter(Boolean).slice(-18);
-  throw Error('Flow : '+(start?'clic sur Start effectué':'bouton Start non reconnu')+', mais ni fichier existant sélectionnable ni champ d’import détecté après 40 secondes. '+(buttons.length?'Boutons visibles : '+buttons.join(' / '):'Une capture du sélecteur permettra d’identifier le blocage.'));
+  throw Error('Flow : '+(slot==='end'?(start?'clic sur Fin effectué':'case Fin non reconnue'):(start?'clic sur Start effectué':'bouton Start non reconnu'))+', mais ni fichier existant sélectionnable ni champ d’import détecté après 40 secondes. '+(buttons.length?'Boutons visibles : '+buttons.join(' / '):'Une capture du sélecteur permettra d’identifier le blocage.'));
  }
 };
 

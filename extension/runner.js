@@ -18,7 +18,7 @@ globalThis.fruchtRunnerHandler=(m,s,reply)=>{
  }
  if(globalThis.fruchtRunState?.state==='running'){reply({accepted:false,error:'Une tâche est déjà en cours dans cet onglet.'});return false;}
  globalThis.fruchtRunState={state:'running',task:m.task.id};
- run(m.task,m.attachments).then(result=>{if(['flow_video','engine_video'].includes(m.task.kind))result.generation_submitted=globalThis.fruchtRunState.submitted===true;globalThis.fruchtRunState={...globalThis.fruchtRunState,state:'completed',task:m.task.id,result};return notifyResult(m.task.id);}).catch(e=>{globalThis.fruchtRunState={...globalThis.fruchtRunState,state:'completed',task:m.task.id,result:{ok:false,error:e.message,...(e.kind?{error_kind:e.kind}:{}),...(e.retryAfter?{retry_after:e.retryAfter}:{}),...(['flow_video','engine_video'].includes(m.task.kind)?{generation_submitted:globalThis.fruchtRunState.submitted===true,...(e.flowBlocked?{flow_blocked:e.flowBlocked}:{}),...(e.notReady?{not_ready:e.notReady}:{}),...(e.flow_failed?{flow_failed:true}:{})}:{})}};return notifyResult(m.task.id);});
+ run(m.task,m.attachments,m.endAttachments).then(result=>{if(['flow_video','engine_video'].includes(m.task.kind))result.generation_submitted=globalThis.fruchtRunState.submitted===true;globalThis.fruchtRunState={...globalThis.fruchtRunState,state:'completed',task:m.task.id,result};return notifyResult(m.task.id);}).catch(e=>{globalThis.fruchtRunState={...globalThis.fruchtRunState,state:'completed',task:m.task.id,result:{ok:false,error:e.message,...(e.kind?{error_kind:e.kind}:{}),...(e.retryAfter?{retry_after:e.retryAfter}:{}),...(['flow_video','engine_video'].includes(m.task.kind)?{generation_submitted:globalThis.fruchtRunState.submitted===true,...(e.flowBlocked?{flow_blocked:e.flowBlocked}:{}),...(e.notReady?{not_ready:e.notReady}:{}),...(e.flow_failed?{flow_failed:true}:{})}:{})}};return notifyResult(m.task.id);});
  reply({accepted:true,task:m.task.id});return false;
 };chrome.runtime.onMessage.addListener(globalThis.fruchtRunnerHandler);
 }
@@ -43,7 +43,7 @@ async function collectScenario(task){
  const raw=bound.find(x=>/^\s*[{`]/.test(x))||bound[0]||null;
  return {ok:false,recoverable:true,...(raw?{raw:raw.slice(0,400000)}:{}),error:'Réponse JSON complète non détectée. La réponse peut être terminée mais sa structure reste à vérifier. Aucun nouveau prompt n’a été envoyé par la récupération. Diagnostic : '+JSON.stringify({candidateCount:candidates.length,maximumLength,expectedScenes:n,observedLengths:candidates.map(x=>x.length).slice(0,5)})};
 }
-async function run(task,attachments){
+async function run(task,attachments,endAttachments){
  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
  const visible=el=>!!el&&el.getClientRects().length>0;
  const text=()=>document.body.innerText;
@@ -97,6 +97,7 @@ async function run(task,attachments){
  let editor=await waitFor(findEditor,45000);
  checkFlowAccount();
  if(attachments?.length){
+  if(isFlow)document.documentElement.dataset.fruchtSlot='start';
   const input=isFlow?await globalThis.FruchtFlow.openImport(document,sleep,attachments[0].name):await globalThis.FruchtComposer.openImport(document,sleep);
   if(!input)throw Error('Image import control unavailable.');
   if(!input.existingReference&&!input.alreadyAttached){
@@ -106,6 +107,19 @@ async function run(task,attachments){
   }
   if(isFlow&&!input.alreadyAttached)await globalThis.FruchtFlow.confirmImport(document,sleep,message=>{requireLiveExtension();globalThis.fruchtRunState.progress=message;},attachments[0].name,input);
   else if(!isFlow)await sleep(3500);
+  // FRUIT-Z (MOTEUR §Z 6): the closing image of the sequence in « Fin » (Début + Fin). Nothing is sent before both are placed.
+  if(isFlow&&endAttachments?.length){
+   globalThis.fruchtRunState.progress='Import de l’image de fin dans Flow…';
+   document.documentElement.dataset.fruchtSlot='end';
+   const end=await globalThis.FruchtFlow.openImport(document,sleep,endAttachments[0].name,'end');
+   if(!end)throw Error('Flow : case « Fin » indisponible. Aucun envoi effectué.');
+   if(!end.existingReference&&!end.alreadyAttached){
+    const dt=new DataTransfer();
+    for(const a of endAttachments){const bin=atob(a.data),bytes=Uint8Array.from(bin,c=>c.charCodeAt(0));dt.items.add(new File([bytes],a.name,{type:a.mime||'image/png'}));}
+    end.files=dt.files;end.dispatchEvent(new Event('change',{bubbles:true}));
+   }
+   if(!end.alreadyAttached)await globalThis.FruchtFlow.confirmImport(document,sleep,message=>{requireLiveExtension();globalThis.fruchtRunState.progress=message;},endAttachments[0].name,end,'end');
+  }
   editor=findEditor()||editor;
  }
 
@@ -128,7 +142,7 @@ async function run(task,attachments){
   if(choice.notes?.length)globalThis.fruchtRunState.progress=choice.notes.join(' ');
   editor=findEditor()||editor;
  }
- const oldAssistants=new Set(globalThis.FruchtComposer.assistants?.(document)||[]);const oldImageElements=new Set([...document.images]);const oldImages=new Set([...document.images].map(i=>i.currentSrc||i.src));const oldVideos=new Set([...document.querySelectorAll('video')].map(v=>v.currentSrc||v.src));
+ const oldAssistants=new Set(globalThis.FruchtComposer.assistants?.(document)||[]);const oldImageElements=new Set([...document.images]);const oldImages=new Set([...document.images].map(i=>i.currentSrc||i.src));const oldVideos=new Set([...document.querySelectorAll('video')].map(v=>v.currentSrc||v.src));const oldTiles=new Set(isFlow&&globalThis.FruchtFlow.videoTiles?globalThis.FruchtFlow.videoTiles(document):[]);let hoveredAt=0;
  const prompt=task.payload.prompt+(task.kind==='chat_image'?'\nGenerate the image now, not a written tutorial.':'');fill(editor,prompt);await sleep(700);
  const findSend=()=>isFlow?globalThis.FruchtFlow.sendButton(document,editor):globalThis.FruchtComposer.button(document,editor);
  let send=null;const buttonStart=Date.now();while(Date.now()-buttonStart<(attachments?.length?180000:25000)){blocked();checkFlowAccount();editor=findEditor()||editor;send=findSend();if(send)break;await sleep(700)}
@@ -142,7 +156,7 @@ async function run(task,attachments){
  if(task.kind==='chat_text'){
   return collectScenario(task);
  }
- let previewOpened=false,openedAt=0,lastRefusal=null;const start=Date.now();while(Date.now()-start<480000){blocked();if(isFlow){if(!previewOpened){previewOpened=globalThis.FruchtFlow.openNewVideo(document,oldImages,oldImageElements);if(previewOpened)openedAt=Date.now();}const v=[...document.querySelectorAll('video')].find(v=>(v.currentSrc||v.src)&&!oldVideos.has(v.currentSrc||v.src)&&v.readyState>=1);const flowError=globalThis.FruchtFlow.generationFailure?.(document,flowBefore);if(flowError)throw fail(flowError.kind,'Flow : '+flowError.message,{generation_submitted:true,flow_failed:true});if(!v&&previewOpened&&Date.now()-openedAt>15000&&globalThis.FruchtFlow.control(document,/^(?:Medien herunterladen|Download media|Télécharger le média|Télécharger le contenu multimédia)$/i))return {ok:false,flow_download:true,generation_submitted:true,error:'Vidéo prête dans Flow : téléchargement du clip original 720p.'};if(v){return await globalThis.FruchtMedia.videoPayload(v)}}else{const candidate=globalThis.FruchtMedia.image(document,task.payload.prompt);const img=candidate&&!oldImages.has(candidate.currentSrc||candidate.src)?candidate:null;if(img&&!/avatar|profile/i.test(img.alt)){await sleep(2000);return await globalThis.FruchtMedia.payload(img)}
+ let previewOpened=false,openedAt=0,lastRefusal=null;const start=Date.now();while(Date.now()-start<480000){blocked();if(isFlow){if(!previewOpened){previewOpened=globalThis.FruchtFlow.openNewVideo(document,oldImages,oldImageElements);if(previewOpened)openedAt=Date.now();}if(Date.now()-hoveredAt>4000&&globalThis.FruchtFlow.hoverNewVideo(document,oldTiles))hoveredAt=Date.now();const v=[...document.querySelectorAll('video')].find(v=>(v.currentSrc||v.src)&&!oldVideos.has(v.currentSrc||v.src)&&v.readyState>=1);const flowError=globalThis.FruchtFlow.generationFailure?.(document,flowBefore);if(flowError)throw fail(flowError.kind,'Flow : '+flowError.message,{generation_submitted:true,flow_failed:true});if(!v&&previewOpened&&Date.now()-openedAt>15000&&globalThis.FruchtFlow.control(document,/^(?:Medien herunterladen|Download media|Télécharger le média|Télécharger le contenu multimédia)$/i))return {ok:false,flow_download:true,generation_submitted:true,error:'Vidéo prête dans Flow : téléchargement du clip original 720p.'};if(v){return await globalThis.FruchtMedia.videoPayload(v)}}else{const candidate=globalThis.FruchtMedia.image(document,task.payload.prompt);const img=candidate&&!oldImages.has(candidate.currentSrc||candidate.src)?candidate:null;if(img&&!/avatar|profile/i.test(img.alt)){await sleep(2000);return await globalThis.FruchtMedia.payload(img)}
   // A refusal is confirmed by two identical readings of a NEW reply (P2-03): no 8-minute wait.
   const refusal=globalThis.FruchtComposer.refusal?.(document,oldAssistants)||null;
   if(refusal&&refusal===lastRefusal)throw fail('refusal','ChatGPT refuse cette image (refus de contenu) : '+refusal.slice(0,240));
