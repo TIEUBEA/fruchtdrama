@@ -240,3 +240,11 @@ class AccountHold(unittest.TestCase):
         self.assertFalse(flow_accounts.usable(p))
         p['hold_until'] = s.time.time() - 1
         self.assertTrue(flow_accounts.usable(p))
+
+
+class Concise(unittest.TestCase):
+    def test_scenario_prompt_caps_every_long_field(self):
+        s.STATE = state()
+        j = clip_job(); j['source_analysis'] = {'duration': 30, 'transcript': TRANSCRIPT}
+        p = s.script_prompt(j)
+        self.assertIn('CONCISION', p); self.assertIn('image_prompt 55 mots', p); self.assertIn('video_prompt 70 mots', p)
