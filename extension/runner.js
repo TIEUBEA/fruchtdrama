@@ -71,7 +71,11 @@ async function run(task,attachments){
   const all=new Map(first.map(r=>[r.url,r]));let still=0;
   for(let k=0;k<14&&all.size<150&&still<3;k++){
    requireLiveExtension();const before=all.size;
-   window.scrollTo(0,document.documentElement.scrollHeight);await new Promise(r=>setTimeout(r,1800));
+   window.scrollTo(0,document.documentElement.scrollHeight);
+   // TikTok on a computer adds results with a « Charger plus » / « Load more » button, not by scrolling.
+   const more=[...document.querySelectorAll('button,[role="button"],div[class*="LoadMore" i]')].find(x=>x.getClientRects().length&&/^(?:Charger plus|Afficher plus|Load more|See more|Mehr laden|Mehr anzeigen|Cargar más|Carregar mais)$/i.test((x.innerText||'').trim()));
+   if(more){more.scrollIntoView({block:'center'});more.click();}
+   await new Promise(r=>setTimeout(r,more?2500:1800));
    for(const r of globalThis.FruchtResearch.extract(document))if(!all.has(r.url))all.set(r.url,r);
    still=all.size===before?still+1:0;
   }
