@@ -37,7 +37,11 @@ async function collectScenario(task){
   await new Promise(r=>setTimeout(r,1500));
  }
  const candidates=globalThis.FruchtResponse.candidates(document);
- return {ok:false,recoverable:true,error:'Réponse JSON complète non détectée. La réponse peut être terminée mais sa structure reste à vérifier. Aucun nouveau prompt n’a été envoyé par la récupération. Diagnostic : '+JSON.stringify({candidateCount:candidates.length,maximumLength,expectedScenes:n,observedLengths:candidates.map(x=>x.length).slice(0,5)})};
+ // The studio reads the raw reply itself (owner 09/11/2026: two scenarios of 30 000 characters dropped without a reason):
+ // it says exactly what is wrong and asks ChatGPT for a light correction instead of stopping. Only a reply bound to this task.
+ const bound=candidates.filter(x=>task.payload.expected_task&&x.includes(task.payload.expected_task)).sort((a,b)=>a.length-b.length);
+ const raw=bound.find(x=>/^\s*[{`]/.test(x))||bound[0]||null;
+ return {ok:false,recoverable:true,...(raw?{raw:raw.slice(0,400000)}:{}),error:'Réponse JSON complète non détectée. La réponse peut être terminée mais sa structure reste à vérifier. Aucun nouveau prompt n’a été envoyé par la récupération. Diagnostic : '+JSON.stringify({candidateCount:candidates.length,maximumLength,expectedScenes:n,observedLengths:candidates.map(x=>x.length).slice(0,5)})};
 }
 async function run(task,attachments){
  const sleep=ms=>new Promise(r=>setTimeout(r,ms));

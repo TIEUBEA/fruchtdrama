@@ -213,3 +213,19 @@ class Speed(unittest.TestCase):
         j['stage'] = 'characters'; s.event(j, 'b')
         self.assertTrue(any(e['text'].startswith('Durée de l’étape Scénario : 2 min 0') for e in j['events']))
         self.assertGreaterEqual(j['stage_durations']['script'], 125)
+
+
+class RawScenario(unittest.TestCase):
+    def test_unreadable_reply_is_read_by_the_studio(self):
+        s.STATE = state()
+        j = clip_job(); j['stage'] = 'script'; j.pop('script', None)
+        t = {'id': 'task123456789', 'job': j['id'], 'kind': 'chat_text', 'slot': 'script', 'status': 'claimed', 'payload': {}}
+        s.STATE['tasks'].append(t)
+        script = {'production_id': j['id'], 'generation_task_id': t['id'], 'title': 'T', 'cover_title': 'C', 'description': 'd',
+                  'characters': [{'id': 'prunelle', 'name': 'P', 'appearance': 'a', 'voice': 'v', 'image_prompt': 'p'}],
+                  'scenes': [{'characters': ['prunelle'], 'meaning': 'm', 'image_prompt': 'i', 'video_prompt': 'v',
+                              'dialogue': [{'speaker': 'prunelle', 'text': 'Bonjour.'}]} for _ in range(3)]}
+        raw = 'JSON\nCopier le code\n' + s.json.dumps(script, ensure_ascii=False).replace(']}]', ']},]', 1)
+        s.accept_task_result(t, {'ok': False, 'recoverable': True, 'raw': raw, 'error': 'Réponse JSON complète non détectée.'})
+        self.assertEqual(j['stage'], 'characters', j['events'][-1]['text'])
+        self.assertTrue(any('relue par le studio' in e['text'] for e in j['events']))

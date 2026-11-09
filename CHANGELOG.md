@@ -9,6 +9,10 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 
 
+## 0.1.96.25 (09/11/2026)
+**Corrigé**
+- **Scénario illisible pour l'extension** : la réponse brute de ChatGPT est envoyée au studio, gardée dans le dossier de l'épisode (`script_raw_….txt`) et relue par le studio (balises de code, guillemets typographiques, virgules en trop). Un défaut restant passe par la correction légère habituelle, avec sa raison exacte, au lieu de « À vérifier ».
+
 ## 0.1.96.24 (09/11/2026)
 **Corrigé**
 - **Scénario « Réponse JSON complète non détectée »** : la lecture abandonnait après 4 min alors qu'un scénario de 7 scènes (30 000 caractères) met plus de 5 min à s'écrire dans ChatGPT. Elle attend maintenant tant que la réponse grandit ou que ChatGPT écrit encore, jusqu'à 15 min.

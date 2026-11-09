@@ -989,6 +989,22 @@ def clean_state_changes(raw,ids,n):
         seen.add((character,scene));clean.append({'from_scene':scene,'character':character,'change':change})
     return sorted(clean[:STATE_CHANGES_MAX],key=lambda x:x['from_scene'])
 
+def repair_json(text):
+    """A ChatGPT reply read as page text: code fences and their labels, typographic quotes around keys, trailing commas.
+    Returns the JSON object text bound to the task (from its first « { » to the matching last « } »)."""
+    s=str(text)
+    s=re.sub(r'^\s*(?:json|JSON)\s*(?:\n|Copier le code|Copy code|Code kopieren)+','',s)
+    s=re.sub(r'```(?:json)?','',s)
+    start=s.find('{');end=s.rfind('}')
+    if start<0 or end<start:return s
+    body=s[start:end+1]
+    try:json.loads(body);return body
+    except ValueError:pass
+    fixed=re.sub(r'[“”]','"',body)
+    fixed=re.sub(r',\s*([}\]])',r'\1',fixed)
+    try:json.loads(fixed);return fixed
+    except ValueError:return body
+
 def parse_json(text):
     text=re.sub(r'^```(?:json)?\s*|\s*```$','',str(text).strip())
     start=text.find('{'); end=text.rfind('}')
@@ -2111,6 +2127,13 @@ def accept_task_result(t,result):
         t['status']='cancelled';t['dry_run_passed']=now();j['dry_run_passed']=now();j['status']='paused'
         event(j,str(result.get('error','Essai à blanc réussi.'))[:600]+' Désactivez l’essai à blanc puis cliquez sur Reprendre pour générer réellement.')
         return
+    raw=result.get('raw') if not result.get('ok') else None
+    if isinstance(raw,str) and t.get('slot')=='script' and t.get('kind') in ('chat_text','chat_collect') and t['id'] in raw:
+        # The extension could not read the scenario: the studio keeps the raw reply and reads it itself (lenient JSON);
+        # a defect then goes to the usual light correction with its exact reason, instead of « À vérifier ».
+        name=f"script_raw_{t['id'][:8]}.txt";(job_dir(j)/name).write_text(raw[:400000],'utf-8')
+        event(j,f'Réponse de ChatGPT relue par le studio ({len(raw)} caractères, copie {name}).')
+        result={'ok':True,'text':repair_json(raw)}
     if not result.get('ok'):
         kind=errors.classify(result);t['error_kind']=kind
         if (not was_paused and j.get('autopilot') and t.get('slot')=='cover_review'
