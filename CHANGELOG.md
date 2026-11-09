@@ -9,6 +9,10 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 
 
+## 0.1.96.22 (09/11/2026)
+**Corrigé**
+- Mise à jour de l'extension : le Chrome du propriétaire charge l'extension depuis le dossier du Bureau `FruchtDrama-0.1.96/FruchtDrama`, pas depuis `~/FruchtDrama` ; les deux dossiers sont maintenant à jour. Numéro relevé pour que le rechargement automatique ne soit pas bloqué par une tentative déjà faite en 0.1.96.21.
+
 ## 0.1.96.21 (09/11/2026) — moteur V09
 Demande du propriétaire : « quand on veut reproduire une vidéo avec notre studio, il produit carrément autre chose ». Le studio applique maintenant la logique du moteur V09 (fruit-france, MOTEUR.md §S).
 
