@@ -195,7 +195,7 @@ class StudioTests(unittest.TestCase):
 
     def test_cover_is_checked_once_then_redrawn_once_like_the_atelier(self):
         from PIL import Image
-        j=job();s.store_script(j,script());s.STATE['tasks']=[];j['cover_style']='dramatic_v2';j['stage']='cover';scene_images(j)
+        j=job();j['config']['cover_controls']='fix';s.store_script(j,script());s.STATE['tasks']=[];j['cover_style']='dramatic_v2';j['stage']='cover';scene_images(j)
         for i,scene in enumerate(j['scenes']):scene['clip']=f'clip{i}.mp4'
         Image.new('RGB',(64,128),'yellow').save(s.job_dir(j)/'c1.png');j['cover_file']='c1.png';j['cover']='x'
         previous=s.start_render;s.start_render=lambda id:None

@@ -18,6 +18,8 @@ ENGINES = {
 }
 # Engines whose browser connector is available in this version.
 AVAILABLE = ('flow', 'grok', 'vidogrid')
+FLOW_SECONDS = (4, 6, 8, 10)  # durations offered by Flow
+LEGACY_FLOW_SECONDS = 8  # episodes made before 0.1.97
 # Clips already made by an engine removed with the V09 engine: their real duration is kept, bounded, at the montage.
 LEGACY_RANGES = {'arena': (4.0, 10.5)}
 
@@ -47,9 +49,19 @@ def of(j):
 
 
 def flow_seconds(j):
-    """Flow clip length of this episode: 10 s with Omni 1.2 Flash (V09 engine), 8 s with the older models."""
-    model = (j.get('config') or {}).get('flow_model')
-    return FLOW_MODELS.get(model, {}).get('seconds', ENGINES['flow']['seconds'])
+    """Flow clip length of this episode: 10 s with Omni 1.2 Flash (V09 engine); with the older models the length
+    chosen for the episode (10 s since 0.1.97), 8 s for older episodes."""
+    cfg = j.get('config') or {}
+    model = cfg.get('flow_model')
+    if model == OMNI_12:
+        return FLOW_MODELS[OMNI_12]['seconds']
+    for value in (cfg.get('flow_seconds'), cfg.get('clip_seconds') if of(j) == 'flow' else None):
+        try:
+            if int(value) in FLOW_SECONDS:
+                return int(value)
+        except (TypeError, ValueError):
+            pass
+    return FLOW_MODELS.get(model, {}).get('seconds', LEGACY_FLOW_SECONDS)
 
 
 def seconds(j, engine):
@@ -84,7 +96,11 @@ def clip_length(j, actual, scene=None):
     """Montage length of one clip: Flow stays exactly its length (8 or 10 s); other engines keep their real duration, bounded."""
     engine = clip_engine(j, scene)
     if engine not in LEGACY_RANGES and (engine == 'flow' or engine not in ENGINES):
-        return float(flow_seconds(j))
+        s = float(flow_seconds(j))
+        # A longer clip replaced by hand (10 s instead of 8 s) keeps its real duration (0.1.99); shorter ones are padded.
+        if actual and float(actual) > s + 0.5:
+            return round(min(max(float(actual), 2.0), 16.0), 3)
+        return s
     low, high = clip_range(j, scene)
     return round(min(max(float(actual or 0), low), high), 3)
 

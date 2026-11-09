@@ -39,12 +39,17 @@ def compare(expected,transcript,language,probability):
     if language and probability>=.8 and language not in ('de','fr','en','es','pt'):issues.append('La langue détectée ne correspond à aucune langue de création autorisée.')
     return round(ratio,3),issues
 
+MIN_CLIP,MAX_CLIP=2.0,16.0
+
 def technical(path,expected=(7.5,8.5),horizontal=False):
     p=subprocess.run([shutil.which('ffprobe') or 'ffprobe','-v','error','-show_entries','format=duration:stream=codec_type,width,height,duration,start_time','-of','json',str(path)],capture_output=True,text=True,timeout=30)
     if p.returncode:raise ValueError('Clip illisible par ffprobe')
     data=json.loads(p.stdout);streams=data.get('streams',[]);video=next((x for x in streams if x['codec_type']=='video'),{})
     errors=[];duration=float(data.get('format',{}).get('duration',0))
-    if not expected[0]<=duration<=expected[1]:errors.append(f'Durée incompatible avec le moteur vidéo ({expected[0]:g} à {expected[1]:g} s attendues).')
+    # 0.1.99: a clip replaced by hand (10 s instead of 8 s) never stops the episode; only an unusable length does.
+    notes=[]
+    if not MIN_CLIP<=duration<=MAX_CLIP:errors.append(f'Durée inutilisable ({duration:.1f} s ; {MIN_CLIP:g} à {MAX_CLIP:g} s acceptées).')
+    elif not expected[0]<=duration<=expected[1]:notes.append(f'Durée {duration:.1f} s au lieu de {expected[0]:g} à {expected[1]:g} s : clip gardé tel quel au montage.')
     if (video.get('height',0)>video.get('width',0))==horizontal or not video:errors.append('Vidéo absente ou mauvaise orientation ('+('horizontale' if horizontal else 'verticale')+' attendue).')
     audio=next((x for x in streams if x['codec_type']=='audio'),None)
     if not audio:errors.append('Piste audio absente.')
@@ -53,7 +58,7 @@ def technical(path,expected=(7.5,8.5),horizontal=False):
     scan=subprocess.run([shutil.which('ffmpeg') or 'ffmpeg','-hide_banner','-i',str(path),'-af','silencedetect=noise=-45dB:d=1','-f','null','-'],capture_output=True,text=True,timeout=90)
     if scan.returncode:errors.append('Erreur de décodage audio/vidéo.')
     if re.search(r'silence_start: 0(?:\.0+)?\s',scan.stderr) and any(float(x)>duration-.3 for x in re.findall(r'silence_duration: ([0-9.]+)',scan.stderr)):errors.append('Audio pratiquement entièrement silencieux.')
-    return {'duration':duration,'hard_errors':errors}
+    return {'duration':duration,'hard_errors':errors,'notes':notes}
 
 def transcribe_all(j,folder):
     sys.path.insert(0,str(ROOT/'.qc-runtime'))
@@ -75,20 +80,24 @@ def analyse(j,folder):
             'limits':['La transcription peut se tromper, surtout sur les noms propres.','Identité du locuteur et synchronisation des lèvres non certifiées automatiquement.']}
     for i,scene in enumerate(j['scenes']):
         result=technical(folder/scene['clip'],engines.clip_range(j,scene),(j.get('config') or {}).get('format')=='horizontal');report['clips'].append(result)
+        if scene.get('still'):result['hard_errors']=[x for x in result['hard_errors'] if 'silencieux' not in x]  # board without voice, on purpose
         report['hard_errors'] += [f"Scène {i+1} : {x}" for x in result['hard_errors']]
+        report.setdefault('notes',[]).extend(f"Scène {i+1} : {x}" for x in result.get('notes',[]))
         # Actual sampled frames, never the generated input still presented as clip evidence.
         sheet=f'quality-scene-{i:02}.jpg'
         run=subprocess.run([shutil.which('ffmpeg') or 'ffmpeg','-v','error','-y','-i',str(folder/scene['clip']),'-vf','fps=1/2,scale=288:-1,tile=4x1','-frames:v','1',str(folder/sheet)],capture_output=True,text=True,timeout=60)
         if run.returncode:report['hard_errors'].append(f'Scène {i+1} : extraction des images de contrôle impossible.')
         else:result['sheet']=sheet
-    if not report['hard_errors']:
+    # 0.1.102: the transcription only places the subtitles; without subtitles it is skipped (2 to 5 min saved).
+    if not report['hard_errors'] and (j.get('config') or {}).get('subtitles',True):
         try:
             speech=transcribe_all(j,folder)
             for i,result in enumerate(speech):
+                # 0.1.101 (owner 06/11/2026: « annule cette vérification »): the transcription only places the subtitles;
+                # a gap with the script is never a warning any more (it was mostly transcription errors).
                 report['clips'][i]['speech']=result
-                report['warnings'] += [f'Scène {i+1} : {x}' for x in result['warnings']]
         except Exception as e:
-            report['warnings'].append('Transcription locale indisponible : '+type(e).__name__+'. Aucun contrôle des paroles revendiqué.')
+            report.setdefault('notes',[]).append('Transcription locale indisponible : '+type(e).__name__+'. Sous-titres placés sans elle.')
     report['status']='review_required' if report['hard_errors'] or report['warnings'] else 'pass'
     return report
 

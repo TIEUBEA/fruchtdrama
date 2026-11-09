@@ -289,3 +289,16 @@ body.dark .acc-use.live,body.theme-ardoise .acc-use.live,body.theme-laiton .acc-
 .journal-all{margin-top:8px}.journal-all summary{cursor:pointer;color:var(--green);font-size:13px;font-weight:600}
 .link-btn.quiet-del{font-size:13px;color:var(--muted);text-decoration:underline;padding:0}.link-btn.quiet-del:hover{color:#9b3030}
 .scene-tile .tile-made{font-size:12px;color:var(--muted);margin-top:-4px}.made-by{margin:8px 0 0;font-size:13px}
+/* 0.1.97: never let a stopped or stalled episode look like it runs (owner 06/11/2026). */
+.stop-banner{margin:14px 0 18px}.stop-banner .wall-text>b{font-size:1.3em}
+.wall.wall-big.stop-banner.paused{background:#fff4dc;border-color:#b26a00;color:#4d3300}.wall-big.stop-banner.paused .wall-text>b{color:#8a4f00}
+body.dark .wall.wall-big.stop-banner.paused{background:#3a2a0c;color:#ffe2b0;border-color:#e0a040}body.dark .wall-big.stop-banner.paused .wall-text>b{color:#ffcf80}
+.run-bar.blocked{border:2px solid #c62828;background:#fde8e6}.run-bar.blocked .run-head b{color:#a31515}.run-bar.blocked .run-head em{color:#a31515}.run-bar.blocked .bar i{background:#c62828}
+.run-bar.stopped{border:2px solid #b26a00;background:#fff4dc}.run-bar.stopped .run-head b,.run-bar.stopped .run-head em{color:#8a4f00}.run-bar.stopped .bar i{background:#b26a00}
+body.dark .run-bar.blocked{background:#3b1414}body.dark .run-bar.stopped{background:#3a2a0c}body.dark .run-bar.blocked .run-head em,body.dark .run-bar.stopped .run-head em{color:#ffb4ab}
+.secondary.quiet{color:var(--muted);background:transparent}
+.sbadge.blocked{background:#c62828;color:#fff}.sbadge.paused{background:#b26a00;color:#fff}
+.story-card.stopped.blocked{outline:2px solid #c62828}.story-card.stopped.paused{outline:2px solid #b26a00}
+.run-widget button.blocked{border:2px solid #c62828;background:#fde8e6;color:#5c1010}.run-widget button.paused{border:2px solid #b26a00;background:#fff4dc;color:#4d3300}
+body.dark .run-widget button.blocked{background:#3b1414;color:#ffd9d6}body.dark .run-widget button.paused{background:#3a2a0c;color:#ffe2b0}
+.notice.failed-clips{border:2px solid #c62828}.notice.failed-clips button{margin-left:6px}

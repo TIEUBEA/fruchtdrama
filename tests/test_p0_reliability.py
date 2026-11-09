@@ -82,7 +82,7 @@ class MontageRecoveryTests(Base):
         s.recover_after_restart()
         self.assertEqual(self.renders, [rendering['id']]); self.assertEqual(rendering['status'], 'rendering')
         self.assertIn('Redémarrage pendant le montage', rendering['events'][-2]['text'])
-        self.assertEqual(done['status'], 'done'); self.assertEqual(t['status'], 'failed'); self.assertEqual(claimed['status'], 'attention')
+        self.assertEqual(done['status'], 'done'); self.assertEqual(t['status'], 'claimed', '0.1.99: the clip stays with its window, nothing sent again'); self.assertEqual(claimed['status'], 'running')
         self.assertTrue((pathlib.Path(TEMP.name) / 'state.json').is_file(), 'recovery is persisted')
 
 
@@ -92,7 +92,7 @@ class UncertainSubmissionTests(Base):
     def test_schedule_never_resubmits_an_uncertain_scene(self):
         j = clip_job(); uncertain_task(j, 0)
         s.schedule(j)
-        # 0.1.93: the uncertain scene waits for the owner, the other clips go on.
+        # 0.1.97: the uncertain scene never goes back to Flow; with Flow alone in the chain it is set aside, the others go on.
         self.assertEqual([t['slot'] for t in s.STATE['tasks'] if t['status'] == 'queued'], ['clip:1'])
         self.assertEqual(s.STATE['profiles'][0]['balance'], 100, 'no reservation')
         for i in (1, 2, 3):
@@ -101,7 +101,7 @@ class UncertainSubmissionTests(Base):
             if t['status'] == 'queued':t['status'] = 'cancelled'
         s.schedule(j)
         self.assertEqual([t for t in s.STATE['tasks'] if t['status'] == 'queued'], [], 'never the uncertain scene')
-        self.assertEqual(j['status'], 'attention'); self.assertIn('scène 1', j['events'][-1]['text'])
+        self.assertEqual(j['status'], 'attention'); self.assertIn('Clip 1 :', j['events'][-1]['text'])
 
     def test_refunded_or_received_or_acknowledged_tasks_are_not_uncertain(self):
         j = clip_job()
@@ -237,9 +237,9 @@ class HttpTests(unittest.TestCase):
             self.req(path, body)
         return e.exception.code, json.load(e.exception)['error']
 
-    def test_resume_refused_until_owner_confirms_no_clip(self):
+    def test_uncertain_clip_never_resent_to_flow_until_owner_confirms_no_clip(self):
         j = clip_job(); j['status'] = 'attention'; t = uncertain_task(j, 1)
-        # 0.1.93: while other clips remain, Reprendre makes them (never the uncertain one).
+        # Reprendre makes the other clips (never the uncertain one on Flow).
         self.req('/api/job/' + j['id'], {'action': 'resume'})
         self.assertEqual([x['slot'] for x in s.STATE['tasks'] if x['status'] == 'queued'], ['clip:0'])
         for x in s.STATE['tasks']:
@@ -247,9 +247,10 @@ class HttpTests(unittest.TestCase):
         for i in (0, 2, 3):
             j['scenes'][i]['clip'] = f'clip{i}.mp4'
         j['status'] = 'attention'
-        code, message = self.error('/api/job/' + j['id'], {'action': 'resume'})
-        self.assertEqual(code, 400); self.assertIn('scène 2', message)
+        # 0.1.97: Reprendre is never refused; with Flow alone in the chain the uncertain clip is set aside and said.
+        self.req('/api/job/' + j['id'], {'action': 'resume'})
         self.assertEqual([x for x in s.STATE['tasks'] if x['status'] == 'queued'], []); self.assertEqual(j['status'], 'attention')
+        self.assertIn('Clip 2 :', j['alerts'][-1]['text'])
         code, message = self.error('/api/job/' + j['id'], {'action': 'confirm_no_clip', 'slot': 'clip:3'})
         self.assertIn('Aucun envoi Flow incertain', message)
         state = self.req('/api/job/' + j['id'], {'action': 'confirm_no_clip', 'slot': 'clip:1'})

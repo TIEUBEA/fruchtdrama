@@ -1,4 +1,4 @@
-"""P5-07/P5-08: Grok / Arena accounts, limit per account, guided account change, automatic wake."""
+"""P5-07/P5-08: Grok accounts, limit per account, guided account change, automatic wake."""
 import importlib.util, json, os, pathlib, sys, tempfile, threading, time, unittest, urllib.error, urllib.request
 
 ROOT = pathlib.Path(__file__).parents[1]
@@ -68,6 +68,8 @@ class FlowTests(unittest.TestCase):
         a = ea.add(s.STATE, 'vidogrid', 'Only', 'only@x.com')
         j = clip_job('vidogrid'); t = self.claim(j)
         s.accept_task_result(t, {'ok': False, 'error_kind': 'quota', 'error': 'limit', 'retry_after': 120})
+        # 0.1.97: the clip is reported (« clip à refaire »), the next clips wait for the renewal.
+        self.assertEqual(s.held_clips(j), {0}); self.assertIn('Clip 1 : Grok', j['alerts'][-1]['text'])
         self.assertEqual(j['status'], 'waiting_quota'); self.assertEqual(active(), [])
         self.assertEqual(s.wake_waiting(time.time() + 10), [], 'not before the renewal')
         # Simulate the passage of time: the renewal moment is reached.

@@ -38,7 +38,7 @@ function accountRows(svc){const R=accReady(),pending=new Set(R.pending||[]),now=
    .sort((a,b)=>a.rank-b.rank||b.credits-a.credits||(a.number||99)-(b.number||99));}
  const session=(R.sites||{})[svc],seen=(state.sites||{})[svc]||{},live=session?.email||seen.email||null,key='site:'+svc;
  let emails=(state.identities||[]).filter(i=>(i.services||[]).includes(svc)).map(i=>i.email);
- const engine=['grok','arena','vidogrid'].includes(svc)?(state.engine_accounts||[]).filter(a=>a.engine===svc):[];
+ const engine=svc==='grok'?(state.engine_accounts||[]).filter(a=>a.engine===svc):[];
  for(const a of engine)if(!emails.includes(a.email))emails.push(a.email);
  if(live&&!emails.includes(live))emails.push(live);
  const rows=emails.map(email=>({email}));

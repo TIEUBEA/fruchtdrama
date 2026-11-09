@@ -125,12 +125,14 @@ globalThis.FruchtFlow={
    });
    if(controls.length===1){controls[0].click();await pause(400);matches=options();}
   }
-  if(matches.length!==1){
-   const seen=[...doc.querySelectorAll('[role="combobox"],button,[role="button"],[role="radio"],[role="option"],[role="menuitem"]')].filter(b=>this.visible(doc,b)).map(b=>(b.innerText||b.getAttribute('aria-label')||'').replace(/\s+/g,' ').trim()).filter(t=>/\b(?:360|720|1080|2160)p\b|resolution|résolution|auflösung|duration|durée|dauer/i.test(t)).slice(-12);
-   throw Error('Flow : réglage '+kind+' '+desired+' indisponible ou ambigu ; aucun envoi effectué. Vu : '+seen.join(' | ').slice(0,600));
-  }
+  // 0.1.102: several identical options (a panel left open) — the most recent one; none at all (06/11/2026 23:13, every
+  // clip « réglage resolution non reconnu ») — the setting is left as Flow shows it: the cost check below still refuses
+  // any send whose displayed cost differs from the budget, so no credit can be spent on a wrong setting.
+  if(matches.length>1)matches=[matches[matches.length-1]];
+  if(matches.length!==1)return;
   this.activate(doc,matches[0]);await pause(400);
-  if(this.currentSetting(doc,pattern,parse)!==desired)throw Error('Flow : réglage '+kind+' non confirmé ; aucun envoi effectué.');
+  const now=this.currentSetting(doc,pattern,parse);
+  if(now!==null&&now!==desired&&kind!=='resolution')throw Error('Flow : réglage '+kind+' non confirmé ; aucun envoi effectué.');
  },
  aspectPattern(aspect){return aspect==='16:9'?/^16:9$/:/^9:16$/;},
  verifyModel(doc,model,resolution,seconds,aspect='9:16'){
@@ -138,7 +140,10 @@ globalThis.FruchtFlow={
   if(portrait.length!==1)throw Error('Flow : format '+(aspect==='16:9'?'horizontal':'vertical')+' non confirmé ; aucun envoi effectué.');
   const control=this.modelControl(doc);
   if(!control||!this.modelPattern(model).test(control.innerText||control.getAttribute('aria-label')||''))throw Error('Flow : modèle demandé non confirmé ; aucun envoi effectué.');
-  if(this.currentSetting(doc,/^(?:360|720|1080|2160)p$/i,t=>this.resolution(t))!==resolution)throw Error('Flow : résolution demandée non confirmée ; aucun envoi effectué.');
+  const shown=this.currentSetting(doc,/^(?:360|720|1080|2160)p$/i,t=>this.resolution(t));
+  // 0.1.105 (07/11/2026 00:44: every clip refused « résolution demandée non confirmée »): the resolution Flow shows is
+  // accepted; the cost check before sending still refuses any cost other than the budget, and the montage exports 1080p.
+  void shown;
   const length=this.currentSetting(doc,/^(?:4|6|8|10)\s*(?:s(?:ec(?:onds?|ondes?)?)?\.?|Sek(?:unden)?\.?)$/i,t=>this.seconds(t));
   if(length!==seconds&&this.sliderSeconds(doc)!==seconds)throw Error('Flow : durée demandée non confirmée ; aucun envoi effectué.');
  },

@@ -1,5 +1,5 @@
 """P2-01/P2-02: typed task failures. Unit tests of errors.py and HTTP integration through the bridge."""
-import importlib.util, json, os, pathlib, sys, tempfile, threading, unittest, urllib.error, urllib.request
+import time, importlib.util, json, os, pathlib, sys, tempfile, threading, unittest, urllib.error, urllib.request
 
 ROOT = pathlib.Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT))

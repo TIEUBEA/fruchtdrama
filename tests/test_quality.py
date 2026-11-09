@@ -8,7 +8,7 @@ class QualityTests(unittest.TestCase):
         self.temp=tempfile.TemporaryDirectory();self.folder=pathlib.Path(self.temp.name)
         self.previous=s.STATE,s.DATA;s.DATA=self.folder;s.STATE=s.fresh()
         self.job={'id':'qualitytest','title':'Original','status':'running','stage':'quality','events':[],
-                  'config':{'language':'Deutsch (de-DE)'},'characters':[{'id':'pear','name':'Lou','appearance':'Pear','file':'ref.png'}],
+                  'config':{'language':'Deutsch (de-DE)','clip_look':'look'},'characters':[{'id':'pear','name':'Lou','appearance':'Pear','file':'ref.png'}],
                   'scenes':[{'clip':'clip.mp4','image':'scene.png','meaning':'An accusation','dialogue':[{'speaker':'pear','text':'Gib mir meinen Schlüssel!'}]}]}
         s.STATE['jobs']=[self.job];d=s.job_dir(self.job)
         for name in ('clip.mp4','scene.png','ref.png'):(d/name).write_bytes(name.encode())

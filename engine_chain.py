@@ -26,7 +26,8 @@ LABELS = {'flow': 'Flow', 'grok': 'Grok', 'vidogrid': 'Vidogrid', 'arena': 'Aren
 FINAL_ROUND = 1
 VERBS = {'refusal': 'a refusé', 'quota': 'est à sa limite', 'timeout': 'n’a pas rendu le clip à temps',
          'login': 'demande une connexion', 'challenge': 'demande une vérification anti-robot',
-         'credits': 'n’a plus de crédits', 'interface': 'a échoué', 'restart': 'a été interrompu', 'other': 'a échoué'}
+         'credits': 'n’a plus de crédits', 'interface': 'a échoué', 'restart': 'a été interrompu',
+         'uncertain': 'n’a pas confirmé l’envoi', 'unavailable': 'n’a aucun compte prêt', 'other': 'a échoué'}
 
 VIDEO_FRAME = ('All-audiences family animation clip. Keep exactly the characters, place and visual style of the attached image. '
                'Nothing violent and nothing suggestive: tense moments are shown by looks, gestures and reactions, never by '
@@ -40,6 +41,10 @@ VIDEO_WORDS = (
     (r'\b(?:arrest(?:s|ed|ing)?|handcuff(?:s|ed)?)\b', 'stops'), (r'\b(?:threat(?:en|ens|ening)?)\b', 'warn'),
     (r'\b(?:cogne|frappe|gifle)\b', 'défie'), (r'\b(?:schlägt|Schlag)\b', 'stellt sich'),
 )
+
+
+def label(engine):
+    return LABELS.get(engine, str(engine).capitalize())
 
 
 def routing(settings, cfg=None):
@@ -191,3 +196,8 @@ def reset(scene):
     """A clip received (or redone by the owner) starts again from the first engine."""
     for key in ('engine_tries', 'engine_round', 'engine_exhausted', 'flow_rewrite_pending'):
         scene.pop(key, None)
+
+
+def failure(index, scene):
+    """The alert of a clip set aside (owner wording, 0.1.97)."""
+    return f'Clip {index + 1} : {summary(scene) or "aucun moteur prêt"} — clip à refaire. Les autres clips continuent.'

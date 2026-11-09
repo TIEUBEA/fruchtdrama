@@ -1,6 +1,6 @@
 const BASE='http://127.0.0.1:8840';
 // Two lanes, like the Atelier (clips leave while ChatGPT draws the boards): 'chat' (ChatGPT, Claude, TikTok) and
-// 'video' (Flow, Grok, Arena, Vidogrid). Each lane follows one task at a time, in its own tabs, with its own saved state:
+// 'video' (Flow, Grok). Each lane follows one task at a time, in its own tabs, with its own saved state:
 // activeTask (chat; also any task saved by 0.1.88 and older) and activeVideoTask (video).
 // 0.1.91, parallel clips: a second video lane (activeVideoTask2) takes another Flow clip on another Google account, in its
 // own tab; the studio never gives two lanes the same account.
@@ -644,9 +644,15 @@ async function tabForTask(task,cfg,key){
  return tab;
 }
 // One lane: follow its saved task, otherwise claim the next task of this lane only (lane=chat|video).
+// 0.1.99: a ChatGPT tab that never answers (06/11/2026 21:04: chrome.scripting waited forever on a frozen tab) kept the
+// chat lane busy for good and no episode moved any more. Past CHAT_STUCK the chat lane gives the task back to the studio
+// as failed (no Flow credit at stake) and takes the next one. Clip lanes are never cut this way.
+const CHAT_STUCK=4*60*1000,busySince={},laneRun={};
+function stuckTimer(lane){return new Promise((_,reject)=>{if(!lane.startsWith('chat'))return;const t=setTimeout(()=>reject(Error('Onglet ChatGPT figé depuis 4 min : étape redemandée.')),CHAT_STUCK);t?.unref?.();});}
 async function runLane(lane){
- if(busy[lane])return;busy[lane]=true;const key=LANE_KEY[lane];let claimed=null;let cfg;
- try{
+ if(busy[lane]&&!(lane.startsWith('chat')&&Date.now()-(busySince[lane]||0)>CHAT_STUCK))return;
+ const run=laneRun[lane]=(laneRun[lane]||0)+1;busy[lane]=true;busySince[lane]=Date.now();const key=LANE_KEY[lane];let claimed=null;let cfg;
+ try{await Promise.race([stuckTimer(lane),(async()=>{
   cfg=await chrome.storage.local.get(null);
   if(!cfg.client||!cfg.token)return;
   if(/^chat[23]$/.test(lane)){
@@ -700,6 +706,7 @@ async function runLane(lane){
     preparedTab=null;await chrome.storage.local.remove(['flowTab']);
    }
   }
+ })()]);
  }catch(e){
   const active=(await chrome.storage.local.get(key))[key]||cfg?.[key];
   const task=claimed||active?.task;
@@ -712,7 +719,7 @@ async function runLane(lane){
   if(active){const data=await chrome.storage.local.get('scenarioTabs');const tabs=data.scenarioTabs||{};if(tabs[active.task.job])tabs[active.task.job].pending=false;await chrome.storage.local.set({scenarioTabs:tabs});}
   await chrome.storage.local.remove(key);
   await chrome.storage.local.set({status:'À vérifier : '+e.message});
- }finally{busy[lane]=false;}
+ }finally{if(laneRun[lane]===run)busy[lane]=false;}
 }
 async function recoverExistingMedia(cfg){
  const candidates=await call('/api/bridge/recoverable-media?client='+encodeURIComponent(cfg.client));
@@ -849,9 +856,10 @@ async function selfUpdate(){
   if(Object.values(LANE_KEY).some(k=>cfg[k])||busy.chat||busy.video)return;
   // Never twice for the same version: when the folder the browser loads is not updated yet, reloading again and again
   // stopped all work (06/11/2026 17:44, « Connecteur à configurer » for an hour).
-  const tried=(await chrome.storage.local.get('reloadedFor')).reloadedFor;
-  if(tried===disk.version)return;
-  await chrome.storage.local.set({reloadedFor:disk.version,status:'Nouvelle version '+disk.version+' : rechargement automatique.'});
+  // 0.1.99: one more try every 10 min (the folder copied a few seconds after the studio restarted left 0.1.98 running).
+  const got=await chrome.storage.local.get(['reloadedFor','reloadedAt']);
+  if(got.reloadedFor===disk.version&&Date.now()-(got.reloadedAt||0)<10*60*1000)return;
+  await chrome.storage.local.set({reloadedFor:disk.version,reloadedAt:Date.now(),status:'Nouvelle version '+disk.version+' : rechargement automatique.'});
   chrome.runtime.reload();
  }catch{}
 }

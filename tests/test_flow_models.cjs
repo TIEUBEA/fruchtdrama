@@ -57,5 +57,7 @@ function fixture({missing=false,ambiguous=false,wrongResolution=false,wrongDurat
  for(const mode of [{missing:true},{ambiguous:true}])await assert.rejects(()=>f.configure(fixture(mode).doc,async()=>{},12,'gemini_omni_flash','720p',8),/indisponible ou ambigu/);
  const x=fixture();await f.configure(x.doc,async()=>{},12,'gemini_omni_flash','720p',8);const n=x.picked.length;
  await f.configure(x.doc,async()=>{},12,'gemini_omni_flash','720p',8);assert.equal(x.picked.length,n,'No repeated model selection when already correct');
+ // 0.1.102: no resolution option in the panel (Flow redesign) never stops a clip: the cost check guards the credits.
+ {const doc={querySelectorAll:()=>[],body:{innerText:''}};await f.chooseSetting(doc,async()=>{},'720p','resolution');}
  console.log('Omni: model selection, no Fast/Lite confusion, 720p, 8s, cost FR/DE/EN, idempotence and missing/ambiguous model guarded. No generation submitted.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

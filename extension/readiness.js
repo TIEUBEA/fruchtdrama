@@ -3,8 +3,8 @@
 // page, no anti-robot check. Read only: no prompt is typed or sent, no credit is spent, no check is bypassed.
 // A tab that needs the owner (sign-in, anti-robot check) stays open in the background; « Régler maintenant » shows it.
 globalThis.FruchtReadiness={
- HOSTS:{chatgpt:['chatgpt.com'],claude:['claude.ai'],grok:['grok.com'],arena:['arena.ai','lmarena.ai'],vidogrid:['vidogrid.ai','www.vidogrid.ai'],flow:['flow.google.com','labs.google']},
- URLS:{chatgpt:'https://chatgpt.com/',claude:'https://claude.ai/new',grok:'https://grok.com/imagine',arena:'https://arena.ai/video',vidogrid:'https://vidogrid.ai/app/video-gen/grok'},
+ HOSTS:{chatgpt:['chatgpt.com'],claude:['claude.ai'],grok:['grok.com'],vidogrid:['vidogrid.ai','www.vidogrid.ai'],flow:['flow.google.com','labs.google']},
+ URLS:{chatgpt:'https://chatgpt.com/',claude:'https://claude.ai/new',grok:'https://grok.com/imagine',vidogrid:'https://vidogrid.ai/app/video-gen/grok'},
  EDITOR:['chatgpt','claude','grok'],
  tabBusy(error){return /Tabs cannot be edited right now|user may be dragging a tab/i.test(String(error?.message||error));},
  async retryTabEdit(operation,wait){
@@ -45,7 +45,7 @@ globalThis.FruchtReadiness={
    ready:['interactive','complete'].includes(doc.readyState)};
  },
  hostOf(url){try{return new URL(url).hostname;}catch{return '';}},
- // Real page 06/11/2026: arena.ai (Next.js / React 19) opened in a background tab stays an empty skeleton (body text
+ // Real page 06/11/2026: a Next.js / React 19 site (then arena.ai) opened in a background tab stays an empty skeleton (body text
  // empty, « Page vide ou bloquée ») because React reveals its streamed content on requestAnimationFrame, which Chrome
  // never fires in a hidden tab. In the page's own world, while the tab is hidden, animation frames become short timers
  // and the content already received is shown. Display only: nothing is typed, clicked or sent.

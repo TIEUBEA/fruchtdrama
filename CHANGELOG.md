@@ -5,9 +5,88 @@ correspondante (P0-xx, P1-x, P2-xx) détaillée dans `docs/sudf/`. Guide pour re
 `docs/sudf/REPRISE.md`. **Mode d'emploi détaillé** (installer, lancer, utiliser), mis à jour à chaque
 version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, version par version).
 
+## 0.1.106 (07/11/2026)
 
+**Corrigé**
+- Flow : « coût affiché différent du budget prévu » sur chaque clip. Un clip Omni de 10 s coûte 15 crédits, pas 12. Les coûts ont été relevés sur la page Flow : 4 s = 7, 6 s = 10, 8 s = 12, 10 s = 15. Le budget suit maintenant la durée du clip, et les soldes nécessaires aussi.
+- Résolution : Omni ne propose que 360p et 720p. Le 1080p demandé n'existait pas : c'est maintenant 720p, et la vidéo finale reste exportée en 1080p.
 
+## 0.1.105 (07/11/2026)
 
+**Corrigé**
+- Flow : « résolution demandée non confirmée » faisait échouer chaque clip, sur tous les comptes. Flow propose maintenant une autre résolution que le 720p demandé. La résolution affichée par Flow est acceptée. Le coût affiché doit toujours être égal au budget avant tout envoi, et la vidéo finale reste en 1080p.
+
+## 0.1.104 (07/11/2026)
+
+**Amélioré** (Recréer à l'identique, d'après la comparaison avec l'original de BANANITO)
+- Rythme de l'original : chaque clip contient 2 ou 3 plans enchaînés (large, moyen, gros plan), soit environ un plan toutes les 3 s, sans clip de plus à payer.
+- Toutes les répliques de l'original sont gardées, dans le même ordre et avec la même densité, mais chacune est réécrite (jamais mot pour mot) pour que TikTok la voie comme une création originale. Jusqu'à 3 répliques par scène.
+- Durée de l'original : le nombre de scènes suit sa durée (117 s donnent 12 scènes de 10 s), au lieu de la durée du menu.
+- Histoire légèrement transposée pour la monétisation : mêmes rôles, mêmes événements et même fin, mais d'autres prénoms, d'autres montants, d'autres noms de lieux et d'enseignes, d'autres couleurs de tenues et d'autres détails de décor. Les signes distinctifs restent au même endroit, par exemple l'étiquette d'argent.
+- Sous-titres et titre d'accroche inchangés.
+
+## 0.1.103 (07/11/2026)
+
+**Corrigé**
+- Flow : « réglage resolution non reconnu » faisait échouer chaque clip, qui partait alors sur Grok. Une option de résolution ou de durée introuvable ne bloque plus. Le coût affiché reste vérifié avant tout envoi, donc aucun crédit ne peut partir sur un mauvais réglage. Avec des options en double (panneau resté ouvert), la plus récente est prise.
+
+## 0.1.102 (06/11/2026)
+
+**Allégé** (pour viser une vidéo en 30 à 40 min)
+- Revue visuelle des clips par ChatGPT désactivée par défaut, ce qui fait gagner environ 40 min. Elle se remet dans Mes comptes › Regard sur les clips.
+- Contrôle de la miniature par ChatGPT désactivé par défaut.
+- Feuilles d'état « Au fil de l'histoire » retirées : 3 images ChatGPT en moins.
+- Scénario : une réplique trop longue, une troisième réplique, une accroche trop longue, un détail d'accroche absent des prompts ou une fiche de concepts mal remplie sont maintenant corrigés par le studio, sans réécriture. Seul un vrai défaut provoque encore un refus : histoire déjà faite, scènes manquantes, mauvaise langue.
+- Transcription locale lancée seulement quand les sous-titres sont activés.
+- Clip que ni Flow ni Grok n'ont pu faire : la planche, avec un zoom lent, le remplace, et la vidéo va jusqu'au montage. Un bandeau le signale, et « Refaire » reste possible. Exception : un envoi Flow incertain (clip peut-être déjà facturé) garde la vérification.
+- Planches : une à la fois par fenêtre ; les scénarios restent en parallèle. Deux planches envoyées en même temps échouaient toutes les deux (« champ de pièce jointe indisponible »). Les épisodes arrêtés ainsi repartent seuls.
+- Montage : un seul à la fois, encodage `veryfast`. Trois montages en parallèle saturaient la mémoire et étaient coupés après 240 s. Le délai passe à 20 min, et une erreur de montage tient en une ligne, au lieu de la commande ffmpeg entière.
+- Avancement du montage visible : « scène 3 sur 16 préparée », « assemblage final », « en attente d'un autre montage ».
+- Clips : une liaison perdue avec l'onglet (extension rechargée, « Could not establish connection ») n'est plus comptée comme un essai, et le même moteur est relancé jusqu'à 3 fois. Une vidéo n'est jamais faite de planches pour plus de la moitié de ses scènes : on a alors un message d'erreur clair. Les 3 épisodes transformés en planches ce soir refont leurs clips.
+- Bloc « Contrôle qualité des clips » affiché seulement s'il y a quelque chose à faire. Les lignes « correspondance avec le scénario » sont retirées.
+
+## 0.1.101 (06/11/2026)
+
+**Retiré**
+- Vérification des paroles (« Les paroles reconnues correspondent à 20 % du scénario… ») : annulée à ta demande. La transcription sert seulement à placer les sous-titres. Les anciens avertissements et bandeaux « Paroles acceptées » disparaissent.
+
+**Corrigé**
+- « Tâche préparée : image:0 » affiché pendant 30 min comme si ça tournait, alors que l'extension était bloquée. Après 6 min sans aucune tâche prise, l'épisode affiche en gros que l'extension est bloquée, et comment la relancer.
+
+## 0.1.100 (06/11/2026)
+
+**Corrigé**
+- Les 3 nouvelles vidéos ne bougeaient plus depuis 22:04 : l'onglet ChatGPT d'une planche ne répondait plus, et l'extension l'attendait sans fin. Au bout de 4 min, la voie ChatGPT rend maintenant la tâche au studio et passe à la suivante.
+- Une étape ChatGPT en échec (onglet figé, page pas chargée…) arrêtait l'épisode. Elle est maintenant redemandée 2 fois automatiquement avant tout arrêt. La connexion et la vérification anti-robot restent à faire par toi.
+- Version 0.1.100 : l'extension restée en 0.1.98 se met à jour toute seule.
+
+## 0.1.99 (06/11/2026)
+
+**Corrigé**
+- Trois vidéos lancées en même temps n'avançaient pas pendant 30 min : une seule voie ChatGPT servait tous les épisodes, et chaque scénario attendait la fin du précédent. L'extension ouvre maintenant jusqu'à 3 voies ChatGPT. Chacune travaille sur un épisode différent, dans son propre onglet.
+- « Contrôle qualité bloquant : Durée incompatible avec le moteur vidéo » après un clip remplacé à la main (10 s au lieu de 8 s). Une durée différente ne bloque plus : elle est notée dans le journal, et le clip garde sa vraie longueur au montage. Seule une durée inutilisable bloque : moins de 2 s ou plus de 16 s. Les anciens contrôles bloqués pour cette raison sont refaits.
+- « Redémarrage : génération précédente à vérifier » arrêtait les épisodes à chaque redémarrage du studio. Le travail en cours reste maintenant dans son onglet et continue, sans rien renvoyer. Les épisodes déjà arrêtés ainsi sur un texte ou une planche repartent seuls.
+- La mise à jour automatique de l'extension est retentée toutes les 10 min, au lieu d'une seule fois.
+
+## 0.1.98 (06/11/2026)
+- Grok aussi en clips de 10 s : le connecteur choisit « Video duration › 10s » (Grok s'ouvre sur 6 s ; 6/10/15 s vus sur la vraie page). Flow et Grok font donc des plans de 10 s, vidéo d'au moins 1 min.
+- Choix du moteur dans Créer : seulement Google Flow et Grok, « 10 s par clip ».
+- Une page FruchtDrama restée ouverte pendant une mise à jour se recharge seule (elle montrait encore Arena et Vidogrid).
+
+## 0.1.97 (06/11/2026)
+Demande du propriétaire, 06/11 au soir : « On va faire beaucoup plus simple. On n'a plus que Flow et Grok. Tu ne dois bloquer sur aucune étape. » Cas réel du soir : « Envoi Flow incertain pour la scène 1, 3, 4, 7, 16 », épisode en Action requise, tout arrêté.
+
+**Modifié**
+- **Arena et Vidogrid retirés de tout le studio** : page Créer, Mes comptes, vérification des comptes, extension (connecteurs, sites, permissions). Les comptes Arena/Vidogrid déjà enregistrés sont ignorés sans erreur ; un clip déjà fait par Arena garde sa durée au montage.
+- **Chaîne par clip : un essai Flow, puis Grok tout de suite**, sans validation (plus de bouton « Utiliser Grok »). Clip reçu de Grok : ajouté au studio, la production continue.
+- **Si Flow puis Grok échouent** : alerte « Clip N : Flow (raison) puis Grok (raison) — clip à refaire », le clip est mis de côté et les autres continuent. L'épisode montre « N clips en échec » avec « Refaire » par clip (possible pendant que les autres clips tournent) ; le montage attend tous les clips. Plus de prompt adouci ni de planche redessinée automatiquement.
+- **Envoi Flow incertain** : n'arrête plus jamais l'épisode. Le clip part sur Grok aussitôt et n'est jamais renvoyé sur Flow tant que le doute reste (réservation de crédits inchangée). Si le clip Flow est retrouvé ensuite (récupération automatique, possible pendant que l'épisode continue), il complète l'épisode ou remplace le clip Grok (gardé dans les versions précédentes). « Reprendre » n'est plus jamais refusé pour un envoi incertain.
+- **Plans de 10 s** (monétisation TikTok Creator Rewards : vidéos d'au moins 1 minute) : Flow fait des clips de 10 s ; « Courte · 1 min » = 7 clips ≈ 70 s. 3 mots par seconde : 30 mots parlés au plus par plan. Scénario, montage et contrôle qualité suivent (plages 9,5 à 10,5 s). Grok Imagine reste à 6 s : son connecteur n'a aucun réglage de durée. Les épisodes existants gardent leurs 8 s.
+- **Refaire une virale** : l'histoire est condensée en environ 1 minute (7 plans de 10 s) même si l'original est plus long ; temps forts gardés, le reste fusionné. Dit dans la page Créer et dans la consigne du scénario.
+
+**Ajouté**
+- **Jamais d'étape silencieuse** : une étape plus longue que d'habitude (scénario 10 min, planche 5 min, clip Flow 10 min, clip Grok 8 min, montage 20 min, contrôle local 25 min) ou un épisode « en production » sans rien en cours depuis 3 min affiche « Bloqué : l'étape depuis N min » en rouge, avec la raison et « Relancer cette étape », sur la page épisode, la carte du Studio et le menu latéral. La barre ne dit plus « Fabrication » et n'affiche plus le chrono dans ce cas.
+- **Gros bandeau en pause / arrêté** : « En pause — rien ne tourne » ou « Arrêté — action requise » en haut de l'épisode, avec la raison et Reprendre ; la carte du Studio et le menu latéral le disent aussi. « En attente — rien ne tourne » pour les attentes de crédits ou de limite.
 
 ## 0.1.96.36 — 09/11/2026
 - Robot de surveillance (robot.py) : chaque minute, il relance seul une étape texte/planche/veille arrêtée sur une erreur technique (sans frais), relance un épisode « en cours » resté sans tâche trop longtemps, et refait une actualisation du Filon en échec. Jamais un clip peut-être envoyé à Flow/Grok ; au plus 3 actions par épisode et par 6 h ; chaque action est écrite dans le journal (« Robot : … »).
