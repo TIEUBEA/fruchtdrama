@@ -154,15 +154,13 @@ class Lanes(unittest.TestCase):
         j = job(n=3, drawn=1); s.schedule(j)
         clip = active(j, 'video')[0]; clip['status'] = 'claimed'
         s.accept_task_result(clip, {'ok': False, 'error_kind': 'quota', 'error': 'Limite atteinte'})
-        # 0.1.97: the clip is reported (« clip à refaire »), the engine is remembered at its limit; the boards go on.
-        self.assertEqual(j['status'], 'running'); self.assertEqual(s.held_clips(j), {0})
+        self.assertEqual(j['status'], 'running'); self.assertTrue(j.get('early_clips_off'))
         self.assertEqual([t['slot'] for t in active(j)], ['image:1'])
         deliver(active(j)[0])
         self.assertEqual(active(j, 'video'), [], 'no clip ahead after the limit')
         deliver(active(j)[0])
         self.assertEqual(j['stage'], 'clips'); self.assertNotIn('early_clips_off', j)
-        self.assertEqual(j['status'], 'waiting_quota', 'the clips stage waits for the renewal and says so')
-        self.assertEqual(active(j), [])
+        self.assertEqual([t['slot'] for t in active(j)], ['clip:0'], 'the clips stage takes over')
 
     def test_failed_clip_error_kept_when_a_board_arrives(self):
         j = job(n=3, drawn=1); s.schedule(j)
@@ -290,17 +288,23 @@ class FailedEarlyClip(unittest.TestCase):
         s.STATE = s.fresh()
 
     def test_boards_go_on_when_an_early_clip_fails(self):
-        j = job(n=3, drawn=1); s.schedule(j)
+        s.STATE["settings"]["grok_auto"] = True; j = job(n=3, drawn=1); s.schedule(j)
         clip = next(t for t in active(j) if t['slot'] == 'clip:0'); clip['status'] = 'claimed'
         s.accept_task_result(clip, {'ok': False, 'error': 'Génération trop longue ou média non détecté.'})
         self.assertEqual(j['status'], 'running')
         self.assertIn('image:1', [t['slot'] for t in active(j)], 'the boards go on')
-        # 0.1.97: Grok tried, Flow cannot pay here: the clip is reported at once, nothing softened or asked.
-        self.assertEqual(s.held_clips(j), {0})
-        self.assertEqual(active(j, 'video'), [])
-        self.assertEqual(j['alerts'][-1]['level'], 'action'); self.assertIn('Clip 1 : Grok', j['alerts'][-1]['text'])
-        self.assertIn('clip à refaire', j['alerts'][-1]['text'])
-        # The owner's instruction (« Refaire » on the clip) starts the engines again, even while the boards go on.
+        # 0.1.93: Grok costs no credit; no other engine is ready here, so the last round asks Grok again, prompt softened.
+        again = active(j, 'video')
+        self.assertEqual([(t['slot'], t['payload']['engine']) for t in again], [('clip:0', 'grok')])
+        self.assertIn('All-audiences family animation clip', again[0]['payload']['prompt'])
+        again[0]['status'] = 'claimed'
+        s.accept_task_result(again[0], {'ok': False, 'error': 'Génération trop longue ou média non détecté.'})
+        self.assertEqual(s.held_clips(j), {0}, 'every engine tried: the clip waits for the owner')
+        self.assertEqual(active(j, 'video'), []); self.assertIn('image:1', [t['slot'] for t in active(j)])
+        self.assertEqual(j['alerts'][-1]['level'], 'action'); self.assertIn('Grok', j['alerts'][-1]['text'])
+        # The owner's instruction (« Refaire » on the clip) starts the engines again.
+        for t in active(j):
+            t['status'] = 'cancelled'
         s.redo(j, 'clip:0', 'moins de bagarre', start=False)
         self.assertEqual(s.held_clips(j), set())
 

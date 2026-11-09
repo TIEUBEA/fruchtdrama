@@ -82,25 +82,6 @@ class EditorialTests(unittest.TestCase):
         self.assertEqual(old,old_before);self.assertEqual(file.read_bytes(),b'untouched')
         self.assertIn('creative_selection',prompt);self.assertNotIn('appartement réaliste chaleureux, vertical',prompt)
 
-    def test_original_refused_script_is_preserved_for_targeted_correction(self):
-        draft=self.opening_story();draft['opening_plan']['payoff_scene']=4
-        task={'id':'rejected','job':self.job['id'],'kind':'chat_text','slot':'script','status':'claimed'}
-        s.STATE['tasks'].append(task)
-        s.accept_task_result(task,{'ok':True,'text':json.dumps(draft)})
-        self.assertEqual(self.job['rejected_script'],draft)
-        prompt=s.script_prompt(self.job)
-        self.assertIn('opening_plan.visible_detail',prompt)
-        self.assertIn('JSON ENTIER',prompt)
-        # An incomplete retry must not erase the last complete recoverable draft.
-        bad={'id':'partial','job':self.job['id'],'kind':'chat_text','slot':'script','status':'claimed'}
-        s.STATE['tasks'].append(bad)
-        s.accept_task_result(bad,{'ok':True,'text':'{}'})
-        self.assertEqual(self.job['rejected_script'],draft)
-        draft['opening_plan']['payoff_scene']=3
-        s.store_script(self.job,draft)
-        self.assertNotIn('editorial_feedback',self.job)
-        self.assertNotIn('rejected_script',self.job)
-
     def test_retention_rules_only_apply_to_new_productions(self):
         draft=story()
         editorial.validate(draft,self.job,s.STATE['jobs'])
@@ -115,8 +96,8 @@ class EditorialTests(unittest.TestCase):
         draft['scenes'][1]['dialogue'][0]['text']=' '.join(['word']*24)
         editorial.validate(draft,self.job,s.STATE['jobs'])
         draft['scenes'][1]['dialogue'][0]['text']+=' word'
-        with self.assertRaisesRegex(editorial.Rejection,'24 mots'):
-            editorial.validate(draft,self.job,s.STATE['jobs'])
+        editorial.validate(draft,self.job,s.STATE['jobs'])  # 0.1.102: one word too many is cut, never a rewrite
+        self.assertLessEqual(sum(len(x['text'].split()) for x in draft['scenes'][1]['dialogue']),24)
 
     def opening_story(self):
         self.job.update(hook_version=1,retention_version=1)

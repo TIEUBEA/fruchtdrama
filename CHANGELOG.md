@@ -5,6 +5,11 @@ correspondante (P0-xx, P1-x, P2-xx) détaillée dans `docs/sudf/`. Guide pour re
 `docs/sudf/REPRISE.md`. **Mode d'emploi détaillé** (installer, lancer, utiliser), mis à jour à chaque
 version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, version par version).
 
+## 0.1.107 — 09/11/2026 — moteur V09 + builds 0.1.97 à 0.1.106
+Fusion sélective des builds 0.1.97 à 0.1.106 (06-07/11) dans le moteur V09.
+- Repris : 3 voies ChatGPT ; un redémarrage du studio n'arrête plus aucun épisode ; onglet ChatGPT figé relâché après 4 min ; mise à jour de l'extension retentée toutes les 10 min ; une planche et un montage à la fois ; contrôles secondaires désactivés par défaut ; répliques un peu trop longues raccourcies par le studio (sans réécriture) ; vérification des paroles retirée ; durée de clip hors plage notée, jamais bloquante ; résolution Flow affichée acceptée, coût toujours vérifié ; échec de montage lisible ; page du studio rechargée seule après une mise à jour ; bandeau d'arrêt sur l'épisode ; onglet coupé par une mise à jour de l'extension non compté comme un essai.
+- Règles V09 gardées : Vidogrid conservé (1 ou 2 essais quand Flow refuse), Arena retiré, Grok pour le clip 1 seulement, Omni 1.2 Flash en 10 s (30 crédits), copie fidèle de la vidéo d'origine, un envoi Flow incertain attend le propriétaire, un clip en échec attend « Refaire » (pas de planche animée à la place).
+
 ## 0.1.106 (07/11/2026)
 
 **Corrigé**

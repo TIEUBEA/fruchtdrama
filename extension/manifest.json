@@ -24,6 +24,10 @@
     "https://*.googlevideo.com/*",
     "https://grok.com/*",
     "https://*.grok.com/*",
+    "https://lmarena.ai/*",
+    "https://*.lmarena.ai/*",
+    "https://arena.ai/*",
+    "https://*.arena.ai/*",
     "https://vidogrid.ai/*",
     "https://*.vidogrid.ai/*"
   ],

@@ -137,7 +137,10 @@ class RealMediaTests(unittest.TestCase):
     def test_qc_duration_range_per_engine(self):
         folder = pathlib.Path(tempfile.mkdtemp()); self.clip(folder, 'six.mp4', 6)
         self.assertEqual([e for e in quality.technical(folder / 'six.mp4', engines.ENGINES['grok']['range'])['hard_errors'] if 'Durée' in e], [])
-        self.assertTrue(any('Durée' in e for e in quality.technical(folder / 'six.mp4', engines.ENGINES['flow']['range'])['hard_errors']), 'a 6 s clip is wrong for Flow')
+        # 0.1.99: a length outside the engine's range is noted, never blocking (the clip is kept as it is at the montage).
+        flow = quality.technical(folder / 'six.mp4', engines.ENGINES['flow']['range'])
+        self.assertEqual([e for e in flow['hard_errors'] if 'Durée' in e], [])
+        self.assertTrue(any('Durée' in n for n in flow['notes']), 'a 6 s clip is noted for Flow')
 
     def test_montage_keeps_real_grok_durations(self):
         s.STATE = s.fresh(); j = clip_job('grok'); folder = s.job_dir(j)

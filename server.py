@@ -27,7 +27,7 @@ import maintenance
 import series
 import licence
 import readiness
-VERSION='0.1.106'
+VERSION='0.1.107'
 OFFICIAL_ORIGIN='chrome-extension://bhdmibhibonmaamgcbpmbhedhohfongj'  # extension/manifest.json "key"
 import sys
 import traceback
@@ -1583,18 +1583,20 @@ def board_ready(j,i):
     return j['config'].get('board_controls','none')=='none' or bool(j.get('board_checked'))
 
 def held_clips(j):
-    """Clips set aside (0.1.97): Flow then Grok failed. The other clips go on; « N clips en échec » comes only when
-    nothing else is left to make. An uncertain Flow submission no longer holds its clip: Grok takes it at once."""
-    return {i for i,s in enumerate(j.get('scenes') or []) if s.get('engine_exhausted') and not s.get('clip')}
+    """Clips that wait for the owner: a Flow submission that may have been charged, or every engine tried.
+    The other clips go on (owner 06/11/2026); « Action requise » comes only when nothing else is left to make."""
+    out={int(t['slot'].split(':')[1]) for t in uncertain_clip_tasks(j)}
+    return out|{i for i,s in enumerate(j.get('scenes') or []) if s.get('engine_exhausted') and not s.get('clip')}
 
 def failed_clips(j):
     """« Clip N : Flow (raison) puis Grok (raison) — clip à refaire », one row per clip set aside (episode page)."""
     return [{'index':i,'text':engine_chain.failure(i,s)} for i,s in enumerate(j.get('scenes') or []) if s.get('engine_exhausted') and not s.get('clip')]
 
 def held_message(j):
-    rows=failed_clips(j)
-    return (f'{len(rows)} clip(s) en échec : '+' ; '.join(r['text'].split(' — ')[0] for r in rows)
-            +'. Refais-les (« Refaire » sur la scène, avec une consigne si besoin) ou importe un clip : le montage attend tous les clips.')
+    uncertain=uncertain_clip_tasks(j)
+    if uncertain:return uncertain_message(j)
+    rows=[f'clip {i+1} : '+engine_chain.summary(s) for i,s in enumerate(j['scenes']) if s.get('engine_exhausted') and not s.get('clip')]
+    return 'Aucun moteur n’a pu faire '+('ces clips' if len(rows)>1 else 'ce clip')+', même avec le prompt adouci — '+' ; '.join(rows)+'. Modifie la scène (« Refaire » avec une consigne) ou importe un clip, puis Reprendre.'
 
 def still_clip(j,i):
     """The board of scene i as a silent clip of the episode's clip length, with a slow zoom (no AI, no credit)."""
@@ -1611,33 +1613,17 @@ def still_clip(j,i):
     event(j,f'Clip {i+1} : planche animée à la place du clip (Flow et Grok en échec).');return True
 
 def schedule_clips(j):
-    """Clips stage. Returns True while clips remain to make (queued, in flight or set aside); False when every clip is in.
+    """Clips stage. Returns True while clips remain to make (queued, in flight or waiting); False when every clip is in.
     One clip first (unchanged rules: switch, wait for credits); then, with Flow and the automatic switch, more clips at
-    once on other ready accounts, up to the « clips en parallèle » setting. A clip set aside never stops the others."""
+    once on other ready accounts, up to the « clips en parallèle » setting. A clip held for the owner never stops the others."""
     active=video_tasks(j);busy={int(t['slot'].split(':')[1]) for t in active if str(t.get('slot','')).startswith('clip:')}
     held=held_clips(j)
     todo=[i for i,s in enumerate(j['scenes']) if not s.get('clip') and i not in busy and i not in held]
     if not todo:
         if active:return True
         if held:
-            # 0.1.102 (owner: « ça doit continuer jusqu'à la fin sans arrêt »): a clip neither Flow nor Grok could make is
-            # replaced by its board, slowly zoomed, and the montage goes on. Said in the banner; « Refaire » still works.
-            # A Flow clip maybe already generated and charged keeps the owner's check (recovery or « il n'existe pas »).
-            doubt={int(t['slot'].split(':')[1]) for t in uncertain_clip_tasks(j)}
-            if 2*len(held)>len(j['scenes']):
-                # More than half the clips failed: a general problem (site changed, accounts out), never a video of
-                # boards only. Said plainly; Reprendre makes them again from Flow.
-                last=engine_chain.failure(min(held),j['scenes'][min(held)])
-                for k in held:engine_chain.reset(j['scenes'][k])
-                if j['status']=='running':
-                    j['status']='attention';alert(j,'action',f'{len(held)} clips sur {len(j["scenes"])} en échec sur Flow et Grok : problème général, pas de vidéo faite de planches. Dernier : {last}. Regarde les onglets Flow et Grok, puis « Reprendre » refait ces clips.')
-                return True
-            stills=[i for i in sorted(held) if i not in doubt and still_clip(j,i)]
-            if stills:
-                alert(j,'auto','Clip(s) '+', '.join(str(i+1) for i in stills)+' : Flow et Grok ont échoué, la planche animée les remplace pour finir la vidéo. Refais-les ou importe un clip si tu veux mieux.')
-            if held_clips(j):
-                if j['status']=='running':j['status']='attention';alert(j,'action',held_message(j))
-                return True
+            if j['status']=='running':j['status']='attention';event(j,held_message(j))
+            return True
         return False
     if not active:
         # Find ready work before setting a global account/credit wait for the first scene.
@@ -1913,29 +1899,26 @@ def clip_failed(j,t,result,kind):
             if engine=='flow':j['status']='attention'  # shared Flow settings: fix once before trying every other clip
             alert(j,'action',f'Clip {i+1} : '+('Grok n’a pas livré le clip après le refus de Flow.' if engine=='grok' else 'Flow rencontre un problème technique ; Grok est réservé aux refus de génération.')+' '+engine_chain.short(reason))
         schedule(j);return True
-    others=lambda:engine_chain.pick(scene,engine_chain.order(STATE.get('settings'),j['config']),lambda e:e!=engine and e not in engine_chain.tried(scene) and clip_ready(j,i)(e))
+    chain=engine_chain.order(STATE.get('settings'),j['config'])
+    ready=lambda e:engine_ready(j,e)
     if kind=='quota' and t['kind']=='engine_video':
         moment=time.time();email=((t.get('payload') or {}).get('account') or {}).get('email')
         account=next((a for a in engine_accounts.accounts(STATE,engine) if a['email']==email),None) or engine_accounts.by_id(STATE,current_account(j,engine))
-        # One Grok account at its limit is an account change (like Flow), not Grok's try: the episode's own engine
-        # goes on with its next account (guided change), as before.
-        if account and engine==engines.of(j) and any(a['id']!=account['id'] and not engine_accounts.walled(a,moment) for a in engine_accounts.accounts(STATE,engine)):return False
-        # Remembered, so the next clips skip it; this clip is not kept waiting.
+        if not engine_chain.pick(scene,chain,lambda e:e!=engine and ready(e)):return False  # nothing else: the existing wait for renewal
         if account:engine_accounts.wall(account,moment,errors.retry_after(result),reason)
         else:STATE.setdefault('engine_walls',{})[engine]=moment+(errors.retry_after(result) or engine_accounts.DEFAULT_WALL)
-    elif kind in errors.HUMAN and not others():
-        return False  # a sign-in or an anti-robot check with nothing else ready: only the owner can act (« Action requise »)
-    t['status']='failed'
+    elif kind in errors.HUMAN and not engine_chain.pick(scene,chain,lambda e:e!=engine and ready(e)):
+        return False  # nothing else ready: the owner signs in or solves the check, as before
     note_not_ready(t,result)
     engine_chain.record(scene,engine,kind,reason,now())
-    chain=engine_chain.order(STATE.get('settings'),j['config'])
-    nxt=engine_chain.advance(scene,chain,clip_ready(j,i))
-    j['status']='running'
-    event(j,engine_chain.line(i,engine,kind,reason,nxt))
-    if kind=='uncertain':
-        alert(j,'auto',f'Clip {i+1} : envoi Flow incertain ({engine_chain.short(reason)})'+(' → essai sur '+engine_chain.label(nxt) if nxt else '')
-              +'. Flow ne refait pas ce clip ; s’il l’a quand même généré, il est récupéré tout seul et complète l’épisode.')
-    if not nxt:set_aside(j,i)
+    before=engine_chain.round_of(scene);nxt=engine_chain.advance(scene,chain,ready)
+    t['status']='failed';j['status']='running'
+    event(j,engine_chain.line(i,engine,kind,reason,nxt,engine_chain.round_of(scene)>before))
+    if not nxt and redraw_refused_board(j,i):schedule(j);return True
+    if not nxt:ask_grok(j,i)
+    if not nxt:
+        scene['engine_exhausted']=True
+        alert(j,'action',f'Clip {i+1} : aucun moteur ne l’a fait, même avec le prompt adouci — {engine_chain.summary(scene)}. Modifie la scène (« Refaire » avec une consigne) ou importe un clip, puis Reprendre. Les autres clips continuent.')
     schedule(j);return True
 
 THIRD_PARTY=re.compile(r'contenu(?:s)? tiers|fournisseurs de contenu|third[- ]party|Drittanbieter',re.I)
