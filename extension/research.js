@@ -39,7 +39,7 @@ globalThis.FruchtResearch={
    // Cover image of the card (Filon gallery). Only the displayed https URL is kept.
    const img=[...card.querySelectorAll('img')].map(i=>i.currentSrc||i.src).find(s=>/^https:\/\//.test(s||''))||'';
    rows.push({url:'https://www.tiktok.com'+u.pathname,title,...this.metrics(card),date,thumb:img.slice(0,2000)});
-   if(rows.length>=30)break;
+   if(rows.length>=200)break;
   }
   return rows;
  }

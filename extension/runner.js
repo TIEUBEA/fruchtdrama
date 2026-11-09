@@ -64,9 +64,19 @@ async function run(task,attachments){
   videoPayload:v=>globalThis.FruchtMedia.videoPayload(v),
   retryAfter:t=>globalThis.FruchtComposer.retryAfter?.(t)||null});
  if(task.kind==='tiktok_search'){
-  const candidates=await waitFor(()=>{const rows=globalThis.FruchtResearch.extract(document);return rows.length?rows:null;},
+  const first=await waitFor(()=>{const rows=globalThis.FruchtResearch.extract(document);return rows.length?rows:null;},
    45000,'Aucun résultat vidéo TikTok détecté après 45 s. Vérifie l’onglet TikTok dans la fenêtre FruchtDrama, puis actualise le Filon.');
-  return {ok:true,candidates};
+  // The first screen holds about 12 videos (owner 09/11/2026: « même la veille ne marche pas », the Atelier lists hundreds).
+  // The results are scrolled, read only, until nothing new comes or 150 videos are seen (about 30 s at most).
+  const all=new Map(first.map(r=>[r.url,r]));let still=0;
+  for(let k=0;k<14&&all.size<150&&still<3;k++){
+   requireLiveExtension();const before=all.size;
+   window.scrollTo(0,document.documentElement.scrollHeight);await new Promise(r=>setTimeout(r,1800));
+   for(const r of globalThis.FruchtResearch.extract(document))if(!all.has(r.url))all.set(r.url,r);
+   still=all.size===before?still+1:0;
+  }
+  window.scrollTo(0,0);
+  return {ok:true,candidates:[...all.values()]};
  }
  const isFlow=task.kind==='flow_video';
  const checkFlowAccount=()=>{

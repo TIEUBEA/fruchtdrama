@@ -829,7 +829,7 @@ def repair_duplicate_scenes(j):
 
 def rank_candidates(rows,language='Deutsch (de-DE)'):
     valid=[]
-    for r in rows[:100]:
+    for r in rows[:200]:
         url=str(r.get('url','')); u=urllib.parse.urlparse(url)
         if u.hostname not in ('www.tiktok.com','tiktok.com') or not re.fullmatch(r'/@[^/]+/video/\d+',u.path): continue
         item={'url':f'https://www.tiktok.com{u.path}','title':str(r.get('title',''))[:1500], 'observed_at':now()}
@@ -2097,7 +2097,7 @@ def store_script(j,s):
 def apply_research(j,rows):
     if j.get('filon_only'):
         # Filon refresh: keep the gallery, never start a story.
-        candidates=rank_candidates(rows,j['config'].get('language','Deutsch (de-DE)'))[:60]
+        candidates=rank_candidates(rows,j['config'].get('language','Deutsch (de-DE)'))[:150]
         if not candidates:
             j['status']='attention'
             event(j,'TikTok n’a renvoyé aucun lien vidéo exploitable. Ouvre TikTok dans la fenêtre FruchtDrama, vérifie la recherche puis actualise à nouveau.')
