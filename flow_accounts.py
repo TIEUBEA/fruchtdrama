@@ -100,8 +100,12 @@ def offline_route(state,p,now=None):
         and seen_ago(c,now) is not None and seen_ago(c,now)<180 for c in clients.values())
 
 
-def usable(p):
-    """Not marked « À régler » or « Pas d'accès » by « Préparer mes comptes » or by a page that did not open (0.1.91)."""
+def usable(p, moment=None):
+    """Not marked « À régler » or « Pas d'accès » by « Préparer mes comptes » or by a page that did not open (0.1.91),
+    and not set aside after a clip failed on it (hold_until: a page that opens is not a page that works, 09/11/2026)."""
+    import time
+    if (p.get('hold_until') or 0) > (moment or time.time()):
+        return False
     return (p.get('readiness') or {}).get('state') not in ('fix', 'no_access')
 
 

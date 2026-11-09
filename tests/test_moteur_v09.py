@@ -231,3 +231,12 @@ class RawScenario(unittest.TestCase):
         s.accept_task_result(t, {'ok': False, 'recoverable': True, 'raw': raw, 'error': 'Réponse JSON complète non détectée.'})
         self.assertEqual(j['stage'], 'characters', j['events'][-1]['text'])
         self.assertTrue(any('relue par le studio' in e['text'] for e in j['events']))
+
+
+class AccountHold(unittest.TestCase):
+    def test_account_failing_a_clip_is_set_aside_even_if_it_opens(self):
+        import flow_accounts
+        p = {'readiness': {'state': 'ready'}, 'hold_until': s.time.time() + 60}
+        self.assertFalse(flow_accounts.usable(p))
+        p['hold_until'] = s.time.time() - 1
+        self.assertTrue(flow_accounts.usable(p))

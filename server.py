@@ -2210,6 +2210,9 @@ def accept_task_result(t,result):
             # No credits, or no Flow access at all for this Google account: skip it, switch to the next one.
             p=profile_by(t.get('profile'))
             if p and result['flow_blocked']!='not_ready':p['blocked']=result['flow_blocked']
+            if p and result['flow_blocked']=='not_ready' and isinstance(result.get('not_ready'),dict):
+                # The account page opened but Flow did not work there: set aside 3 h, whatever the next opening check says.
+                p['hold_until']=time.time()+3*3600;p['hold_reason']=str(result['not_ready'].get('reason',''))[:300]
             if not was_paused and STATE.get('settings',{}).get('flow_auto'):
                 j['status']='running';schedule(j)
         if lane_of(t)=='video' and j.get('stage')=='images' and j['status']=='attention' and not was_paused:
