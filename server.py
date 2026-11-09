@@ -382,6 +382,8 @@ def release_lost_chat(moment=None):
             if j.get('status')=='running':schedule(j)
     return released
 
+# Media a window or the owner may deliver (image_end: FRUIT-Z closing image; real case 09/11/2026: refused at first).
+MEDIA_SLOT=re.compile(r'(?:cover|characters|character:[a-z][a-z0-9_]{0,24}|state:\d+|image:\d+|image_end:\d+|clip:\d+)')
 ROBOT_LAST=0
 def robot_tick(moment=None):
     """Robot de surveillance (robot.py): repairs free steps stopped on a technical error and episodes that stall."""
@@ -3047,7 +3049,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     if not j: raise ValueError('Projet inconnu')
                     ext=q.get('ext',[''])[0].lower()
                     if ext not in ('png','jpg','jpeg','webp','mp4','webm'): raise ValueError('Type média non accepté')
-                    if not re.fullmatch(r'(?:cover|characters|character:[a-z][a-z0-9_]{0,24}|state:\d+|image:\d+|clip:\d+)',slot): raise ValueError('Emplacement média invalide')
+                    if not MEDIA_SLOT.fullmatch(slot): raise ValueError('Emplacement média invalide')
                     if slot.startswith('character:') and not any(c['id']==slot.split(':')[1] for c in j['characters']): raise ValueError('Personnage inconnu')
                     if slot.startswith('state:') and int(slot.split(':')[1])>=len(state_changes(j)): raise ValueError('Feuille d’état inconnue')
                     if slot not in ('cover','characters') and not slot.startswith(('character:','state:')) and int(slot.split(':')[1])>=len(j['scenes']): raise ValueError('Scène inconnue')

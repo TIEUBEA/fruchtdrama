@@ -114,6 +114,13 @@ class Production(unittest.TestCase):
         self.assertIsNone(s.clip_engine_for(j, 1))
 
 
+class Upload(unittest.TestCase):
+    def test_closing_image_is_a_valid_media_slot(self):
+        for slot in ('image_end:0', 'image:3', 'clip:7', 'cover'):
+            self.assertTrue(s.MEDIA_SLOT.fullmatch(slot), slot)
+        self.assertFalse(s.MEDIA_SLOT.fullmatch('image_end:x'))
+
+
 class Creation(unittest.TestCase):
     def test_new_episode_from_a_link_is_fruit_z(self):
         import threading, urllib.request
