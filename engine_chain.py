@@ -67,6 +67,10 @@ def v09_next(scene, index, grok_ready, vidogrid_ready=False):
         return 'flow'
     if flow[-1].get('kind') == 'refusal' and len(flow) == 1 and not vido:
         return 'flow'
+    # A technical failure before anything was sent (page not ready, new account dialog) gets one more Flow try
+    # (real case 09/11/2026, clip 4: « Paramètres Flow indisponibles » on a newly detected account).
+    if flow[-1].get('kind') == 'interface' and len(flow) == 1:
+        return 'flow'
     refused = flow[-1].get('kind') == 'refusal' or (vido and vido[-1].get('kind') == 'refusal')
     if refused and vidogrid_ready and len(vido) < VIDOGRID_TRIES and (not vido or vido[-1].get('kind') not in ('quota', 'login', 'challenge', 'credits')):
         return 'vidogrid'

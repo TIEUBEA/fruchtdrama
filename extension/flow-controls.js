@@ -156,8 +156,20 @@ globalThis.FruchtFlow={
   const settings=this.settingsButton(doc);
   if(settings){settings.click();await pause(350);}
  },
+ // A new Google account opens Flow on a welcome / tour dialog that hides the settings (real case 09/11/2026, account 16):
+ // simple acknowledgement buttons only, never an acceptance of terms (handled by uploadConsent with the owner's rule).
+ dismissWelcome(doc){
+  const dialogs=[...doc.querySelectorAll('[role="dialog"],[role="alertdialog"]')].filter(d=>this.visible(doc,d));
+  for(const d of dialogs){
+   const b=[...d.querySelectorAll('button')].find(x=>this.visible(doc,x)&&!x.disabled&&/^(?:OK|Compris|J.ai compris|Got it|Fermer|Close|Plus tard|Not now|Ignorer|Skip|Verstanden|Schließen|Später)$/i.test((x.innerText||x.getAttribute('aria-label')||'').trim()));
+   if(b){b.click();return true;}
+  }
+  return false;
+ },
  async configure(doc,pause,cost,model,resolution='720p',seconds=8,aspect='9:16'){
-  const settings=this.settingsButton(doc);if(!settings)throw Error('Paramètres Flow indisponibles ; aucun envoi effectué.');
+  let settings=this.settingsButton(doc);
+  for(let k=0;k<30&&!settings;k++){this.dismissWelcome(doc);await pause(500);settings=this.settingsButton(doc);}
+  if(!settings)throw Error('Paramètres Flow indisponibles après 15 s ; aucun envoi effectué.');
   // A panel left open by an earlier try in this tab doubled every option (06/11/2026: « Réglage Flow vidéo / 9:16 / x1
   // non reconnu » on every account): only the most recent settings panel counts.
   const radios=()=>{const all=[...doc.querySelectorAll('[role="radio"]')].filter(b=>this.visible(doc,b));const panes=[...new Set(all.map(b=>b.closest?.('.cdk-overlay-pane,[role="dialog"],[role="menu"]')).filter(Boolean))];return panes.length>1?all.filter(b=>b.closest('.cdk-overlay-pane,[role="dialog"],[role="menu"]')===panes[panes.length-1]):all;};

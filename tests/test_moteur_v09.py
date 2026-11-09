@@ -81,6 +81,8 @@ class RoutingUnit(unittest.TestCase):
         sc['engine_tries'].append({'engine': 'vidogrid', 'kind': 'refusal'})
         self.assertIsNone(engine_chain.v09_next(sc, 3, True, True), 'two Vidogrid tries at most')
         tech = {'engine_tries': [{'engine': 'flow', 'kind': 'interface'}]}
+        self.assertEqual(engine_chain.v09_next(tech, 2, True, True), 'flow', 'nothing sent: one more Flow try')
+        tech['engine_tries'].append({'engine': 'flow', 'kind': 'interface'})
         self.assertIsNone(engine_chain.v09_next(tech, 2, True, True), 'Vidogrid only for refused scenes')
         self.assertIsNone(engine_chain.v09_next({'engine_tries': [{'engine': 'flow', 'kind': 'refusal'}] * 2}, 2, True, False))
         self.assertNotIn('arena', engine_chain.order({}, {'clip_routing': engine_chain.V09}))

@@ -9,6 +9,11 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 
 
+## 0.1.96.26 (09/11/2026)
+**Corrigé**
+- **Compte Google neuf dans Flow** : la fenêtre d'accueil cachait les réglages et le clip échouait en 3 s (« Paramètres Flow indisponibles »). L'extension attend jusqu'à 15 s et ferme les fenêtres d'accueil simples (jamais une acceptation de conditions).
+- **Moteur V09** : un échec technique de Flow sans aucun envoi est réessayé une fois au lieu d'arrêter le clip.
+
 ## 0.1.96.25 — suite (09/11/2026, suivi en direct d'une production)
 **Corrigé**
 - **Grok relu avant de démarrer** (moteur V09) : un ancien « À régler » envoyait le clip 1 sur Flow sans vérifier si Grok était revenu. Grok ne bloque jamais : indisponible, le clip 1 part sur Flow.
