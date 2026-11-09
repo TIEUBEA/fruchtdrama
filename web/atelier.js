@@ -143,6 +143,10 @@ function filon(){loadFigures();const niche=curNiche(),all=filonItems(niche),foll
  const attempted=state.settings.filon_attempted||state.settings.filon_refreshed;
  // 24 h first, like the Atelier; until the owner picks a period, an empty 24 h widens to 7 days, then to everything.
  if(!filonPeriodChosen){const fresh=d=>all.some(x=>(filonTab!=='viral'||x.viral)&&(x.age??99)<=d);filonPeriod=filonTab==='latest'?'all':fresh(1)?'24h':fresh(7)?'7d':'all';}
+ // A period chosen earlier that hides everything in this tab (real case 09/11/2026: « 24 h » on a fresh relevé of
+ // older videos showed « Aucune vidéo ») falls back to the widest period holding videos, and says so on the chip.
+ if(filonPeriodChosen&&filonPeriod!=='all'){const lim={'24h':1,'3d':3,'7d':7}[filonPeriod],inTab=x=>(filonTab!=='viral'||x.viral);
+  if(!all.some(x=>inTab(x)&&(x.age??99)<=lim)&&all.some(inTab)){filonPeriod=all.some(x=>inTab(x)&&(x.age??99)<=7)?'7d':'all';}}
  const days={'24h':1,'3d':3,'7d':7}[filonPeriod],q=filonSearch.trim().toLowerCase();
  let items=(filonTab==='latest'?latestItems:all).filter(x=>(filonTab!=='viral'||x.viral)&&(!days||(x.age??99)<=days)&&(filonDuration==='all'||(d=>d>0&&({short:d<=60,m90:d>=60&&d<=90,m120:d>=60&&d<=120,long:d>=120})[filonDuration])(x.f.duration))&&(!filonUnfollowed||!followed.includes(x.account))&&(!q||('@'+x.account+' '+(x.f.desc||'')+' '+(x.title||'')).toLowerCase().includes(q)));
  const accounts=filonAccounts(all),median=Object.fromEntries(accounts.map(a=>[a.account,a.median||0]));
@@ -505,7 +509,7 @@ document.addEventListener('click',async e=>{const t=e.target.closest?.('[data-sw
 document.addEventListener('click',async e=>{const t=e.target.closest?.('[data-filon-niche],[data-niche-editor],[data-niche-toggle],[data-filon-tag]');if(!t)return;e.preventDefault();
  try{if(t.dataset.nicheEditor){nicheEditor=!nicheEditor;render();return}
   if(t.dataset.filonTag){filonSearch=t.dataset.filonTag;render();return}
-  if(t.dataset.filonNiche){await api('/api/filon',{niche:t.dataset.filonNiche});await refresh(true);return}
+  if(t.dataset.filonNiche){filonPeriodChosen=false;await api('/api/filon',{niche:t.dataset.filonNiche});await refresh(true);return}
   const n=t.dataset.nicheToggle,mine=myNiches();await api('/api/filon',{niches:mine.includes(n)?mine.filter(x=>x!==n):[...mine,n]});await refresh(true);}catch(err){toast(err.message)}});
 document.addEventListener('submit',async e=>{if(e.target.id!=='nicheAdd')return;e.preventDefault();const n=String(new FormData(e.target).get('niche')||'').trim();if(!n)return;
  try{await api('/api/filon',{niches:[...myNiches(),n]});await refresh(true);toast('Niche ajoutée');}catch(err){toast(err.message)}});

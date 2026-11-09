@@ -126,6 +126,7 @@ async function receiveMedia(task,result){
  const data=await r.json();if(!r.ok)throw Error(data.error);return {ok:true,file:data.file};
 }
 async function finish(active,result){
+ if(active.task?.kind==='tiktok_search'){const back=(await chrome.storage.local.get('researchReturnTab')).researchReturnTab;if(back){chrome.tabs.update(back,{active:true}).catch(()=>{});await chrome.storage.local.remove('researchReturnTab');}}
  // Persist a completed reply before delivery. A temporary local-server outage
  // must never cause another prompt to be sent.
  // Binary data can exceed chrome.storage.local's quota after base64 encoding.
@@ -632,8 +633,12 @@ async function tabForTask(task,cfg,key){
   const url='https://www.tiktok.com/search?q='+encodeURIComponent(task.payload.query);
   const saved=cfg.researchTab;let previous;
   if(saved)try{previous=await chrome.tabs.get(saved);}catch{}
-  if(previous&&/^https:\/\/(www\.)?tiktok\.com\//.test(previous.url||''))tab=await FruchtWorkspace.adopt(chrome,await chrome.tabs.update(previous.id,{url,active:false}));
-  else tab=await FruchtWorkspace.createTab(chrome,{url,active:false});
+  // In the foreground of the FruchtDrama window during the search (about 30 s): TikTok loads the next results only in a
+  // visible tab (a hidden one stayed at 12 videos, 09/11/2026). The tab shown before comes back when the search ends.
+  const shown=(await chrome.tabs.query({active:true,windowId:(await FruchtWorkspace.windowId?.(chrome))??chrome.windows.WINDOW_ID_CURRENT}).catch(()=>[]))[0];
+  if(previous&&/^https:\/\/(www\.)?tiktok\.com\//.test(previous.url||''))tab=await FruchtWorkspace.adopt(chrome,await chrome.tabs.update(previous.id,{url,active:true}));
+  else tab=await FruchtWorkspace.createTab(chrome,{url,active:true});
+  await chrome.storage.local.set({researchReturnTab:shown&&shown.id!==tab.id?shown.id:null});
   await chrome.storage.local.set({researchTab:tab.id});
  }
  return tab;
