@@ -9,6 +9,13 @@ version : `docs/MODE-EMPLOI.md` (section 12 : ce qui change pour l'utilisateur, 
 
 
 
+## 0.1.96.25 — suite (09/11/2026, suivi en direct d'une production)
+**Corrigé**
+- **Grok relu avant de démarrer** (moteur V09) : un ancien « À régler » envoyait le clip 1 sur Flow sans vérifier si Grok était revenu. Grok ne bloque jamais : indisponible, le clip 1 part sur Flow.
+- **Changement de compte Flow** : le journal donne la vraie raison (« 50 crédits, à régler », « moins de 30 crédits ») au lieu de « vide ».
+- **Plus de crédits Flow** : quand un compte se recharge dans l'heure, l'épisode attend et repart seul, au lieu de « Action requise » à cause d'un compte sans accès à Flow.
+- **Affichage** : « Planche 6 reçue », « Clip 2 reçu (Google Flow) » au lieu d'un nom de fichier ; version réelle en bas de page ; séparateur en trop retiré sous le titre de l'épisode.
+
 ## 0.1.96.25 (09/11/2026)
 **Corrigé**
 - **Scénario illisible pour l'extension** : la réponse brute de ChatGPT est envoyée au studio, gardée dans le dossier de l'épisode (`script_raw_….txt`) et relue par le studio (balises de code, guillemets typographiques, virgules en trop). Un défaut restant passe par la correction légère habituelle, avec sa raison exacte, au lieu de « À vérifier ».

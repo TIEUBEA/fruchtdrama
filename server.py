@@ -444,6 +444,8 @@ def public_state(light=False):
     s['key_saved']=bool(STATE['clients'])  # an extension holds the key once it has paired, manually or automatically
     s['ffmpeg']=bool(shutil.which('ffmpeg'))
     s['character_styles']=character_styles.options()
+    try:s['extension_version']=json.loads((ROOT/'extension'/'manifest.json').read_text('utf-8')).get('version')
+    except (OSError,ValueError):s['extension_version']=None
     s['licence']=LICENCE.view()
     s['montage']=montage.validate({},STATE['settings'].get('montage'));s['montage_summary']=montage.summary(s['montage'])
     root=backups_root();s['backups']={'folder':str(root),'count':len(story_backup.listing(root))}
@@ -1637,6 +1639,15 @@ def schedule_flow_clip(j,i,early=False,parallel=False):
         return not early
     if not p and STATE.get('settings',{}).get('flow_auto'):
         unready=[x for x in readiness.candidates(STATE,cost,lambda x:flow_accounts.eligible(STATE,x)) if not flow_accounts.usable(x)]
+        refill=[x for x in STATE['profiles'] if x.get('refill_at') and x.get('auto_enabled') and x['refill_at']>time.time() and flow_accounts.usable(x)]
+        if unready and refill:
+            # Real case 09/11/2026: the only account with enough credits had no access to Flow, and others refill within the
+            # hour: the episode waits for the refill and resumes alone (with the account to fix named), no « Action requise ».
+            if early:return False
+            j['status']='waiting_credit';back=min(x['refill_at'] for x in refill)
+            event(j,f'Plus aucun compte Flow prêt avec {cost} crédits : le clip part tout seul à la prochaine recharge (vers {clock_in(back)}). À régler quand tu veux : '
+                  +'; '.join(readiness.mask(x.get('flow_email') or x.get('label'))+' : '+readiness.reason_of(x.get('readiness')) for x in unready)+'. Clips reçus conservés.')
+            return True
         if unready:
             # Accounts with credits exist but none is ready: only now « Action requise », with the exact reasons.
             if early:return False
@@ -2291,7 +2302,12 @@ def accept_task_result(t,result):
         elif slot=='cover':
             if duplicate_scene_source(j,file,-1) or ((job_dir(j)/'cover-style-reference.png').is_file() and image_fingerprint(j,file)==image_fingerprint(j,'cover-style-reference.png')):raise ValueError('Couverture rejetée : copie exacte d’une référence. Attente de la couverture composée.')
             j['cover_file']=file;j['cover']=asset_url(j,file)
-        event(j,'Média reçu : '+file)
+        # Atelier-like progress line (« Planche 6 reçue ») instead of a file name (owner 09/11/2026, UI review).
+        kind,_,num=slot.partition(':')
+        label={'image':f'Planche {int(num)+1} reçue' if num.isdigit() else 'Planche reçue','clip':f'Clip {int(num)+1} reçu' if num.isdigit() else 'Clip reçu',
+               'cover':'Miniature reçue','characters':'Feuille des personnages reçue','character':'Fiche personnage reçue',
+               'state':'Feuille d’état reçue'}.get(kind,'Média reçu')
+        event(j,label+(f" ({engines.ENGINES.get(sc.get('engine'),{}).get('label','')})" if kind=='clip' and num.isdigit() and (sc:=j['scenes'][int(num)]).get('engine') else '')+'.')
     t['status']='done'; t['result']=result;t['done_at']=now()  # done_at: Studio counts per 6 h
     if t.get('kind')=='flow_video' and profile_by(t.get('profile')):profile_by(t['profile'])['readiness']={'state':'ready','reason':'','at':now()}
     # A success clears the episode's last error only on its own lane: a board received does not erase a failed clip.
