@@ -1645,7 +1645,7 @@ def schedule_flow_clip(j,i,early=False,parallel=False):
             # hour: the episode waits for the refill and resumes alone (with the account to fix named), no « Action requise ».
             if early:return False
             j['status']='waiting_credit';back=min(x['refill_at'] for x in refill)
-            event(j,f'Plus aucun compte Flow prêt avec {cost} crédits : le clip part tout seul à la prochaine recharge (vers {clock_in(back)}). À régler quand tu veux : '
+            event(j,f'Plus aucun compte Flow prêt avec {cost} crédits : le clip part tout seul à la prochaine recharge, vers {clock_in(back)}. À régler quand tu veux : '
                   +'; '.join(readiness.mask(x.get('flow_email') or x.get('label'))+' : '+readiness.reason_of(x.get('readiness')) for x in unready)+'. Clips reçus conservés.')
             return True
         if unready:
