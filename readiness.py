@@ -162,6 +162,11 @@ def checks_needed(state, cfg, stage, cost, moment, eligible, limit=2):
     already known ready, the first `limit` such accounts. Kept short so a production starts within seconds."""
     need = needs(cfg, stage)
     sites = [n for n in need['sites'] if not fresh(site_entry(state, n), moment)]
+    # Moteur V09: Grok makes clip 1 when it is ready. It is read again before starting (an old « À régler » sent clip 1
+    # to Flow on 09/11/2026), but never blocks: unavailable, clip 1 simply goes to Flow.
+    if (cfg or {}).get('clip_routing') == 'v09_grok_first' and stage in VIDEO_STAGES and 'grok' not in sites \
+            and any(a.get('engine') == 'grok' for a in state.get('engine_accounts', [])) and not fresh(site_entry(state, 'grok'), moment):
+        sites.append('grok')
     profiles = []
     if need['flow'] and state.get('settings', {}).get('flow_auto', False):
         pool = candidates(state, cost, eligible)

@@ -1653,7 +1653,7 @@ def schedule_flow_clip(j,i,early=False,parallel=False):
         return True
     if p['id']!=j.get('flow_profile') and not parallel:
         previous=profile_by(j.get('flow_profile'))
-        j['flow_profile']=p['id'];account_usage.number_flow(STATE);event(j,account_usage.switch_line(previous,p))
+        j['flow_profile']=p['id'];account_usage.number_flow(STATE);event(j,account_usage.switch_line(previous,p,cost))
     payload={'prompt':clip_prompt(j,i,'flow'),'attachments':[asset_url(j,flow_reference(j,s['image']))],'cost':cost,'balance':p['balance'],'seconds':engines.flow_seconds(j),**({'model':j['config']['flow_model'],'resolution':j['config'].get('flow_resolution','720p')} if j['config'].get('flow_model') else {})}
     if j['config'].get('dry_run'):payload['dry_run']=True
     target=flow_accounts.route(p) if STATE.get('settings',{}).get('flow_auto') else None

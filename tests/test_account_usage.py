@@ -95,3 +95,13 @@ class ReceivedClip(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class SwitchReason(unittest.TestCase):
+    def test_account_left_with_credits_is_not_called_empty(self):
+        import account_usage as u
+        rich = {'number': 1, 'flow_email': 'one@example.com', 'balance': 50, 'readiness': {'state': 'fix'}}
+        nxt = {'number': 10, 'flow_email': 'two@example.com', 'balance': 38}
+        line = u.switch_line(rich, nxt, 30)
+        self.assertIn('50 crédits, à régler', line); self.assertNotIn('vide', line)
+        self.assertIn('moins de 30 crédits', u.switch_line({**rich, 'balance': 14, 'readiness': {}}, nxt, 30))

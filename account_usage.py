@@ -98,11 +98,18 @@ def credits(n):
     return f'{n} crédit' + ('s' if abs(n) > 1 else '')
 
 
-def switch_line(previous, profile):
+def switch_line(previous, profile, cost=None):
     """Journal line of an automatic Flow switch: « Compte Flow 2 (…, 0 crédit, vide) → compte 3 (…, 38 crédits) »."""
     if not previous:
         return 'Flow : ' + flow_name(profile) + ' ; clips reçus conservés.'
-    why = 'sans accès à Flow' if previous.get('blocked') == 'unavailable' else 'vide'
+    # Real case 09/11/2026: « 50 crédits, vide » for an account left for another reason; the journal says the real one.
+    if previous.get('blocked') == 'unavailable':
+        why = 'sans accès à Flow'
+    elif cost is not None and (previous.get('balance') or 0) >= cost:
+        state = (previous.get('readiness') or {}).get('state')
+        why = 'à régler' if state and state != 'ready' else 'occupé ou non relié à la fenêtre'
+    else:
+        why = 'vide' if cost is None or not previous.get('balance') else f'moins de {cost} crédits'
     return flow_name(previous, extra=why) + ' → ' + flow_name(profile, word='compte') + ' ; clips reçus conservés.'
 
 
