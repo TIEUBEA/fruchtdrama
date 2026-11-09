@@ -2226,7 +2226,7 @@ def accept_task_result(t,result):
     slot=t['slot']
     if slot=='research':
         d=result.get('diag')
-        if isinstance(d,dict):event(j,'Lecture TikTok : '+' → '.join(str(x) for x in (d.get('sizes') or [])[:16])+f" vidéos, « Charger plus » cliqué {d.get('clicked',0)} fois"+(', onglet caché' if d.get('hidden') else '')+'. Boutons vus : '+' | '.join(str(x)[:30] for x in (d.get('buttons') or [])[:10]))
+        if isinstance(d,dict):event(j,'Lecture TikTok : '+' → '.join(str(x) for x in (d.get('sizes') or [])[:16])+f" vidéos, « Charger plus » cliqué {d.get('clicked',0)} fois"+(', onglet caché' if d.get('hidden') else '')+f", {d.get('boxes','?')} zone(s) défilante(s). Boutons vus : "+' | '.join(str(x)[:30] for x in (d.get('buttons') or [])[:10]))
         apply_research(j,result.get('candidates',[]))
     elif slot.startswith('flow_rewrite:'):apply_flow_rewrite(j,t,result)
     elif slot=='board_review':

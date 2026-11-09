@@ -72,8 +72,12 @@ async function run(task,attachments){
   for(let k=0;k<14&&all.size<150&&still<4;k++){
    requireLiveExtension();const before=all.size;
    window.scrollTo(0,document.documentElement.scrollHeight);
+   // The results grid scrolls inside a page container, not the window: every scrollable box holding video links goes down.
+   const boxes=[...document.querySelectorAll('div,main,section')].filter(x=>x.scrollHeight>x.clientHeight+100&&/(auto|scroll)/.test(getComputedStyle(x).overflowY)&&x.querySelector('a[href*="/video/"]'));
+   for(const box of boxes){box.scrollTop=box.scrollHeight;box.dispatchEvent(new WheelEvent('wheel',{deltaY:2000,bubbles:true}));}
+   const lastCard=[...document.querySelectorAll('a[href*="/video/"]')].pop();if(lastCard)lastCard.scrollIntoView({block:'end'});
    // TikTok on a computer adds results with a « Charger plus » / « Load more » button, not by scrolling.
-   const more=[...document.querySelectorAll('button,[role="button"],div[class*="LoadMore" i]')].find(x=>x.getClientRects().length&&/^(?:Charger plus|Afficher plus|Load more|See more|Mehr laden|Mehr anzeigen|Cargar más|Carregar mais)$/i.test((x.innerText||'').trim()));
+   const more=[...document.querySelectorAll('button,[role="button"]')].find(x=>x.getClientRects().length&&/^(?:Charger plus|Load more|Mehr laden|Cargar más|Carregar mais)$/i.test((x.innerText||'').trim()));
    if(more){more.scrollIntoView({block:'center'});more.click();clicked++;}
    await new Promise(r=>setTimeout(r,more?2500:1800));
    for(const r of globalThis.FruchtResearch.extract(document))if(!all.has(r.url))all.set(r.url,r);
@@ -81,7 +85,7 @@ async function run(task,attachments){
   }
   const buttons=[...document.querySelectorAll('button,[role="button"]')].filter(x=>x.getClientRects().length).map(x=>(x.innerText||x.getAttribute('aria-label')||'').replace(/\s+/g,' ').trim()).filter(Boolean).slice(-10);
   window.scrollTo(0,0);
-  return {ok:true,candidates:[...all.values()],diag:{sizes,clicked,hidden:document.hidden,buttons}};
+  return {ok:true,candidates:[...all.values()],diag:{sizes,clicked,hidden:document.hidden,buttons,boxes:[...document.querySelectorAll('div,main,section')].filter(x=>x.scrollHeight>x.clientHeight+100&&/(auto|scroll)/.test(getComputedStyle(x).overflowY)).length}};
  }
  const isFlow=task.kind==='flow_video';
  const checkFlowAccount=()=>{
