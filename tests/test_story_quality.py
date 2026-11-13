@@ -35,7 +35,34 @@ class StoryQualityTests(unittest.TestCase):
         for banned in ('CINQ concepts', 'HISTORIQUE', 'Ne recopie pas', 'creative_selection'):
             self.assertNotIn(banned, p)
         self.assertIn('LA MÊME HISTOIRE', p); self.assertIn('DÉCOUPAGE OBLIGATOIRE', p); self.assertIn('Scène 4 : ', p)
-        self.assertIn('garde l’ouverture de la vidéo d’origine', p)
+        self.assertIn('Garde les silences et le jeu de la source', p)
+
+    def test_exact_remake_keeps_verbatim_dialogue_in_each_source_window(self):
+        j = job('identical')
+        transcript = '[00:00.2] Attends, attends !\n[00:17.5] Je reviens demain.'
+        windows = source_video.exact_windows(transcript, 18.5, 8)
+        self.assertEqual(windows, [[(0.2, 'Attends, attends !')], [], [(1.5, 'Je reviens demain.')]])
+        j['source_analysis'].update(transcript=transcript, duration=18.5, exact_windows=windows)
+        j['config'].update(scene_count=3, remake_exact=True)
+        prompt = s.script_prompt(j)
+        self.assertIn('mot pour mot', prompt)
+        self.assertIn('Scène 2 (8–16 s) : silence', prompt)
+        self.assertNotIn('reformulées', prompt)
+        scenes = [
+            {'characters': ['a'] if window else [], 'meaning': 'm', 'image_prompt': 'i', 'video_prompt': 'v',
+             'dialogue': [{'speaker': 'a', 'text': text} for _, text in window]}
+            for window in windows
+        ]
+        script = {'title': 'Titre', 'cover_title': 'Couverture', 'description': 'Fiction IA',
+                  'characters': [{'id': 'a', 'name': 'Rose', 'appearance': 'Pomme', 'voice': 'douce', 'image_prompt': 'p'}],
+                  'scenes': scenes}
+        scenes[0]['dialogue'][0]['text'] = 'Attends !'
+        with self.assertRaisesRegex(ValueError, 'paroles différentes'):
+            s.store_script(j, script)
+        scenes[0]['dialogue'][0]['text'] = 'Attends, attends !'
+        s.store_script(j, script)
+        self.assertEqual(j['scenes'][1]['dialogue'], [])
+        self.assertIn('Attends, attends !', s.clip_prompt(j, 0, 'flow'))
 
     def test_identical_script_is_not_rejected_for_being_close_to_the_source(self):
         j = job('identical')
@@ -78,7 +105,7 @@ class StoryQualityTests(unittest.TestCase):
         video = s.clip_prompt(j, 0, 'grok')
         self.assertIn('SILENT, MOUTH CLOSED: Paul', video)
         self.assertNotIn('Absent', video)
-        self.assertIn('6 seconds', video)
+        self.assertIn('10 seconds', video)
         scene.pop('critical_mark')
         self.assertIn('No text, letters, numbers', s.clip_prompt(j, 0, 'flow'))
 

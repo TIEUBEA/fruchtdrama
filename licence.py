@@ -17,6 +17,8 @@ import os
 import pathlib
 import platform
 import re
+import subprocess
+import sys
 import threading
 import urllib.error
 import urllib.request
@@ -67,6 +69,14 @@ def machine_id() -> str:
                                 winreg.KEY_READ | winreg.KEY_WOW64_64KEY) as k:
                 raw = str(winreg.QueryValueEx(k, 'MachineGuid')[0])
         except OSError:
+            raw = ''
+    elif sys.platform == 'darwin':
+        # Mac (owner 11/11/2026, migration): the hardware UUID never changes, unlike the network card fallback.
+        try:
+            out = subprocess.run(['ioreg', '-rd1', '-c', 'IOPlatformExpertDevice'], capture_output=True, text=True, timeout=10).stdout
+            found = re.search(r'"IOPlatformUUID"\s*=\s*"([^"]+)"', out)
+            raw = found[1] if found else ''
+        except (OSError, subprocess.SubprocessError):
             raw = ''
     else:
         for path in ('/etc/machine-id', '/var/lib/dbus/machine-id'):

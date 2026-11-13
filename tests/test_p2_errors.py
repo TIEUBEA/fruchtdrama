@@ -106,7 +106,11 @@ class BridgeTests(unittest.TestCase):
         j = job(); s.schedule(j); t = self.claim()
         self.report(t, {'ok': True, 'file': '../evil.png'})
         self.assertEqual(j['last_error']['kind'], 'other')
-        j2 = job(); j2['status'] = 'running'; s.schedule(j2); self.claim()
+        j2 = job(); j2['status'] = 'running'; s.schedule(j2); t2 = self.claim()
+        # 0.1.99: a restart never stops a task whose window still answers (it keeps following it, nothing sent again)…
+        s.recover_after_restart(); self.assertNotIn('last_error', j2); self.assertEqual(t2['status'], 'claimed')
+        # …only a task whose window is gone is marked as interrupted by the restart.
+        for c in s.STATE['clients'].values():c['seen'] = '2000-01-01T00:00:00+00:00'
         s.recover_after_restart(); self.assertEqual(j2['last_error']['kind'], 'restart')
 
 

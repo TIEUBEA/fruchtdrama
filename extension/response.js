@@ -41,6 +41,12 @@ globalThis.FruchtResponse={
     if(!Array.isArray(b)||b.length!==expectedScenes||!b.every((x,i)=>x&&x.index===i&&['pass','issue'].includes(x.status)&&typeof x.detail==='string'&&x.detail.trim()))continue;
     return parsed;
    }
+   if(kind==='montage_review'){
+    // « Vérifier et remonter »: one verdict on the montage with its fixes, bound to this exact task.
+    if(parsed?.production_id!==expectedJob||parsed?.generation_task_id!==expectedTask)continue;
+    if(!['ok','corriger'].includes(parsed.verdict)||(parsed.corrections!==undefined&&!Array.isArray(parsed.corrections)))continue;
+    return parsed;
+   }
    if(kind==='cover_review'){
     // Cover check of the full loop: one verdict, bound to this exact task.
     if(parsed?.production_id!==expectedJob||parsed?.generation_task_id!==expectedTask)continue;

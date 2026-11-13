@@ -1,0 +1,851 @@
+{
+  "title": "LA MALÉDICTION DE MANGO — ÉPISODE 1",
+  "cover_title": "SA TANTE L'A MAUDIT ?!",
+  "description": "Mango vend le meilleur jus du marché Dokoti… et sa propre tante ne le supporte plus. Cette nuit, au couvent d'Oncle Piment, elle passe commande. 🥭🌶️ Épisode 1 — à suivre ! #LaMalédictionDeMango #FruitsAfricains #FeuilletonAfricain #Yetna #DramaIA",
+  "lieu": "Yetna, a fictional African village inspired by Cameroon, Ivory Coast and Benin: earthen and cement houses with corrugated metal roofs, dusty paths, banana trees and tropical trees. Every building, road and stall keeps the same place in every shot.",
+  "lieux": {
+    "marche": "Dokoti market, Yetna, daytime: big open-air African market, dusty central alley with uneven stones, wooden shops, baskets, basins, fruit stalls, fabric awnings, banana trees and modest houses behind. Mango's wooden juice kiosk on one side of the alley (counter, green and white tarp roof, juice bottles, clear glasses, fresh mangoes, sign MANGO above). Tante Mango's smaller stall on the other side of the alley, set back, facing the kiosk.",
+    "marche_soir": "The same Dokoti market at dusk: traders closing their stalls, customers leaving, violet and dark blue sky, a few warm lights under the awnings. Same layout: Mango's kiosk on one side of the alley, Tante Mango's stall across, set back.",
+    "foret": "Yetna's mystic forest at night: dense dark tropical forest, tall twisted trunks framing a narrow path, branches forming a vault, exposed roots, lianas, dead leaves, low bluish mist, moonlight barely piercing the foliage; mostly blue and green light.",
+    "couvent": "Oncle Piment's convent: a clearing at the heart of the forest at night. An ancient mossy stone altar covered with roots in the centre; on it a large calabash full of glowing green liquid with slow green smoke rising. Candles, wooden objects, small calabashes and ritual accessories around the altar, always at the same places.",
+    "chambre": "Mango's bedroom in Yetna at night: earth-coloured walls, wooden bed with a woven surface, thin mattress, light pillow, beige blanket, an open window letting in bluish night light, a light curtain moving gently, a small wooden bedside table with a juice bottle and a few personal objects."
+  },
+  "story_signature": {
+    "relationship": "une tante jalouse contre son neveu",
+    "setting": "marché Dokoti et couvent d'Oncle Piment, village de Yetna",
+    "central_object": "le jus de mangue et la statuette du rituel",
+    "twist_mechanism": "la malédiction commandée frappe Mango pendant son sommeil"
+  },
+  "characters": [
+    {
+      "id": "mango",
+      "name": "Mango",
+      "appearance": "Young mango man, about 23. round ripe mango head in yellow-green, orange and red shades, small brown stem and one green leaf on top, warm brown face with brown eyes, thick black eyebrows, wide warm smile and a short black goatee. Slim athletic brown body. Short-sleeved yellow wax shirt with red and blue circular patterns, brown trousers rolled at the ankle, brown leather sandals, brown leather shoulder bag across the chest, beaded bracelets on the right wrist, black watch on the left wrist.",
+      "voice": "Young African man, warm and energetic voice with Cameroonian or Ivorian intonation; loud, joking and smiling when he sells; trembling and panicked when he suffers.",
+      "image_prompt": "Mango exactly as on the attached reference sheet: round yellow-green and red mango head with stem and green leaf, short black goatee, yellow wax shirt with red and blue circles, rolled brown trousers, brown leather shoulder bag, sandals. Premium 3D animation, 9:16.",
+      "tenue": "yellow wax shirt with red and blue circles, rolled brown trousers, brown shoulder bag, sandals, bracelets and watch",
+      "detail": "green leaf and brown stem on his round mango head, short black goatee",
+      "place": "behind the counter of his MANGO kiosk"
+    },
+    {
+      "id": "tante_mango",
+      "name": "Tante Mango",
+      "appearance": "Mango woman, about 52, Mango's aunt. Round ripe mango head in green-yellow and orange shades, stern displeased face with thick eyebrows, dark eyes, full cheeks, gold hoop earrings and a gold pendant necklace. Stout authoritative posture, often arms crossed. purple head wrap with gold patterns, purple blouse with gold embroidery, long purple and gold wrap pagne with diamond patterns, gold bangles, brown sandals.",
+      "voice": "Mature African woman, deep, authoritative and expressive voice; sighs, tongue clicks (tchip), sarcastic remarks; goes from a scornful murmur to an angry shout.",
+      "image_prompt": "Tante Mango exactly as on the attached reference sheet: round green-yellow mango head, stern face, gold hoop earrings, purple and gold head wrap, purple embroidered blouse, purple and gold diamond-pattern wrap pagne, gold bangles. Premium 3D animation, 9:16.",
+      "tenue": "purple and gold head wrap, purple embroidered blouse, purple and gold diamond-pattern pagne, gold bangles and necklace",
+      "detail": "purple and gold head wrap and gold hoop earrings",
+      "place": "at her small stall across the alley, facing Mango's kiosk"
+    },
+    {
+      "id": "piment",
+      "name": "Oncle Piment",
+      "appearance": "Old anthropomorphic dried red chili pepper, village sorcerer. Wrinkled cracked dark red chili head with a long curled brown stem on top, gaunt skull-like face, glowing yellow eyes, wide toothy menacing grin, wispy grey beard. Extremely thin, hunched, long bony red arms and fingers. Tattered rust-brown robe and shawl, many bead necklaces, belt of cowrie shells with a small gourd and bells, brown sandals. Holds a tall twisted carved wooden staff decorated with cowries and a red tassel.",
+      "voice": "Very old man, deep, hoarse and sometimes grating voice, theatrical and mocking; his signature laugh « Kèh kèh kèh ! » always sounds the same.",
+      "image_prompt": "Oncle Piment exactly as on the attached reference sheet: hunched dried red chili sorcerer, cracked red head with curled stem, glowing yellow eyes, toothy grin, tattered rust-brown robes, bead necklaces, cowrie belt with gourd, tall twisted wooden staff with cowries and red tassel. Premium 3D animation, 9:16.",
+      "tenue": "tattered rust-brown robe and shawl, bead necklaces, cowrie belt with gourd, twisted wooden staff",
+      "detail": "curled brown stem on his cracked red chili head, glowing yellow eyes",
+      "place": "behind his stone altar"
+    },
+    {
+      "id": "citron",
+      "name": "Citron",
+      "appearance": "Young lemon man, about 24, Mango's best friend, always male. Bright yellow lemon head with subtle peel texture, small brown stem and one green leaf on top, stylised African male features, expressive eyes, thick eyebrows, short dark goatee, confident half-smile. Slim brown body. Short-sleeved cream wax shirt with yellow, orange and black square patterns, brown trousers rolled at the ankle, dark brown sandals, beaded bracelets on both wrists.",
+      "voice": "Young African man, spontaneous and expressive voice with natural Cameroonian or Ivorian intonation, cheerful and warm.",
+      "image_prompt": "Citron exactly as on the attached reference sheet: young lemon man with bright yellow lemon head, stem and green leaf, short goatee, cream wax shirt with yellow orange and black squares, rolled brown trousers, sandals, beaded bracelets. Premium 3D animation, 9:16.",
+      "tenue": "cream wax shirt with yellow, orange and black squares, rolled brown trousers, sandals, beaded bracelets",
+      "detail": "bright yellow lemon head with green leaf and short goatee",
+      "place": "in front of Mango's counter, in the alley"
+    },
+    {
+      "id": "ananas",
+      "name": "Pasteur Ananas",
+      "appearance": "Pineapple man, about 60, Christian pastor of Yetna. Golden ripe pineapple head with scales and a crown of green leaves, mature African face, round glasses, grey beard, calm reassuring smile. Purple and gold pastoral robe with wax-inspired patterns, cream stole with gold crosses, brown sandals, holds a black Bible.",
+      "voice": "Mature African man, deep, calm and reassuring voice, powerful when he prays, natural Cameroonian or Ivorian intonation.",
+      "image_prompt": "Pasteur Ananas exactly as on the attached reference sheet: golden pineapple head with green leaf crown, round glasses, grey beard, purple and gold pastoral robe, cream stole with gold crosses, Bible. Premium 3D animation, 9:16.",
+      "tenue": "purple and gold pastoral robe, cream stole with gold crosses, Bible",
+      "detail": "golden pineapple head with green leaf crown and round glasses",
+      "place": "not in this episode"
+    }
+  ],
+  "scenes": [
+    {
+      "lieu": "couvent",
+      "characters": [
+        "piment",
+        "tante_mango"
+      ],
+      "meaning": "Accroche : au couvent, Oncle Piment demande à Tante Mango ce qu'elle veut faire à son neveu ; elle hurle sa haine.",
+      "montre": "Night, green smoke rising from the calabash on the stone altar; Oncle Piment behind the altar, Tante Mango facing him.",
+      "cadre": "Medium shot on Oncle Piment's face, his yellow eyes glowing in the dark, Tante Mango's shoulder in the foreground.",
+      "camera": "Starts on a medium shot of Oncle Piment, then pans to Tante Mango as she steps forward.",
+      "actions": [
+        "Oncle Piment slowly leans toward Tante Mango",
+        "Tante Mango clenches her fists and suddenly steps forward",
+        "She shouts with hatred"
+      ],
+      "image_prompt": "Night in the forest clearing: green smoke rising from a large calabash on a mossy stone altar. Medium shot of Oncle Piment behind the altar, yellow eyes glowing in the dark, leaning toward Tante Mango who faces him. High-end cinematic 3D animation, dramatic green light, 9:16.",
+      "video_prompt": "Medium shot on Oncle Piment's glowing yellow eyes; he slowly leans toward Tante Mango and asks his question in a deep menacing voice. Pan to Tante Mango: she clenches her fists, steps forward abruptly and shouts with hatred. Green smoke rises between them. Sounds: night insects, bubbling calabash.",
+      "dialogue": [
+        {
+          "speaker": "piment",
+          "text": "Que veux-tu qu'on fasse à ton neveu Mango ?",
+          "jeu": "voix grave, menaçante"
+        },
+        {
+          "speaker": "tante_mango",
+          "text": "JE VEUX QU'IL POURRISSE ! Tu m'entends ?!",
+          "jeu": "criant de haine"
+        }
+      ]
+    },
+    {
+      "lieu": "couvent",
+      "characters": [
+        "tante_mango",
+        "piment"
+      ],
+      "meaning": "Tante Mango précise son vœu ; Oncle Piment sourit et ricane.",
+      "cadre": "Camera slowly moves closer to Tante Mango's face, then Oncle Piment's sinister smile through the smoke.",
+      "camera": "Slow dolly-in on Tante Mango, then rack focus to Oncle Piment behind the green smoke.",
+      "actions": [
+        "Tante Mango spits out her wish, face twisted with hatred",
+        "Oncle Piment reveals a sinister smile",
+        "Green smoke rises between them"
+      ],
+      "image_prompt": "Same clearing at night: medium shot of Tante Mango's face twisted with hatred, Oncle Piment behind the altar smiling sinisterly through the green smoke. High-end cinematic 3D animation, 9:16.",
+      "video_prompt": "Camera slowly moves closer to Tante Mango's angry face while she finishes her wish. Oncle Piment, behind the altar, lets a sinister smile appear and laughs his signature laugh. Green smoke rises between them.",
+      "dialogue": [
+        {
+          "speaker": "tante_mango",
+          "text": "Je veux que sa pulpe devienne noire avant le lever du jour !",
+          "jeu": "haineuse"
+        },
+        {
+          "speaker": "piment",
+          "text": "Kèh kèh kèh !",
+          "jeu": "ricanant"
+        }
+      ]
+    },
+    {
+      "lieu": "couvent",
+      "characters": [
+        "piment",
+        "tante_mango"
+      ],
+      "meaning": "Oncle Piment se moque : c'est son propre neveu ; Tante Mango s'impatiente.",
+      "cadre": "Medium two-shot across the altar.",
+      "camera": "Slow lateral move around the altar.",
+      "actions": [
+        "Oncle Piment snickers and tilts his head mockingly",
+        "He leans over the altar toward Tante Mango",
+        "Tante Mango glares at him sternly"
+      ],
+      "image_prompt": "Medium two-shot across the mossy stone altar at night: Oncle Piment mocking, Tante Mango glaring at him sternly, green smoke from the calabash between them. High-end cinematic 3D animation, 9:16.",
+      "video_prompt": "Oncle Piment snickers, tilts his head mockingly and leans over the altar while he speaks. Tante Mango glares at him in silence. Green smoke drifts across the altar.",
+      "dialogue": [
+        {
+          "speaker": "piment",
+          "text": "Hééé ! Donc c'est ton propre neveu que tu veux finir comme ça ?",
+          "jeu": "ricanant"
+        }
+      ]
+    },
+    {
+      "lieu": "couvent",
+      "characters": [
+        "piment",
+        "tante_mango"
+      ],
+      "meaning": "Oncle Piment se moque : c'est son propre neveu ; Tante Mango s'impatiente.",
+      "cadre": "Medium two-shot across the altar.",
+      "camera": "Slow lateral move around the altar.",
+      "actions": [
+        "Tante Mango glares at Oncle Piment",
+        "She points at him impatiently",
+        "Oncle Piment keeps smiling in silence"
+      ],
+      "image_prompt": "Medium two-shot across the mossy stone altar at night: Oncle Piment mocking, Tante Mango glaring at him sternly, green smoke from the calabash between them. High-end cinematic 3D animation, 9:16.",
+      "video_prompt": "Tante Mango glares at Oncle Piment, then points at him impatiently while she speaks. Oncle Piment keeps smiling in silence. Green smoke drifts across the altar.",
+      "dialogue": [
+        {
+          "speaker": "tante_mango",
+          "text": "Piment ! Je ne suis pas venue ici pour bavarder !",
+          "jeu": "impatiente"
+        }
+      ]
+    },
+    {
+      "lieu": "couvent",
+      "characters": [
+        "tante_mango",
+        "piment"
+      ],
+      "meaning": "Tante Mango exige ; Oncle Piment éclate de rire et la fumée envahit le cadre.",
+      "cadre": "Tante Mango in the foreground, Oncle Piment bursting out laughing behind the altar.",
+      "camera": "Slow dolly-in while the smoke fills the frame, ending on green smoke.",
+      "actions": [
+        "Tante Mango gives her order firmly",
+        "Oncle Piment bursts out laughing",
+        "Green smoke gradually fills the whole frame"
+      ],
+      "image_prompt": "Clearing at night: Tante Mango in the foreground giving an order, Oncle Piment behind the altar starting to laugh, green smoke thickening. High-end cinematic 3D animation, 9:16.",
+      "video_prompt": "Tante Mango gives her order firmly. Oncle Piment bursts out laughing. The green smoke from the calabash grows and gradually fills the whole frame, ending on a screen full of green smoke (transition).",
+      "dialogue": [
+        {
+          "speaker": "tante_mango",
+          "text": "Fais seulement ce que je te demande !",
+          "jeu": "autoritaire"
+        },
+        {
+          "speaker": "piment",
+          "text": "Kèh kèh kèh !",
+          "jeu": "éclatant de rire"
+        }
+      ]
+    },
+    {
+      "lieu": "marche",
+      "characters": [
+        "mango"
+      ],
+      "meaning": "Plus tôt dans la journée : Mango vend son jus au marché Dokoti et interpelle les passants.",
+      "montre": "Wide shot of the busy Dokoti market by day; the camera moves toward Mango's kiosk where he raises a bottle.",
+      "cadre": "Wide shot of the market, then medium shot of Mango behind his counter.",
+      "camera": "Starts wide on the market, moves forward to Mango's kiosk.",
+      "actions": [
+        "Traders work and customers walk between the stalls",
+        "Mango picks up a bottle of juice and raises it",
+        "He calls out to the passers-by with a big smile"
+      ],
+      "image_prompt": "Daytime, busy Dokoti market: traders working, customers walking, stalls full of goods; in the centre Mango behind the counter of his wooden kiosk with the MANGO sign, raising a bottle of mango juice and smiling. High-end cinematic 3D animation, warm sunlight, 9:16.",
+      "critical_mark": "the sign MANGO above the kiosk",
+      "video_prompt": "Wide shot of the lively market, then the camera moves forward to Mango's kiosk. Mango picks up a bottle, raises it high and calls out to the passers-by, loud and joyful. Market ambience: voices, footsteps, birds.",
+      "dialogue": [
+        {
+          "speaker": "mango",
+          "text": "Approchez, approchez ! Hééé, mes frères, mes sœurs ! Venez arroser vos gosiers avec le pur jus de Mango !",
+          "jeu": "joyeux, voix forte"
+        }
+      ]
+    },
+    {
+      "lieu": "marche",
+      "characters": [
+        "mango",
+        "citron"
+      ],
+      "meaning": "Mango vante son jus ; Citron s'approche.",
+      "cadre": "Medium shot of Mango showing his bottles, Citron arriving from the alley.",
+      "camera": "Follows Mango's gestures along the counter.",
+      "actions": [
+        "Mango smiles and shows his bottles",
+        "Citron walks up from the central alley",
+        "Mango hands him a glass of juice"
+      ],
+      "image_prompt": "Dokoti market by day: Mango behind his kiosk counter showing his juice bottles, Citron walking up from the alley. High-end cinematic 3D animation, 9:16.",
+      "critical_mark": "the sign MANGO above the kiosk",
+      "video_prompt": "Mango, enthusiastic, shows his bottles and praises his juice. Citron approaches from the central alley; Mango pours and hands him a glass. Citron stays silent.",
+      "dialogue": [
+        {
+          "speaker": "mango",
+          "text": "Venez goûter ! Le jus-là est doux jusqu'ààà ! Une seule gorgée et vous oubliez même les problèmes de la maison !",
+          "jeu": "enthousiaste"
+        }
+      ]
+    },
+    {
+      "lieu": "marche",
+      "characters": [
+        "citron",
+        "mango"
+      ],
+      "meaning": "Citron goûte et en redemande.",
+      "cadre": "Medium shot of Citron at the counter, Mango behind.",
+      "camera": "Slight dolly-in on Citron as he tastes.",
+      "actions": [
+        "Citron tastes the juice",
+        "His face lights up with satisfaction",
+        "He asks for two more bottles"
+      ],
+      "image_prompt": "Dokoti market by day: Citron at Mango's counter tasting a glass of mango juice, Mango smiling behind the counter. High-end cinematic 3D animation, 9:16.",
+      "video_prompt": "Citron tastes the juice, closes his eyes with pleasure, then speaks with satisfaction and raises two fingers. Mango smiles silently behind the counter.",
+      "dialogue": [
+        {
+          "speaker": "citron",
+          "text": "Aaaah Mango ! Mon frère, ton jus-là est trop bon ! Donne-moi encore deux bouteilles !",
+          "jeu": "satisfait"
+        }
+      ]
+    },
+    {
+      "lieu": "marche",
+      "characters": [
+        "mango",
+        "citron"
+      ],
+      "meaning": "Mango rit, remet deux bouteilles à Citron ; d'autres clients attendent.",
+      "cadre": "Medium shot of Mango handing over two bottles, a queue of customers behind.",
+      "camera": "Follows Mango's hands, then widens to show the activity around the kiosk.",
+      "actions": [
+        "Mango laughs and takes two bottles from the counter",
+        "He hands them to Citron",
+        "The camera reveals other customers waiting behind"
+      ],
+      "image_prompt": "Dokoti market by day: Mango laughing, handing two bottles of mango juice to Citron, other customers waiting behind in the alley. High-end cinematic 3D animation, 9:16.",
+      "critical_mark": "the sign MANGO above the kiosk",
+      "video_prompt": "Mango laughs, takes two bottles from his counter and hands them to Citron, who pays him. The camera widens to show other customers waiting behind.",
+      "dialogue": [
+        {
+          "speaker": "mango",
+          "text": "Voilààà ! Chez Mango, on ne blague pas avec la qualité ! Ici, c'est du vrai jus de mangue !",
+          "jeu": "en riant"
+        }
+      ]
+    },
+    {
+      "lieu": "marche",
+      "characters": [
+        "tante_mango"
+      ],
+      "meaning": "À son étal, Tante Mango remarque la foule devant le kiosque de son neveu.",
+      "montre": "Over-the-shoulder shot from behind Tante Mango at her stall, Mango's busy kiosk in the background across the alley.",
+      "cadre": "Behind Tante Mango, then she turns to face the camera.",
+      "camera": "Starts behind Tante Mango, slowly pans as she turns.",
+      "actions": [
+        "Tante Mango works at her own stall",
+        "She notices the crowd at Mango's kiosk, stops and turns",
+        "Her face hardens and she crosses her arms"
+      ],
+      "image_prompt": "Dokoti market by day, shot from behind Tante Mango at her small stall; across the alley Mango's kiosk surrounded by customers. High-end cinematic 3D animation, 9:16.",
+      "video_prompt": "Tante Mango works at her stall, then notices the crowd at her nephew's kiosk. She slowly stops, turns and stares, her face hardening; she crosses her arms and clicks her tongue with scorn.",
+      "dialogue": [
+        {
+          "speaker": "tante_mango",
+          "text": "Tchiiiiip ! Regardez-moi ce petit insolent-là !",
+          "jeu": "marmonnant avec mépris"
+        }
+      ],
+      "raccord": false
+    },
+    {
+      "lieu": "marche",
+      "characters": [
+        "tante_mango"
+      ],
+      "meaning": "Tante Mango, jalouse, compare son neveu à la famille.",
+      "cadre": "Medium medium shot of Tante Mango, Mango's kiosk blurred in the background.",
+      "camera": "Slow dolly-in on Tante Mango.",
+      "actions": [
+        "Tante Mango stares at the kiosk, arms crossed",
+        "She mutters jealously",
+        "She shakes her head"
+      ],
+      "image_prompt": "Dokoti market by day: medium medium shot of Tante Mango, arms crossed, jealous expression, Mango's busy kiosk blurred in the background. High-end cinematic 3D animation, 9:16.",
+      "video_prompt": "The camera pushes in slightly on Tante Mango, arms crossed, staring at the kiosk; she mutters jealously and shakes her head.",
+      "dialogue": [
+        {
+          "speaker": "tante_mango",
+          "text": "Il n'a même pas encore fait deux saisons au marché Dokoti et il veut déjà dépasser toute la famille !",
+          "jeu": "jalouse"
+        }
+      ]
+    },
+    {
+      "lieu": "marche",
+      "characters": [
+        "tante_mango"
+      ],
+      "meaning": "Elle regarde son comptoir presque vide puis les clients de Mango.",
+      "cadre": "Tante Mango glancing at her almost empty counter, then back at the kiosk.",
+      "camera": "Tilts down to her almost empty counter, then back up to her face.",
+      "actions": [
+        "Tante Mango looks at her almost empty counter",
+        "She looks back at Mango's customers",
+        "She speaks with annoyance, hand on her hip"
+      ],
+      "image_prompt": "Dokoti market by day: Tante Mango at her almost empty stall, looking across the alley at Mango's crowded kiosk with annoyance. High-end cinematic 3D animation, 9:16.",
+      "video_prompt": "Tante Mango looks down at her almost empty counter, then back at Mango's customers; annoyed, hand on her hip, she speaks sarcastically.",
+      "dialogue": [
+        {
+          "speaker": "tante_mango",
+          "text": "Hééé ! Parce que ton jus marche aujourd'hui, tu crois que tu es devenu le président des mangues ?",
+          "jeu": "agacée"
+        }
+      ]
+    },
+    {
+      "lieu": "marche",
+      "characters": [
+        "tante_mango"
+      ],
+      "meaning": "Tante Mango menace son neveu à voix basse.",
+      "cadre": "Medium shot of Tante Mango's jealous face.",
+      "camera": "Holds on her face after she looks away.",
+      "actions": [
+        "Tante Mango shakes her head with anger",
+        "She threatens in a low voice",
+        "She looks away; the camera stays on her jealous expression"
+      ],
+      "image_prompt": "Dokoti market by day: medium shot of Tante Mango's angry, jealous face, eyes narrowed. High-end cinematic 3D animation, 9:16.",
+      "video_prompt": "Tante Mango shakes her head angrily and threatens in a low voice, then looks away. The camera stays a moment on her jealous expression.",
+      "dialogue": [
+        {
+          "speaker": "tante_mango",
+          "text": "On va voir si ton jus-là va continuer à couler ! Petit-là, tu ne connais pas encore les anciens de cette famille !",
+          "jeu": "menaçante, à voix basse"
+        }
+      ]
+    },
+    {
+      "lieu": "marche_soir",
+      "characters": [
+        "tante_mango"
+      ],
+      "meaning": "Le crépuscule : le marché se vide, Tante Mango ferme son étal, jette un dernier regard au kiosque et s'en va.",
+      "montre": "Dusk at Dokoti market: violet and dark blue sky, warm lights under the awnings, traders closing, Tante Mango closing her stall.",
+      "cadre": "Medium shot of Tante Mango closing her stall, then an aerial shot of the emptying market.",
+      "camera": "Starts on Tante Mango, then slowly rises above the roofs.",
+      "actions": [
+        "Tante Mango packs her goods and closes her stall",
+        "She looks one last time toward Mango's kiosk",
+        "She leaves; the camera rises above the emptying market"
+      ],
+      "image_prompt": "Dokoti market at dusk: violet and dark blue sky, warm lights under the awnings, traders closing their stalls, Tante Mango closing her small stall and glancing toward Mango's kiosk. High-end cinematic 3D animation, 9:16.",
+      "video_prompt": "Dusk. Traders close their stalls and customers leave. Tante Mango packs her goods, closes her stall, looks one last time toward Mango's kiosk and walks away. The camera slowly rises above the roofs of the emptying market. Market noise fades into night sounds. No one speaks.",
+      "dialogue": []
+    },
+    {
+      "lieu": "foret",
+      "characters": [
+        "tante_mango"
+      ],
+      "meaning": "Tante Mango traverse la forêt la nuit jusqu'à la lumière verte du couvent.",
+      "montre": "Night forest path: Tante Mango seen from behind, walking on dead leaves among roots and bluish mist.",
+      "cadre": "Following shot from behind, then her profile when she turns her head.",
+      "camera": "Follows Tante Mango from behind along the path.",
+      "actions": [
+        "Tante Mango walks on the path, her pagne and scarf moving",
+        "She hears a noise, stops, turns her head and murmurs impatiently",
+        "A green light appears between the trees and she walks toward it"
+      ],
+      "deplacement": "Tante Mango walks away from the camera along the narrow forest path toward a green light between the trees",
+      "image_prompt": "Night in the dense tropical forest: Tante Mango seen from behind on a narrow path covered with dead leaves, twisted trunks, roots and lianas, bluish mist, moonlight through the foliage. High-end cinematic 3D animation, 9:16.",
+      "video_prompt": "The camera follows Tante Mango from behind on the forest path; her sandals crush dead leaves, her pagne and headscarf move. She hears a noise, stops, turns her head and murmurs impatiently, then continues. A green light appears between the trees and she walks toward it. Sounds: night insects, wind, footsteps on leaves.",
+      "dialogue": [
+        {
+          "speaker": "tante_mango",
+          "text": "Hééé Piment ! J'espère que tu es là hein ! Parce que l'affaire de mon neveu-là, il faut qu'on règle ça aujourd'hui !",
+          "jeu": "murmurant avec impatience"
+        }
+      ]
+    },
+    {
+      "lieu": "couvent",
+      "characters": [
+        "piment",
+        "tante_mango"
+      ],
+      "meaning": "Tante Mango arrive au couvent ; Oncle Piment l'accueille en se moquant.",
+      "montre": "The clearing: Oncle Piment behind his altar watching the green smoke, Tante Mango entering the clearing.",
+      "cadre": "Wide shot of the clearing, then medium shot of Oncle Piment raising his head.",
+      "camera": "Starts wide as Tante Mango arrives, then slowly moves closer to Oncle Piment.",
+      "actions": [
+        "Tante Mango arrives in the clearing",
+        "Oncle Piment slowly raises his head and snickers",
+        "He watches her come closer"
+      ],
+      "image_prompt": "The clearing at night: Oncle Piment behind the mossy stone altar watching the green smoke of the calabash, Tante Mango arriving from the forest path. High-end cinematic 3D animation, 9:16.",
+      "video_prompt": "Tante Mango arrives in the clearing from the forest path. Oncle Piment, watching the green smoke, slowly raises his head and snickers as she comes closer.",
+      "dialogue": [
+        {
+          "speaker": "piment",
+          "text": "Kèh kèh kèh ! La mangue est venue chercher le piment pimenté !",
+          "jeu": "ricanant"
+        }
+      ]
+    },
+    {
+      "lieu": "couvent",
+      "characters": [
+        "piment",
+        "tante_mango"
+      ],
+      "meaning": "Tante Mango arrive au couvent ; Oncle Piment l'accueille en se moquant.",
+      "montre": "The clearing: Oncle Piment behind his altar watching the green smoke, Tante Mango entering the clearing.",
+      "cadre": "Wide shot of the clearing, then medium shot of Oncle Piment raising his head.",
+      "camera": "Starts wide as Tante Mango arrives, then slowly moves closer to Oncle Piment.",
+      "actions": [
+        "Oncle Piment leans slightly toward the altar",
+        "He asks his question in a deep voice",
+        "Tante Mango stops in front of the altar"
+      ],
+      "image_prompt": "The clearing at night: Oncle Piment leaning over the mossy stone altar toward Tante Mango who stands in front of it, green smoke from the calabash. High-end cinematic 3D animation, 9:16.",
+      "video_prompt": "Oncle Piment leans slightly toward the altar and asks in a deep voice. Tante Mango stops in front of the altar and listens in silence.",
+      "dialogue": [
+        {
+          "speaker": "piment",
+          "text": "Alors, femme ! Qu'est-ce que tu veux qu'on fasse à ton neveu Mango ?",
+          "jeu": "voix grave"
+        }
+      ]
+    },
+    {
+      "lieu": "couvent",
+      "characters": [
+        "tante_mango",
+        "piment"
+      ],
+      "meaning": "Tante Mango répète son vœu de haine.",
+      "cadre": "Medium medium shot of Tante Mango stepping forward toward the altar.",
+      "camera": "Slow dolly-in on Tante Mango.",
+      "actions": [
+        "Tante Mango steps forward",
+        "She speaks with hatred",
+        "Oncle Piment smiles silently"
+      ],
+      "image_prompt": "The clearing at night: Tante Mango stepping toward the altar with hatred in her eyes, Oncle Piment behind it, green smoke. High-end cinematic 3D animation, 9:16.",
+      "video_prompt": "Tante Mango steps forward toward the altar and speaks with hatred. Oncle Piment smiles silently.",
+      "dialogue": [
+        {
+          "speaker": "tante_mango",
+          "text": "Je veux qu'il pourrisse ! Je veux que sa pulpe devienne noire avant le lever du jour !",
+          "jeu": "avec haine"
+        }
+      ]
+    },
+    {
+      "lieu": "couvent",
+      "characters": [
+        "piment",
+        "tante_mango"
+      ],
+      "meaning": "Oncle Piment se moque : le neveu la dépasse au marché.",
+      "cadre": "Medium shot of Oncle Piment smiling, Tante Mango gritting her teeth.",
+      "camera": "Slow lateral move from Oncle Piment to Tante Mango.",
+      "actions": [
+        "Oncle Piment smiles and mocks her",
+        "The camera moves to Tante Mango",
+        "Tante Mango grits her teeth"
+      ],
+      "image_prompt": "The clearing at night: Oncle Piment mocking with a wide smile behind the altar, Tante Mango gritting her teeth. High-end cinematic 3D animation, 9:16.",
+      "video_prompt": "Oncle Piment smiles and mocks her. The camera moves to Tante Mango, who grits her teeth in silence.",
+      "dialogue": [
+        {
+          "speaker": "piment",
+          "text": "Kèh kèh kèh ! Donc le petit-là a commencé à te dépasser au marché Dokoti ?",
+          "jeu": "moqueur"
+        }
+      ]
+    },
+    {
+      "lieu": "couvent",
+      "characters": [
+        "tante_mango",
+        "piment"
+      ],
+      "meaning": "Tante Mango, en colère, accuse son neveu de se croire supérieur.",
+      "cadre": "Medium shot of Tante Mango, furious.",
+      "camera": "Holds on Tante Mango, Oncle Piment visible behind the smoke.",
+      "actions": [
+        "Tante Mango grits her teeth",
+        "She speaks angrily, pointing toward the village",
+        "Oncle Piment listens in silence"
+      ],
+      "image_prompt": "The clearing at night: medium shot of furious Tante Mango pointing toward the village, Oncle Piment listening behind the altar. High-end cinematic 3D animation, 9:16.",
+      "video_prompt": "Tante Mango, furious, speaks angrily and points toward the village. Oncle Piment listens silently behind the altar.",
+      "dialogue": [
+        {
+          "speaker": "tante_mango",
+          "text": "Piment ! Le petit-là commence déjà à se croire supérieur à toute la famille !",
+          "jeu": "en colère"
+        }
+      ]
+    },
+    {
+      "lieu": "couvent",
+      "characters": [
+        "tante_mango",
+        "piment"
+      ],
+      "meaning": "Tante Mango finit sa demande ; Oncle Piment lève les mains : la commande est reçue.",
+      "cadre": "Two-shot: Tante Mango in the foreground, Oncle Piment turning toward the calabash.",
+      "camera": "Slow dolly-in on Oncle Piment as the smoke thickens.",
+      "actions": [
+        "Tante Mango finishes her demand",
+        "Oncle Piment slowly turns toward the calabash and raises both hands",
+        "The green smoke becomes thicker"
+      ],
+      "image_prompt": "The clearing at night: Oncle Piment turning toward the glowing calabash with both hands raised, Tante Mango in the foreground, green smoke thickening. High-end cinematic 3D animation, 9:16.",
+      "video_prompt": "Tante Mango finishes her demand. Oncle Piment slowly turns toward the calabash, raises both hands and speaks slowly. The green smoke becomes thicker.",
+      "dialogue": [
+        {
+          "speaker": "tante_mango",
+          "text": "Je veux qu'il comprenne que les anciens ne sont pas ses camarades !",
+          "jeu": "en colère"
+        },
+        {
+          "speaker": "piment",
+          "text": "Yetna a reçu la commande…",
+          "jeu": "lentement"
+        }
+      ]
+    },
+    {
+      "lieu": "couvent",
+      "characters": [
+        "piment",
+        "tante_mango"
+      ],
+      "meaning": "Le rituel : Oncle Piment lève la statuette au-dessus de la calebasse et invoque les esprits.",
+      "montre": "Medium shot of Oncle Piment's bony hands holding a small wooden humanoid statuette above the glowing calabash, green smoke wrapping it.",
+      "cadre": "Medium shot on his hands and the statuette, then his face turned to the sky.",
+      "camera": "Slowly moves closer to his hands, then tilts up to his face.",
+      "actions": [
+        "Oncle Piment takes the wooden statuette and holds it above the calabash",
+        "The green smoke wraps around the statuette",
+        "He turns his face to the sky and raises the statuette"
+      ],
+      "image_prompt": "The clearing at night: medium shot of Oncle Piment's long bony hands holding a small carved wooden humanoid statuette above the calabash of glowing green liquid, green smoke wrapping the statuette. High-end cinematic 3D animation, 9:16.",
+      "video_prompt": "Oncle Piment leans toward the altar, takes the small wooden statuette and holds it above the calabash; green smoke wraps it. He turns his face to the sky and raises the statuette, invoking in a powerful voice. Tante Mango watches silently.",
+      "dialogue": [
+        {
+          "speaker": "piment",
+          "text": "Esprits de Yetna ! Vous avez entendu la commande !",
+          "jeu": "voix puissante"
+        },
+        {
+          "speaker": "piment",
+          "text": "Que le jus de Mango tourne ! Que sa pulpe noircisse !",
+          "jeu": "criant"
+        }
+      ],
+      "raccord": false
+    },
+    {
+      "lieu": "couvent",
+      "characters": [
+        "piment",
+        "tante_mango"
+      ],
+      "meaning": "Le rituel culmine : fumée rouge, Tante Mango recule.",
+      "cadre": "Wide shot of the altar as the liquid boils and red smoke bursts out.",
+      "camera": "Low angle on Oncle Piment, then shakes slightly as the red smoke bursts.",
+      "actions": [
+        "The green liquid boils harder and harder",
+        "Oncle Piment raises his arms higher",
+        "He screams his curse"
+      ],
+      "image_prompt": "The clearing at night: Oncle Piment with arms raised high above the boiling calabash, Tante Mango watching. High-end cinematic 3D animation, 9:16.",
+      "video_prompt": "The green liquid in the calabash boils harder and harder. Oncle Piment raises his arms higher and screams his curse. Tante Mango watches silently.",
+      "dialogue": [
+        {
+          "speaker": "piment",
+          "text": "Que son corps commence à pourrir avant le premier chant du coq !",
+          "jeu": "criant"
+        }
+      ]
+    },
+    {
+      "lieu": "couvent",
+      "characters": [
+        "piment",
+        "tante_mango"
+      ],
+      "meaning": "Le rituel culmine : fumée rouge, Tante Mango recule.",
+      "cadre": "Wide shot of the altar as the liquid boils and red smoke bursts out.",
+      "camera": "Low angle on Oncle Piment, then shakes slightly as the red smoke bursts.",
+      "actions": [
+        "Oncle Piment screams with his arms raised high",
+        "Red smoke bursts from the calabash",
+        "Tante Mango steps back and shields her face with her arm"
+      ],
+      "image_prompt": "The clearing at night: Oncle Piment with arms raised high above the boiling calabash, Tante Mango watching. High-end cinematic 3D animation, 9:16.",
+      "video_prompt": "Oncle Piment screams with his arms raised high. Red smoke bursts from the calabash and fills the scene; Tante Mango steps back and protects her face with her arm.",
+      "dialogue": [
+        {
+          "speaker": "piment",
+          "text": "YETNA A REÇU LA COMMANDE ! QUE LA POURRITURE LE MORDE !",
+          "jeu": "hurlant"
+        }
+      ]
+    },
+    {
+      "lieu": "couvent",
+      "characters": [
+        "piment",
+        "tante_mango"
+      ],
+      "meaning": "La fumée se dissipe ; Oncle Piment renvoie Tante Mango chez elle.",
+      "cadre": "Medium shot of Oncle Piment in front of the altar as the red smoke clears.",
+      "camera": "Slow dolly-in as the smoke fades.",
+      "actions": [
+        "The red smoke begins to fade",
+        "Oncle Piment still stands in front of the altar with an unsettling smile",
+        "He speaks to Tante Mango"
+      ],
+      "image_prompt": "The clearing at night: red smoke fading, Oncle Piment standing in front of the altar with an unsettling smile, Tante Mango lowering her arm. High-end cinematic 3D animation, 9:16.",
+      "video_prompt": "The red smoke begins to fade. Oncle Piment still stands in front of the altar with an unsettling smile and speaks to Tante Mango, who lowers her arm and listens silently.",
+      "dialogue": [
+        {
+          "speaker": "piment",
+          "text": "Kèh kèh kèh ! Tante Mango, rentre chez toi. Avant que le coq chante, ton neveu va sentir le vrai piment !",
+          "jeu": "ricanant"
+        }
+      ]
+    },
+    {
+      "lieu": "couvent",
+      "characters": [
+        "tante_mango",
+        "piment"
+      ],
+      "meaning": "Tante Mango, satisfaite, regarde une dernière fois la calebasse.",
+      "cadre": "Medium shot of Tante Mango smiling with satisfaction, the calabash in the foreground.",
+      "camera": "Slow dolly-in on Tante Mango, then on the calabash; red smoke fills the frame.",
+      "actions": [
+        "Tante Mango smiles with satisfaction",
+        "She speaks, pleased",
+        "She looks one last time at the calabash; red smoke fills the frame"
+      ],
+      "image_prompt": "The clearing at night: medium shot of Tante Mango smiling with satisfaction, the glowing calabash in the foreground, the last red smoke around it. High-end cinematic 3D animation, 9:16.",
+      "video_prompt": "Tante Mango smiles with satisfaction and speaks. She looks one last time at the calabash. The remaining red smoke swirls and fills the frame (transition). Oncle Piment stays silent.",
+      "dialogue": [
+        {
+          "speaker": "tante_mango",
+          "text": "Hé hé hé ! Voilààà ! C'est ça que je voulais entendre !",
+          "jeu": "satisfaite"
+        }
+      ]
+    },
+    {
+      "lieu": "chambre",
+      "characters": [
+        "mango"
+      ],
+      "meaning": "Mango dort paisiblement ; une tache noire apparaît sur son bras et s'étend.",
+      "montre": "Mango asleep in his wooden bed under a beige blanket, bluish night light from the window, a juice bottle on the bedside table.",
+      "cadre": "Wide shot of the calm bedroom, then medium shot of \u0001 and arm.",
+      "camera": "Red smoke dissolves into the bedroom, then a slow dolly-in on Mango's face.",
+      "actions": [
+        "The red smoke dissolves and reveals Mango asleep",
+        "His fingers start to twitch",
+        "A small black spot appears on his arm and slowly spreads; he grimaces in his sleep"
+      ],
+      "image_prompt": "Night in Mango's simple bedroom: earth-coloured walls, Mango asleep in his wooden bed under a beige blanket, bluish light from the open window, light curtain, a juice bottle on the wooden bedside table. High-end cinematic 3D animation, 9:16.",
+      "video_prompt": "The red smoke dissolves into Mango's calm bedroom. The curtain moves gently. The camera slowly approaches Mango's sleeping face. His fingers start to twitch; a small black spot appears on his arm and slowly spreads. He grimaces in his sleep. No one speaks; night insects only.",
+      "dialogue": []
+    },
+    {
+      "lieu": "chambre",
+      "characters": [
+        "mango"
+      ],
+      "meaning": "Mango se réveille brusquement et découvre la tache noire.",
+      "cadre": "Medium shot of Mango sitting up in bed, looking at his arm.",
+      "camera": "Follows Mango as he sits up.",
+      "actions": [
+        "Mango wakes up abruptly",
+        "He looks at the black spot spreading on his arm",
+        "He struggles to sit up, panicked"
+      ],
+      "image_prompt": "Night in Mango's bedroom: Mango waking up abruptly in bed, staring in horror at a black spot spreading on his arm. High-end cinematic 3D animation, 9:16.",
+      "video_prompt": "Mango wakes up abruptly, looks at his arm where a black spot is spreading and screams, then struggles to sit up, panicked.",
+      "dialogue": [
+        {
+          "speaker": "mango",
+          "text": "AÏEEEE ! Hééé ! C'est quoi ça ?!",
+          "jeu": "criant"
+        },
+        {
+          "speaker": "mango",
+          "text": "MON BRAS ! MON JUS ! Hééé ! Qu'est-ce qui m'arrive comme ça ?!",
+          "jeu": "paniqué"
+        }
+      ]
+    },
+    {
+      "lieu": "chambre",
+      "characters": [
+        "mango"
+      ],
+      "meaning": "Mango va à la fenêtre, touche la tache et hurle de douleur.",
+      "cadre": "Mango at the window, his arm in the bluish light.",
+      "camera": "Follows Mango from the bed to the window.",
+      "actions": [
+        "Mango gets up and walks to the window to look at his arm in the light",
+        "He touches the blackened part",
+        "He pulls his hand back in pain and screams"
+      ],
+      "deplacement": "Mango gets out of bed and walks to the open window",
+      "image_prompt": "Night in Mango's bedroom: Mango standing at the open window, examining the black spot on his arm in the bluish moonlight, terrified. High-end cinematic 3D animation, 9:16.",
+      "video_prompt": "Mango gets out of bed and walks to the window to look at his arm in the light, terrified. He touches the blackened part and immediately pulls his hand back in pain, screaming.",
+      "dialogue": [
+        {
+          "speaker": "mango",
+          "text": "Seigneur ! J'ai fait quoi à qui même ?!",
+          "jeu": "terrifié"
+        },
+        {
+          "speaker": "mango",
+          "text": "AÏEEEE ! Ça brûle ! Mon jus est en train de pourrir !",
+          "jeu": "hurlant"
+        }
+      ]
+    },
+    {
+      "lieu": "chambre",
+      "characters": [
+        "mango"
+      ],
+      "meaning": "Mango tombe à genoux, supplie et pleure ; la tache continue de progresser. À suivre.",
+      "cadre": "Mango on his knees beside the bed, medium shot of his tearful face, then his arm.",
+      "camera": "Slowly moves closer to his face, then slowly tilts down to the spreading black spot.",
+      "actions": [
+        "Mango staggers and falls to his knees beside the bed",
+        "He begs for help, eyes full of tears",
+        "He holds his arm"
+      ],
+      "image_prompt": "Night in Mango's bedroom: Mango on his knees beside his wooden bed, eyes full of tears, holding his arm with the spreading black spot. High-end cinematic 3D animation, 9:16.",
+      "video_prompt": "Mango staggers and falls to his knees beside the bed. Eyes full of tears, he begs for help, holding his arm.",
+      "dialogue": [
+        {
+          "speaker": "mango",
+          "text": "Au secours ! S'il vous plaît, aidez-moi !",
+          "jeu": "suppliant"
+        }
+      ]
+    },
+    {
+      "lieu": "chambre",
+      "characters": [
+        "mango"
+      ],
+      "meaning": "Mango tombe à genoux, supplie et pleure ; la tache continue de progresser. À suivre.",
+      "cadre": "Mango on his knees beside the bed, medium shot of his tearful face, then his arm.",
+      "camera": "Slowly moves closer to his face, then slowly tilts down to the spreading black spot.",
+      "actions": [
+        "Mango, on his knees, speaks desperately",
+        "The camera slowly tilts down to his arm",
+        "The black spot keeps spreading; he trembles with fear"
+      ],
+      "image_prompt": "Night in Mango's bedroom: Mango on his knees beside his wooden bed, eyes full of tears, holding his arm with the spreading black spot. High-end cinematic 3D animation, 9:16.",
+      "video_prompt": "Mango, on his knees beside the bed, speaks desperately with tears. The camera slowly tilts down to his arm where the black spot keeps spreading. He trembles with fear. To be continued.",
+      "dialogue": [
+        {
+          "speaker": "mango",
+          "text": "Je voulais seulement vendre mon jus et aider ma famille ! Pourquoi on me fait ça ?!",
+          "jeu": "désespéré"
+        }
+      ]
+    }
+  ],
+  "state_changes": [
+    {
+      "from_scene": 28,
+      "character": "mango",
+      "change": "black rotting spot on his left forearm, spreading"
+    }
+  ]
+}

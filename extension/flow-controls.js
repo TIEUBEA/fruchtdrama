@@ -46,7 +46,42 @@ globalThis.FruchtFlow={
   return values.length&&values.every(n=>n===values[0])?values[0]:null;
  },
  count(label){const m=String(label).replace(/(\d\s*s)(x[1-4]\b)/gi,'$1 $2').match(/\b([1-4])\s*-\s*mal\b|\bx\s*([1-4])\b/i);return m?Number(m[1]||m[2]):null;},
- settingsButton(doc){return [...doc.querySelectorAll('button,[role="button"]')].find(b=>this.visible(doc,b)&&(/^(?:Déclencheur des paramètres|Settings trigger|Einstellungen öffnen|Zu den Einstellungen|Paramètres de génération|Generation settings)$/i.test(b.getAttribute('aria-label')||'')||(/720p|1080p|Sek\./i.test(b.innerText||'')&&this.count(b.innerText)!==null)));},
+
+
+settingsButton(doc) {
+  const usable = b =>
+    this.visible(doc, b) &&
+    !b.disabled &&
+    b.getAttribute('aria-disabled') !== 'true';
+
+  // Bouton des paramètres dans la zone de génération.
+  const candidates = [
+    ...doc.querySelectorAll(
+      '.submit-controls button.settings-trigger-button'
+    )
+  ].filter(usable);
+
+  if (candidates.length === 1) return candidates[0];
+  if (candidates.length > 1) return null;
+
+  // Compatibilité avec les interfaces précédentes.
+  const fallback = [
+    ...doc.querySelectorAll('button,[role="button"]')
+  ].filter(b =>
+    usable(b) &&
+    (
+      /^(?:Déclencheur des paramètres|Settings trigger|Einstellungen öffnen|Zu den Einstellungen|Paramètres de génération|Generation settings)$/i.test(
+        b.getAttribute('aria-label') || ''
+      ) ||
+      (
+        /720p|1080p|Sek\./i.test(b.innerText || '') &&
+        this.count(b.innerText) !== null
+      )
+    )
+  );
+
+  return fallback.length === 1 ? fallback[0] : null;
+},
  outputCount(doc,settings){
   const labelCount=this.count(settings?.innerText||'');if(labelCount!==null)return labelCount;
   const selected=[...doc.querySelectorAll('[role="radio"][aria-checked="true"],input[type="radio"]:checked')].filter(b=>this.visible(doc,b)).map(b=>this.count(b.innerText||b.getAttribute('aria-label')||b.value||'')).filter(n=>n!==null);
@@ -56,7 +91,7 @@ globalThis.FruchtFlow={
   return [el.getAttribute('aria-label'),el.innerText].filter(Boolean).some(v=>[v,...v.split('\n')].some(line=>pattern.test(line.replace(/^(?:videocam|movie|image|crop_portrait|crop_landscape|crop_9_16|crop_16_9)\s+/i,'').trim())));
  },
  modelPattern(model){
-  if(model==='gemini_omni_flash')return /\b(?:Gemini\s+)?Omni(?:\s+1\.1)?\s*[-–]?\s*Flash(?:\s+1\.1)?\b/i;
+  if(model==='gemini_omni_flash')return /\b(?:Gemini\s+)?Omni(?:\s+1\.2\s*[-–]?\s*Flash|\s*[-–]?\s*Flash\s+1\.2)\b(?!\.\d)/i;
   if(model==='veo_3_1_lite')return /\bVeo\s*3\.1\s*[-–]?\s*Lite\b/i;
   if(model==='veo_3_1_fast')return /\bVeo\s*3\.1\s*[-–]?\s*Fast\b/i;
   if(model==='veo_3_1_quality')return /\bVeo\s*3\.1\s*[-–]?\s*(?:Quality|Qualität|Qualité)\b/i;
@@ -65,6 +100,9 @@ globalThis.FruchtFlow={
  modelControl(doc){
   const pattern=/\b(?:Veo|Gemini|Omni)\b/i;
   const find=selector=>[...doc.querySelectorAll(selector)].filter(b=>this.visible(doc,b)&&pattern.test((b.innerText||b.getAttribute('aria-label')||'').trim()));
+  const named=[...doc.querySelectorAll('button,[role="button"]')].filter(b=>this.visible(doc,b)&&/^(?:Modellfamilie auswählen|Select model family|Choisir la famille de modèles)$/i.test(b.getAttribute('aria-label')||''));
+  if(named.length===1)return named[0];
+  if(named.length>1)return null;
   const boxes=find('[role="combobox"]');if(boxes.length===1)return boxes[0];if(boxes.length>1)return null;
   const buttons=find('button,[role="button"]');return buttons.length===1?buttons[0]:null;
  },
@@ -74,11 +112,26 @@ globalThis.FruchtFlow={
   return selected.length===1?selected[0]:null;
  },
  resolution(text){const values=[...String(text).matchAll(/\b(360|720|1080|2160)p\b/gi)].map(x=>x[1]+'p');return values.length&&new Set(values).size===1?values[0]:null;},
- seconds(text){const values=[...String(text).replace(/(\d\s*s)(x[1-4]\b)/gi,'$1 $2').matchAll(/\b(4|6|8|10)\s*(?:s(?:ec(?:onds?|ondes?)?)?\.?|Sek(?:unden)?\.?)\b/gi)].map(x=>Number(x[1]));return values.length&&new Set(values).size===1?values[0]:null;},
+ seconds(text){const values=[...String(text).replace(/(\d\s*s)(x[1-4]\b)/gi,'$1 $2').matchAll(/\b([3-9]|1[0-5])\s*(?:s(?:ec(?:onds?|ondes?)?)?\.?|Sek(?:unden)?\.?)\b/gi)].map(x=>Number(x[1]));return values.length&&new Set(values).size===1?values[0]:null;},
  async chooseSetting(doc,pause,desired,kind){
   const parse=kind==='resolution'?t=>this.resolution(t):t=>this.seconds(t);
-  const pattern=kind==='resolution'?/^(?:360|720|1080|2160)p$/i:/^(?:4|6|8|10)\s*(?:s(?:ec(?:onds?|ondes?)?)?\.?|Sek(?:unden)?\.?)$/i;
-  if(this.currentSetting(doc,pattern,parse)===desired)return;
+  const pattern=kind==='resolution'?/^(?:360|720|1080|2160)p$/i:/^(?:[3-9]|1[0-5])\s*(?:s(?:ec(?:onds?|ondes?)?)?\.?|Sek(?:unden)?\.?)$/i;
+  const current=this.currentSetting(doc,pattern,parse);
+  if(current===desired)return;
+  if(kind==='seconds'&&current!==null){
+   const sliders=[...doc.querySelectorAll('input[type="range"]')].filter(el=>this.visible(doc,el)&&!el.disabled&&/duration|durée|dauer|länge|length/i.test(el.getAttribute('aria-label')||''));
+   if(sliders.length===1){
+    const slider=sliders[0],target=slider.valueAsNumber+desired-current;
+    if(target>=Number(slider.min)&&target<=Number(slider.max)){
+     slider.valueAsNumber=target;
+     const Event=doc.defaultView.Event;
+     slider.dispatchEvent(new Event('input',{bubbles:true}));
+     slider.dispatchEvent(new Event('change',{bubbles:true}));
+     await pause(400);
+     if(this.currentSetting(doc,pattern,parse)===desired)return;
+    }
+   }
+  }
   const options=()=>[...doc.querySelectorAll('[role="radio"],[role="option"],[role="menuitem"],button')].filter(b=>this.visible(doc,b)&&!b.disabled&&this.labelMatches(b,pattern)&&parse(b.innerText||b.getAttribute('aria-label')||'')===desired);
   let matches=options();
   if(matches.length!==1){
@@ -104,7 +157,7 @@ globalThis.FruchtFlow={
   const control=this.modelControl(doc);
   if(!control||!this.modelPattern(model).test(control.innerText||control.getAttribute('aria-label')||''))throw Error('Flow : modèle demandé non confirmé ; aucun envoi effectué.');
   if(this.currentSetting(doc,/^(?:360|720|1080|2160)p$/i,t=>this.resolution(t))!==resolution)throw Error('Flow : résolution demandée non confirmée ; aucun envoi effectué.');
-  if(this.currentSetting(doc,/^(?:4|6|8|10)\s*(?:s(?:ec(?:onds?|ondes?)?)?\.?|Sek(?:unden)?\.?)$/i,t=>this.seconds(t))!==seconds)throw Error('Flow : durée demandée non confirmée ; aucun envoi effectué.');
+  if(this.currentSetting(doc,/^(?:[3-9]|1[0-5])\s*(?:s(?:ec(?:onds?|ondes?)?)?\.?|Sek(?:unden)?\.?)$/i,t=>this.seconds(t))!==seconds)throw Error('Flow : durée demandée non confirmée ; aucun envoi effectué.');
  },
  async prepareFrames(doc,pause,cost,model,resolution,seconds,aspect='9:16'){
   if(/Einstellungen für KI-Agenten|AI agent settings|Paramètres (?:de l.agent|des agents IA)/i.test(doc.body?.innerText||'')){
@@ -120,8 +173,30 @@ globalThis.FruchtFlow={
   const settings=this.settingsButton(doc);
   if(settings){settings.click();await pause(350);}
  },
+ // A Google account opening Flow may show a welcome or tour dialog that hides the settings: only plain acknowledgement
+ // buttons are pressed, never an acceptance of terms (owner's rule, handled elsewhere).
+ dismissWelcome(doc){
+  const dialogs=[...doc.querySelectorAll('[role="dialog"],[role="alertdialog"]')].filter(d=>this.visible(doc,d));
+  for(const d of dialogs){
+   const b=[...d.querySelectorAll('button')].find(x=>this.visible(doc,x)&&!x.disabled&&/^(?:OK|Compris|J.ai compris|Got it|Fermer|Close|Plus tard|Not now|Ignorer|Skip|Verstanden|Schließen|Später)$/i.test((x.innerText||x.getAttribute('aria-label')||'').trim()));
+   if(b){b.click();return true;}
+  }
+  return false;
+ },
  async configure(doc,pause,cost,model,resolution='720p',seconds=8,aspect='9:16'){
-  const settings=this.settingsButton(doc);if(!settings)throw Error('Paramètres Flow indisponibles ; aucun envoi effectué.');
+  // 10/11/2026: « Paramètres Flow indisponibles » 40 times in 3 days — the button was looked for once, at once, while
+  // the project page was still loading. Up to 15 s now, closing a welcome dialog that may hide it.
+  let settings=this.settingsButton(doc);
+  for(let k=0;k<30&&!settings;k++){this.dismissWelcome(doc);await pause(500);settings=this.settingsButton(doc);}
+  if(!settings){
+   // Still nothing: this Google account is not ready in Flow (welcome, terms or access to confirm). It is marked
+   // « À régler » with what the page shows, and the next account takes the clip. Nothing was sent.
+   const seen=[...doc.querySelectorAll('[role="dialog"] button,[role="alertdialog"] button,h1,h2')].filter(x=>this.visible(doc,x)).map(x=>(x.innerText||x.getAttribute('aria-label')||'').replace(/\s+/g,' ').trim()).filter(Boolean).slice(0,8).join(' · ');
+   const error=Error('Paramètres Flow indisponibles après 15 s sur ce compte ; aucun envoi effectué.'+(seen?' Vu : '+seen.slice(0,160):''));
+   error.kind='interface';error.flowBlocked='not_ready';
+   error.notReady={state:'fix',reason:'Flow ne montre pas ses réglages sur ce compte (accueil, conditions ou accès à valider)'+(seen?' — vu : '+seen.slice(0,120):'')};
+   throw error;
+  }
   // A panel left open by an earlier try in this tab doubled every option (06/11/2026: « Réglage Flow vidéo / 9:16 / x1
   // non reconnu » on every account): only the most recent settings panel counts.
   const radios=()=>{const all=[...doc.querySelectorAll('[role="radio"]')].filter(b=>this.visible(doc,b));const panes=[...new Set(all.map(b=>b.closest?.('.cdk-overlay-pane,[role="dialog"],[role="menu"]')).filter(Boolean))];return panes.length>1?all.filter(b=>b.closest('.cdk-overlay-pane,[role="dialog"],[role="menu"]')===panes[panes.length-1]):all;};
@@ -230,8 +305,21 @@ globalThis.FruchtFlow={
   let selectedSource=selection.referenceSource||'';
   // 0.1.93 (owner: « pas 10 min d'attente ») : 90 s (180 passes) without any visible change at the import is a failure
   // before any generation was sent: the clip goes at once to the next engine. The 5 min bound stays for slow uploads.
-  let lastSeen=null,lastChange=0;
+  let lastSeen=null,lastChange=0,emptyPicker=0;
+  // Flow's own words when it rejects an upload (« Échec de l'importation de l'image. Veuillez réessayer. », seen 12/11/2026):
+  // a NEW such tile is a refusal of the board at once. Tiles left by earlier tries are counted out.
+  const importFailures=()=>this.importFailures(doc);
+  const failuresBefore=Number.isInteger(this.failureBase)?this.failureBase:importFailures();
   for(let n=0;n<600;n++){
+   if(importFailures()>failuresBefore)throw Object.assign(Error('Flow a refusé l’image de la scène (« Échec de l’importation de l’image »). Aucun envoi de génération effectué.'),{kind:'refusal'});
+   // 12/11/2026 (« La méchante éducatrice », clip 2): Flow silently drops an uploaded board it does not accept (a child
+   // in distress): the picker stays « Aucun élément trouvé ». 20 s of that, nothing uploading, is a refusal of the
+   // image (the studio adapts the scene, then Grok), not a 90 s technical wait counted twice.
+   const body=String(doc.body?.innerText||'');
+   const uploading=/\d{1,3}\s?%|Wird hochgeladen|Uploading|Téléversement|Importation en cours/i.test(body);
+   if(/Aucun élément trouvé|No items found|Keine Elemente gefunden|Keine Ergebnisse|Nothing found/i.test(body)&&!uploading&&![...doc.querySelectorAll('[role="option"]')].some(el=>this.visible(doc,el)))emptyPicker++;
+   else emptyPicker=0;
+   if(emptyPicker>=40)throw Object.assign(Error('Flow a refusé l’image de la scène : elle n’apparaît pas dans « Sélectionner une image » (Aucun élément trouvé). Aucun envoi de génération effectué.'),{kind:'refusal'});
    const seen=this.importSignature(doc,expectedName,selected);
    if(seen!==lastSeen){lastSeen=seen;lastChange=n;}
    else if(n-lastChange>=180)throw Error('Flow : image toujours en traitement, rien ne progresse depuis 90 s. Aucun envoi de génération effectué.');
@@ -286,7 +374,11 @@ globalThis.FruchtFlow={
   });
   return candidates.length===1?candidates[0]:null;
  },
+ importFailures(doc){
+  return (String(doc.body?.innerText||'').match(/Échec de l[’']importation de l[’']image|Image (?:upload|import) failed|Failed to (?:upload|import) (?:the )?image|Bild konnte nicht (?:importiert|hochgeladen) werden|Fehler beim (?:Importieren|Hochladen) des Bildes/gi)||[]).length;
+ },
  async openImport(doc,pause,name){
+  this.failureBase=this.importFailures(doc);  // counted before this upload: earlier failed tiles are not this one
   if(name){
    if(this.frameMatches(doc,this.referenceKey(doc,name)))return {alreadyAttached:true};
    const escaped=name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');

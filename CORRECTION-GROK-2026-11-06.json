@@ -1,0 +1,28 @@
+{
+  "date": "2026-11-06T20:29:37.2283546+01:00",
+  "extension": "0.1.96.1",
+  "active_extension": true,
+  "project": "426a6e2b35814e1a",
+  "status": "paused",
+  "dry_run_passed": "2026-11-06T20:28:04.033405+01:00",
+  "dry_run_enabled": false,
+  "fixes": [
+    "Wait for engine navigation before injecting the runner",
+    "Probe the content receiver and reconnect up to three times before dispatch",
+    "Recover pre-submission preparation on the same task/tab only",
+    "Preserve persisted submission intent and recovery limits",
+    "Acknowledge running/completed task without generating it twice",
+    "Display the actual video engine in the dry-run notice"
+  ],
+  "tests": [
+    "test_grok_connection.cjs",
+    "test_runner_lifecycle.cjs",
+    "test_worker_begin.cjs",
+    "test_worker_lanes.cjs",
+    "test_engine_video.cjs",
+    "test_worker.cjs"
+  ],
+  "live_test": "Grok prepared the original image and prompt, stopped before submission, no credits used",
+  "backups": "data/backups/grok-connection-20261106",
+  "python_changes_from_previous_task": "On disk, pending normal server restart; not required for this Grok extension fix"
+}

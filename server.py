@@ -67,14 +67,20 @@ def creation_language(value):
 
 def now(): return dt.datetime.now(dt.timezone.utc).isoformat()
 def uid(): return uuid.uuid4().hex[:16]
+OMNI_FLOW_COST = 24
+
 def fresh():
-    return {'version':1, 'token':secrets.token_urlsafe(32), 'pair_code':secrets.token_hex(4), 'jobs':[], 'profiles':[], 'clients':{}, 'tasks':[], 'settings':{'provider':'chatgpt','language':'Deutsch (de-DE)','scene_count':4,'clip_seconds':8,'flow_model':'gemini_omni_flash','flow_resolution':'720p','flow_cost':12,'query':'KI Früchte Geschichten deutsch','daily_budget':50}}
+    return {'version':1, 'token':secrets.token_urlsafe(32), 'pair_code':secrets.token_hex(4), 'jobs':[], 'profiles':[], 'clients':{}, 'tasks':[], 'settings':{'provider':'chatgpt','language':'Deutsch (de-DE)','scene_count':4,'clip_seconds':8,'flow_model':'gemini_omni_flash','flow_resolution':'720p','flow_cost':OMNI_FLOW_COST,'query':'KI Früchte Geschichten deutsch','daily_budget':50}}
 def read_state():
     DATA.mkdir(parents=True, exist_ok=True)
     p=DATA/'state.json'
     state=json.loads(p.read_text('utf-8')) if p.exists() else fresh()
     if 'flow_model' not in state['settings']:
-        state['settings'].update(flow_model='gemini_omni_flash',flow_resolution='720p',flow_cost=12)
+        state['settings'].update(flow_model='gemini_omni_flash',flow_resolution='720p',flow_cost=OMNI_FLOW_COST)
+    configs=[state['settings']]+[j['config'] for j in state['jobs'] if j.get('status')!='done']
+    for cfg in configs:
+        if cfg.get('flow_model')=='gemini_omni_flash' and cfg.get('flow_cost')==12:
+            cfg['flow_cost']=OMNI_FLOW_COST
     return state
 STATE=read_state()
 if not os.environ.get('FRUCHT_NO_THUMBS'):
@@ -175,7 +181,7 @@ def gate_blockers(j,setup=True):
     eligible=lambda p:flow_accounts.eligible(STATE,p)
     stage = j.get('stage', 'research')
     out = readiness.setup_missing(STATE) if setup and stage != 'clips' else []
-    return out+readiness.blockers(STATE,j['config'],stage,int(j['config'].get('flow_cost',12)),time.time(),eligible,j.get('flow_profile'))
+    return out+readiness.blockers(STATE,j['config'],stage,int(j['config'].get('flow_cost',OMNI_FLOW_COST)),time.time(),eligible,j.get('flow_profile'))
 
 def window_online():
     return any(client_online(c) and c.get('role','all') in ('all','flow') for c in STATE['clients'].values())
@@ -193,7 +199,7 @@ def request_readiness(sites,profiles,background=False,job=None):
 
 def start_check(j):
     """Before a production starts: read what is not known recently. True when it may start right away."""
-    need=readiness.checks_needed(STATE,j['config'],j.get('stage','research'),int(j['config'].get('flow_cost',12)),time.time(),lambda p:flow_accounts.eligible(STATE,p))
+    need=readiness.checks_needed(STATE,j['config'],j.get('stage','research'),int(j['config'].get('flow_cost',OMNI_FLOW_COST)),time.time(),lambda p:flow_accounts.eligible(STATE,p))
     if not (need['sites'] or need['profiles']) or not window_online():return True
     j['accounts_check']={'at':now(),'id':request_readiness(need['sites'],need['profiles'],job=j['id']),
                         'pending':['site:'+n for n in need['sites']]+['flow:'+p for p in need['profiles']]}
@@ -264,11 +270,106 @@ def readable_progress(text,slot=None):
 def take_over(c):
     """An automatic gateway left switched off at pairing (the old one was running a task, then disappeared:
     extension reloaded, real case 06/11/2026) takes over once no other automatic gateway is online."""
-    alive=[x for x in STATE['clients'].values() if x is not c and x.get('auto') and not x.get('disabled') and time.time()-flow_credits.seconds(x.get('seen'))<STALL_ONLINE]
+    alive=[x for x in STATE['clients'].values() if x is not c and x.get('auto') and not x.get('pool') and not x.get('disabled') and time.time()-flow_credits.seconds(x.get('seen'))<STALL_ONLINE]
     if alive:return False
-    for x in STATE['clients'].values():
-        if x is not c and x.get('auto'):x['disabled']=True
-    c['disabled']=False;flow_accounts.follow_active_browser(STATE);rebind_flow_routes();return True
+    remember_replaced(c,switch_off_main_windows(c))
+    c['disabled']=False;remember_taken(c);rebind_flow_routes();return True
+
+def switch_off_main_windows(keep=None):
+    """The main window(s) step aside for a new one; extra Flow sessions keep working. Returns those really switched off."""
+    replaced=[]
+    for key,x in STATE['clients'].items():
+        if x is keep or not x.get('auto') or x.get('pool'):continue
+        if not x.get('disabled'):replaced.append(key)
+        x['disabled']=True
+    return replaced
+
+def remember_replaced(c,replaced):
+    if replaced:c['replaced']=replaced
+
+def remember_taken(c):
+    """Accounts that follow this window because it replaced another: given back if that window proves it is alive."""
+    before={p['id']:p.get('flow_client') for p in STATE['profiles']}
+    flow_accounts.follow_active_browser(STATE)
+    taken=[p['id'] for p in STATE['profiles'] if p.get('flow_client')==c['id'] and before.get(p['id'])!=c['id']]
+    if taken:c['taken']={pid:before[pid] for pid in taken}
+
+def make_flow_session(c):
+    """Another Chrome profile, open at the same time as the main window: its Google accounts are added.
+    Google allows about 10 accounts per Chrome profile, so more accounts live in other profiles (owner 10/11/2026).
+    Flow only: research, ChatGPT and Claude stay in the main window."""
+    c.update(role='flow',flow_profile=None,ai_provider='none',pool=True,disabled=False,label='Session Flow supplémentaire')
+    c.pop('replaced',None);c.pop('taken',None)
+    queue=STATE.setdefault('bridge_requests',[]);item={'type':'scan_flow','client':c['id']}
+    if item not in queue:queue.append(item)
+    STATE['bridge_notice']={'at':now(),'action':'scan_flow','pending':True,'text':'Autre session Chrome reliée : recherche de ses comptes Flow…'}
+
+def remember_chrome_folder(c,accounts,folders=None):
+    """Which Chrome profile this window runs in, so the studio can open it again when it is closed (owner 10/11/2026)."""
+    folders=flow_accounts.chrome_folders() if folders is None else folders
+    taken={x.get('chrome_profile') for k,x in STATE['clients'].items() if x is not c and x.get('chrome_profile')}
+    # /u/0 is the profile's own Chrome account (Default holds euloge.moussa at /u/0 and borismoussa53, Profile 3's,
+    # further down: real case 10/11/2026). Then only the accounts this window really holds.
+    mine={(p.get('flow_email') or '').lower() for p in STATE['profiles'] if p.get('flow_client')==c['id']}
+    first=[a for a in accounts if int(a.get('slot') or 0)==0]
+    owned=[a for a in accounts if str(a.get('email') or '').strip().lower() in mine]
+    folder=c.get('chrome_profile') if c.get('chrome_profile') and c['chrome_profile'] not in taken else flow_accounts.folder_of(first,folders,taken) or flow_accounts.folder_of(owned,folders,taken)
+    if not folder:return None
+    c['chrome_profile']=folder
+    for p in STATE['profiles']:
+        if p.get('flow_client')==c['id']:p['chrome_profile']=folder
+    return folder
+
+WAKE_EVERY=900  # seconds between two openings of the same closed Chrome profile
+
+def closed_session_account(cost,moment=None):
+    """An account able to pay, held by an extra Chrome profile that is closed and whose folder is known."""
+    moment=moment or time.time()
+    for p in flow_refill.order(STATE['profiles']):
+        c=STATE['clients'].get(p.get('flow_client')) or {}
+        if not c.get('pool') or c.get('owner_off') or client_online(c) or not p.get('chrome_profile'):continue
+        if p.get('blocked') or p.get('balance',0)<cost or not flow_accounts.route(p) or not flow_accounts.usable(p):continue
+        if moment-flow_credits.seconds(c.get('woken'))<WAKE_EVERY:continue
+        return p,c
+    return None
+
+def wake_closed_session():
+    """A production waits for credits that only a closed Chrome profile has: that profile starts in the background.
+    Its FruchtDrama window answers, its accounts become usable again and the clip leaves by itself."""
+    with LOCK:
+        if not STATE.get('settings',{}).get('flow_auto'):return False
+        waiting=[j for j in STATE['jobs'] if j.get('stage')=='clips' and j.get('status')=='waiting_credit']
+        if not waiting:return False
+        cost=min(int(j['config'].get('flow_cost',OMNI_FLOW_COST)) for j in waiting)
+        found=closed_session_account(cost)
+        if not found:return False
+        p,c=found;c['woken']=now();pending=copy.deepcopy(p)
+        for j in waiting:event(j,'Crédits disponibles sur '+readiness.mask(p.get('flow_email') or p.get('label'))+' dans un autre profil Chrome fermé : ouverture de ce profil en arrière-plan.')
+        save()
+    try:flow_accounts.launch(pending);return True
+    except Exception as e:
+        with LOCK:
+            c['wake_error']=str(e)[:200];save()
+        return False
+
+def session_rejoined(c,previous):
+    """A switched-off window answers: main window back, reloaded window taking over, or another Chrome profile.
+
+    Two pairings that both answer are two Chrome profiles (one extension copy per profile). A reinstalled
+    extension never answers on its old pairing, so it still takes over as before."""
+    if not c.get('auto') or c.get('owner_off'):return None
+    holder=next((x for x in STATE['clients'].values() if x is not c and c['id'] in (x.get('replaced') or []) and client_online(x)),None)
+    if holder:
+        # This window was the main one until another profile paired: it gets its place and accounts back.
+        if any(t['status']=='claimed' and t.get('client')==holder['id'] and lane_of(t)=='chat' for t in STATE['tasks']):return None
+        for pid,owner in (holder.get('taken') or {}).items():
+            p=profile_by(pid)
+            if p and p.get('flow_client')==holder['id'] and owner==c['id']:p['flow_client']=c['id']
+        c['disabled']=False;make_flow_session(holder);rebind_flow_routes();return 'main'
+    if take_over(c):return 'takeover'
+    both=[x for x in STATE['clients'].values() if x is not c and x.get('auto') and not x.get('pool') and client_online(x) and flow_credits.seconds(x.get('seen'))>previous]
+    if not both or any(t['status']=='claimed' and t.get('client')==c['id'] for t in STATE['tasks']):return None
+    make_flow_session(c);return 'session'
 
 def clock(ts,moment=None):
     """Local time for the owner (« 15:42 », « demain 08:10 »), never UTC."""
@@ -369,14 +470,19 @@ def task_stall(j,task,moment,ago,shared):
         return {'reason':f'La fenêtre FruchtDrama qui faisait cette étape ne répond plus depuis {when} (fermée, rechargée ou extension mise à jour) : sa réponse ne viendra pas.',
                 'hint':retry_note,'retry':True,'paid':paid,'since':client.get('seen')}
     # With both lanes active, the other lane's news must not hide this one's silence: its own progress only.
-    news=ago(task.get('progress_at')) if shared else ago((j.get('events') or [{}])[-1].get('at'))
+    # 12/11/2026 (« La méchante éducatrice », clip 2 silent for 35 min while the other clips kept arriving): a clip is
+    # judged on its own progress, never on the episode's news.
+    news=ago(task.get('progress_at')) if shared or paid else ago((j.get('events') or [{}])[-1].get('at'))
     last=min([x for x in (ago(task.get('claimed')),news) if x is not None],default=None)
     limit=STALL_QUIET.get(kind,12)
     if kind=='engine_video':
         limit=ENGINE_STALL_QUIET.get((task.get('payload') or {}).get('engine'),limit)
     if last is not None and last>=limit*60:
-        return {'reason':f'Aucune nouvelle de {service} depuis {int(last//60)} min : l’onglet attend peut-être une connexion, une vérification anti-robot, ou la réponse s’est arrêtée.',
-                'hint':'Regarde l’onglet '+service+' dans la fenêtre FruchtDrama. '+retry_note,'retry':True,'paid':paid,'since':task.get('claimed')}
+        # Never a word from the window (not even « Import de la planche »): nothing reached the provider, nothing was paid.
+        untouched=paid and not task.get('progress') and not task.get('progress_at')
+        return {'reason':f'Aucune nouvelle de {service} depuis {int(last//60)} min : l’onglet attend peut-être une connexion, une vérification anti-robot, ou la réponse s’est arrêtée.'
+                          +(' La fenêtre n’a jamais commencé ce clip : rien n’a été envoyé, rien n’a été payé.' if untouched else ''),
+                'hint':'Regarde l’onglet '+service+' dans la fenêtre FruchtDrama. '+('Relancer ne coûte rien de plus.' if untouched else retry_note),'retry':True,'paid':paid and not untouched,'since':task.get('claimed')}
     return None
 
 def public_state(light=False):
@@ -396,9 +502,13 @@ def public_state(light=False):
         for e in public.get('events',[]):e['text']=readable_progress(e['text'])
         public['uncertain_clips']=sorted({int(t['slot'].split(':')[1]) for t in uncertain_clip_tasks(j)})
         public['stall']=stall_info(j)
+        # « Faire la suite de la vidéo » / « Terminer avec les clips reçus » buttons
+        public['remake_next']=round(remake_remaining(j)) if remake_remaining(j)>1 and not job_by(j.get('next_part')) else 0
+        public['can_split']=exact_remake(j) and len(j.get('scenes') or [])*engines.spec(j)['seconds']>REMAKE_PART+8
+        public['can_finish_now']=j.get('stage') in ('images','clips') and j.get('status')!='done' and bool((j.get('scenes') or [{}])[0].get('clip')) and not j.get('finish_now')
     s['quota_status']=quotas.summary(STATE,time.time());s['version']=VERSION
     s['usage']=account_usage.view(STATE)  # which account works now, on which AI, for what (0.1.95)
-    s['accounts']=identities.view(STATE,time.time(),int(STATE['settings'].get('flow_cost',12)));s.pop('extension_origin',None)
+    s['accounts']=identities.view(STATE,time.time(),int(STATE['settings'].get('flow_cost',OMNI_FLOW_COST)));s.pop('extension_origin',None)
     s['setup']=readiness.setup_missing(STATE);s.setdefault('readiness',{'sites':{},'pending':[]})
     s['key_saved']=bool(STATE['clients'])  # an extension holds the key once it has paired, manually or automatically
     s['ffmpeg']=bool(shutil.which('ffmpeg'))
@@ -434,6 +544,38 @@ def refill_check(at=None):
     # A balance that cannot be read (window closed, session expired) is asked again in an hour, not every 10 min.
     for p in flow_refill.due(STATE['profiles'],at):p['refill_at']=at+flow_refill.RETRY
     STATE['refill_requested']=at;save();return True
+
+SEARCH_STUCK=5*60
+
+def expire_stuck_searches(moment=None):
+    """12/11/2026 (« La méchante éducatrice » waited 10 min): a TikTok search answers in about a minute; one still
+    « en cours » after 5 min is frozen and holds the window's ChatGPT lane for every episode. It is given up as a
+    timeout (the research's own automatic retry decides what follows), nothing paid is involved."""
+    moment=moment or time.time();done=False
+    for t in STATE['tasks']:
+        if t.get('kind')!='tiktok_search' or t.get('status')!='claimed':continue
+        try:since=dt.datetime.fromisoformat(t.get('claimed')).timestamp()
+        except (TypeError,ValueError):continue
+        if moment-since<SEARCH_STUCK:continue
+        accept_task_result(t,{'ok':False,'error_kind':'timeout','error':'Recherche TikTok sans réponse après 5 min : abandonnée pour libérer la fenêtre.'})
+        done=True
+    return done
+
+def speech_end(src,speech,length):
+    """When the last word of a clip ends (seconds): word timings when known, else the start of the final silence."""
+    words=(speech or {}).get('words') or []
+    if words:
+        try:return float(words[-1]['end'])
+        except (KeyError,TypeError,ValueError):pass
+    ff=shutil.which('ffmpeg')
+    if not ff:return None
+    try:out=subprocess.run([ff,'-hide_banner','-i',str(src),'-af','silencedetect=noise=-35dB:d=0.3','-f','null','-'],capture_output=True,text=True,timeout=60).stderr
+    except (OSError,subprocess.SubprocessError):return None
+    starts=[float(x) for x in re.findall(r'silence_start: ([0-9.]+)',out)];ends=[float(x) for x in re.findall(r'silence_end: ([0-9.]+)',out)]
+    # Silence running to the end of the file (ffmpeg closes it at the very end, or not at all): its start is the end
+    # of speech. No final silence: speech to the end.
+    if starts and (len(starts)>len(ends) or (length and ends[-1]>=float(length)-0.15)):return starts[-1]
+    return float(length) if length else None
 
 def flow_dispatch_tick():
     """Wake only the one browser needed for the next queued Flow clip.
@@ -504,7 +646,9 @@ def wake_waiting(moment=None):
     with LOCK:
         for j in STATE['jobs']:
             if j.get('status')=='waiting_quota' and (j.get('wait_until') or 0)<=moment:
-                j['status']='running';j.pop('wait_until',None);j.pop('quota_lane',None);event(j,'Limite renouvelée : reprise automatique.');schedule(j);woken.append(j['id'])
+                reason=j.pop('retry_reason',None)
+                j['status']='running';j.pop('wait_until',None);j.pop('quota_lane',None)
+                event(j,'Nouvel essai automatique de la recherche TikTok.' if reason=='research' else 'Limite renouvelée : reprise automatique.');schedule(j);woken.append(j['id'])
         if woken:save()
     return woken
 
@@ -618,6 +762,12 @@ def dispatch_once():
         with LOCK:
             if readiness_tick():save()
     except Exception as e:log_error('Vérification des comptes',e)
+    try:wake_closed_session()
+    except Exception as e:log_error('Ouverture d’un profil Chrome fermé',e)
+    try:
+        with LOCK:
+            if expire_stuck_searches():save()
+    except Exception as e:log_error('Recherche TikTok figée',e)
     try:flow_dispatch_tick()
     except Exception as e:
         # An unavailable account must not stop the HTTP server, but the failure must stay diagnosable.
@@ -640,6 +790,10 @@ def sheet_prompt(j):
             # Atelier "Personnages : Détaillé": richer sheet so every board keeps the same details.
             +('Detailed sheet: for each character add a three-quarter view and a face close-up next to the full body, '
               'and make the skin texture, outfit, accessories and distinctive marks clearly readable.\n' if j['config'].get('characters_detail')=='detailed' else '')
+            # 11/11/2026: « These characters REPLACE the people of a source video » made ChatGPT ask for the source image
+            # instead of drawing. The sheet is drawn from the written descriptions only: no image is needed.
+            +('Draw them ONLY from the written descriptions below: they are brand-new original characters ('+cast_text(j,True)+'). '
+              'No reference image is needed or expected: invent their faces, colours and outfits from the text and draw the sheet now, without asking anything.\n' if is_identical(j) else '')
             +cast)
 
 def state_changes(j): return (j.get('script') or {}).get('state_changes') or []
@@ -839,20 +993,26 @@ def plan_image_block(j,s):
     if visible:parts.append('ONLY THESE CHARACTERS ARE VISIBLE: '+', '.join(visible))
     marks=[f"{c.get('name')}: {_txt(c.get('tenue'),120)}; {_txt(c.get('detail'),120)}; {_txt(c.get('place'),120)}" for c in j.get('characters',[]) if c.get('id') in s.get('characters',[]) and (c.get('detail') or c.get('place'))]
     if marks:parts.append('CHARACTER COSTUME, DISTINCTIVE MARK AND USUAL STARTING POSITION: '+' | '.join(marks))
-    if s.get('actions'):parts.append('Catch the moment of: '+_txt((s['actions'] or [''])[0],200)+' Faces show the emotion strongly (exaggerated, readable on a phone).')
+    if s.get('actions'):parts.append('Catch the moment of: '+_txt(s['actions'][0],200)+(' Preserve the source expression.' if is_identical(j) else ' Faces show the emotion clearly and naturally, readable on a phone; medium framing, no extreme close-up.'))
     said=[f"{names.get(x.get('speaker'),x.get('speaker'))} says « {_txt(x.get('text'),160)} »"+(f" ({_txt(x.get('jeu'),80)})" if x.get('jeu') else '') for x in s.get('dialogue',[])]
     if parts and said:parts.append('THE FACES PLAY THESE LINES (do not print the dialogue): '+' / '.join(said))
-    if parts:parts.append('HOW THEY ARE MADE: the fruit is the WHOLE body (head, face, neck, arms, hands, fingers), four fingers per hand, fully clothed in ordinary covering clothes, no human, no human skin. '
-                          'The attached sheet rules faces, species, proportions and outfits; a character who is not on the sheet does not exist in this image. '
+    if parts and is_identical(j):parts.append('CAST: '+cast_text(j,True)+'. They replace the people of the source video: never draw the original people.')
+    if parts:parts.append(('' if is_identical(j) else 'HOW THEY ARE MADE: the fruit is the WHOLE body (head, face, neck, arms, hands, fingers), four fingers per hand, fully clothed in ordinary covering clothes, no human, no human skin. ')
+                          +'The attached sheet rules faces, species, proportions and outfits; a character who is not on the sheet does not exist in this image. '
                           'ONE single shot filling the whole frame edge to edge, like a still from the film. '+scene_lettering(s))
     return ('\n'+'\n'.join(parts)) if parts else ''
-def plan_video_block(j,s):
+def plan_video_block(j,s,action_limit=200):
     parts=[]
+    # 11/11/2026 (Mango, clip 4): the forest turned into a market mid-shot; the place now rides with every clip prompt.
+    script=j.get('script') or {}
+    place=(script.get('lieux') or {}).get(s.get('lieu')) if isinstance(script.get('lieux'),dict) else None
+    if place:parts.append('SETTING, identical from the first to the last frame: '+_txt(place,260))
     if s.get('camera'):parts.append('CAMERA: '+_txt(s['camera'],200))
-    acts=[_txt(a,200) for a in (s.get('actions') or []) if _txt(a)]
+    acts=[_txt(a,action_limit) for a in (s.get('actions') or []) if _txt(a)]
     if acts:parts.append('ACTIONS IN ORDER (the last one closes the shot): '+' / '.join(acts))
     if s.get('deplacement'):
-        parts.append('CHARACTER MOVEMENT: '+_txt(s['deplacement'],300)+'. Follow the moving character in one continuous shot. Keep the speaker’s face readable while they speak.')
+        follow=' Follow the source camera and cuts.' if exact_remake(j) else ' Follow the moving character in one continuous shot. Keep the speaker’s face readable while they speak.'
+        parts.append('CHARACTER MOVEMENT: '+_txt(s['deplacement'],300)+'.'+follow)
     silent=set(s.get('characters') or [])-{line['speaker'] for line in s.get('dialogue',[])}
     mute=[c['name'] for c in j.get('characters',[]) if c.get('id') in silent]
     if mute:parts.append('SILENT, MOUTH CLOSED: '+', '.join(mute))
@@ -875,7 +1035,7 @@ def size_problems(chars):
         if found:out.append(f"Le détail de {c.get('name','un personnage')} : « {', '.join(found)} » fait grossir le personnage dans la vidéo. Décris le détail sans parler de sa taille.")
     return out
 
-def validate_script(s, n, check_size=True, word_limit=25):
+def validate_script(s, n, check_size=True, word_limit=25, allow_silent=False):
     if not isinstance(s,dict): raise ValueError('Objet JSON attendu')
     chars=s.get('characters',[]); scenes=s.get('scenes',[])
     # Name the count actually received: the rewrite request and the journal must say what to fix.
@@ -895,8 +1055,9 @@ def validate_script(s, n, check_size=True, word_limit=25):
         for line in lines:line['speaker']=character_id(line.get('speaker'))
         for key in ('characters','muets'):
             if isinstance(scene.get(key),list):scene[key]=[character_id(x) for x in scene[key]]
-        if not lines or any(x.get('speaker') not in ids or not isinstance(x.get('text'),str) or not x['text'].strip() for x in lines): raise ValueError('Dialogue ou locuteur invalide')
-        if not set(scene.get('characters',[])).issubset(ids) or not scene.get('characters'): raise ValueError('Distribution de scène invalide')
+        if (not lines and not allow_silent) or any(x.get('speaker') not in ids or not isinstance(x.get('text'),str) or not x['text'].strip() for x in lines): raise ValueError('Dialogue ou locuteur invalide')
+        if allow_silent:scene.setdefault('dialogue',[])
+        if not set(scene.get('characters',[])).issubset(ids) or (not scene.get('characters') and not allow_silent): raise ValueError('Distribution de scène invalide')
         if any(x['speaker'] not in scene['characters'] for x in lines): raise ValueError('Locuteur absent de la scène')
         mark=scene.get('critical_mark')
         if isinstance(mark,str) and mark.strip():scene['critical_mark']=_txt(mark,180)
@@ -975,6 +1136,241 @@ PRÉPARATION POUR FLOW :
 def is_identical(j):
     return ((j.get('selected') or {}).get('source')=='owner_link' and j['config'].get('recreate')=='identical')
 
+def owner_script(j):
+    """« Mon scénario » (owner 11/11/2026): a complete script written by the owner, kept word for word: no concept
+    comparison, no novelty check, silent shots allowed; only what must fit in each clip is checked."""
+    return (j.get('selected') or {}).get('source')=='owner_script'
+
+def exact_remake(j):
+    return is_identical(j) and j['config'].get('remake_exact') is True
+
+# « Reproduire cette vidéo » (owner 10/11/2026): everything is kept except the characters, replaced by the kind the
+# owner chose before production. (French for the script prompt, English for the image prompts.)
+CASTS={
+    'fruits':('des fruits : chaque personnage devient un fruit dont le fruit forme tout le corps (tête, visage, bras, mains), habillé',
+              'fruit characters: the fruit is the WHOLE body (head, face, neck, arms, hands), four fingers per hand, fully clothed, no human skin'),
+    'legumes':('des légumes : chaque personnage devient un légume dont le légume forme tout le corps (tête, visage, bras, mains), habillé',
+               'vegetable characters: the vegetable is the WHOLE body (head, face, neck, arms, hands), four fingers per hand, fully clothed, no human skin'),
+    'animaux':('des animaux qui se tiennent et agissent comme des humains, habillés',
+               'anthropomorphic animal characters standing and acting like people, fully clothed'),
+    'humains':('des humains fictifs en animation 3D, avec d’autres visages, coiffures, couleurs et tenues que dans la source',
+               'fictional humans in premium 3D animation, with faces, hair, colours and outfits different from the source'),
+    'autre':('',''),
+}
+
+def cast_choice(req):
+    """The owner's answer to « Par qui remplacer les personnages ? », required for a faithful remake."""
+    kind=str((req or {}).get('cast') or '').strip();note=' '.join(str((req or {}).get('cast_note') or '').split())[:400]
+    if kind not in CASTS:raise ValueError('Choisis par qui remplacer les personnages de la vidéo')
+    if kind=='autre' and len(note)<3:raise ValueError('Décris les personnages qui remplaceront ceux de la vidéo')
+    return {'kind':kind,'note':note}
+
+def cast_text(j,english=False):
+    cast=j['config'].get('cast') or {}
+    base=CASTS.get(cast.get('kind'),('',''))[1 if english else 0]
+    note=cast.get('note') or ''
+    if not base and not note:
+        return ('new original fictional characters, clearly different from the people of the source video' if english
+                else 'des personnages fictifs nouveaux, nettement différents de ceux de la source')
+    return base+((' — ' if base else '')+(('owner details: ' if english else 'précisions du propriétaire : ')+note if base else note) if note else '')
+
+# « Reproduire cette vidéo » (owner 10/11/2026): a long video is reproduced one minute at a time; « Faire la suite
+# de la vidéo » makes the next minute with the same characters.
+REMAKE_PART=60
+
+def source_offset(j):
+    return float((j.get('config') or {}).get('source_offset') or 0)
+
+def exact_span(j):
+    """Seconds of the source this episode reproduces: its part, or less when it was finished early with fewer clips."""
+    analysis=j['source_analysis'];seconds=engines.spec(j)['seconds']
+    return min(float(analysis['duration']),len(j['scenes'])*seconds)
+
+def clip_shift(j,i,speech,exact,own_voices):
+    """Shift used by the montage for clip i: the one ChatGPT set after « Vérifier et remonter », else the automatic
+    alignment on the original voice (faithful remake, source sound), else none."""
+    override=(j.get('sync_overrides') or {}).get(str(i))
+    if isinstance(override,(int,float)):return max(-3.0,min(3.0,float(override)))
+    return sync_shift(j,i,speech) if exact and not own_voices else 0.0
+
+def montage_review_prompt(j):
+    """« Vérifier et remonter »: ChatGPT reads the measures of every clip and says what to adjust in the montage."""
+    exact=exact_remake(j);own=remake_translated(j) or (exact and j['config'].get('remake_audio')=='clips')
+    clips=(j.get('quality_report') or {}).get('clips') or [];windows=(j.get('source_analysis') or {}).get('exact_windows') or []
+    seconds=engines.spec(j)['seconds'];rows=[]
+    for i,scene in enumerate(j['scenes']):
+        speech=(clips[i].get('speech') if i<len(clips) else None) or {}
+        words=speech.get('words') or []
+        row={'clip':i+1,'duree_segment_s':seconds,
+             'texte_prevu':' / '.join(x.get('text','') for x in scene.get('dialogue') or []) or '(silence)',
+             'parole_entendue_dans_le_clip':str(speech.get('text') or '')[:200] or None,
+             'concordance_texte':speech.get('match'),
+             'le_clip_commence_a_parler_a_s':round(float(words[0]['start']),2) if words and words[0].get('start') is not None else None,
+             'le_clip_finit_de_parler_a_s':round(float(words[-1]['end']),2) if words and words[-1].get('end') is not None else None,
+             'decalage_applique_s':clip_shift(j,i,speech,exact,own)}
+        if exact and i<len(windows):
+            row['la_voix_d_origine_commence_a_s']=windows[i][0][0] if windows[i] else None
+        rows.append(row)
+    sound=('son de la vidéo d’origine (les clips sont recalés pour que les bouches démarrent avec la voix d’origine)' if exact and not own
+           else 'voix générées dans chaque clip')
+    return ('Tu vérifies le MONTAGE d’une vidéo verticale faite de clips de '+f'{seconds} s'+' mis bout à bout. Ne génère aucune image. '
+            f'Son utilisé : {sound}. Mesures clip par clip (temps en secondes depuis le début du clip, transcription automatique pouvant contenir des erreurs) :\n'
+            +json.dumps(rows,ensure_ascii=False)+'\n'
+            'Repère les problèmes de montage : bouches en avance ou en retard sur la voix, silence trop long au début d’un clip, '
+            'parole coupée par la fin du segment, réplique qui ne correspond pas au texte prévu. '
+            'Pour chaque clip à corriger, donne decalage_s, le décalage total à appliquer à l’image du clip : positif, l’image attend ce temps '
+            '(première image tenue) ; négatif, le début du clip est coupé. Entre -3 et 3 secondes. '
+            +('Si les voix d’origine ne peuvent pas coller aux bouches sur une bonne partie des clips, propose son = "clips" (voix des clips, sous-titres ajoutés). ' if exact else '')+
+            'Réponds UNIQUEMENT en JSON : '
+            f'{{"production_id": "{j["id"]}", "generation_task_id": "...", "verdict": "ok" ou "corriger", "son": "source" ou "clips", '
+            '"corrections": [{"clip": 2, "decalage_s": 1.3, "raison": "courte"}], "resume": "une phrase sur ce qui est corrigé"}')
+
+def apply_montage_review(j,t,result):
+    answer=parse_json(result.get('text',''))
+    if not isinstance(answer,dict) or answer.get('production_id')!=j['id'] or answer.get('verdict') not in ('ok','corriger'):
+        raise ValueError('Avis de montage illisible : {"verdict": "ok" | "corriger", "corrections": [...]} attendu')
+    overrides=dict(j.get('sync_overrides') or {});changed=[]
+    for fix in answer.get('corrections') or []:
+        try:k=int(fix.get('clip'))-1;value=round(max(-3.0,min(3.0,float(fix.get('decalage_s')))),2)
+        except (TypeError,ValueError,AttributeError):continue
+        if 0<=k<len(j['scenes']):overrides[str(k)]=value;changed.append(f'clip {k+1} : {value:+g} s')
+    sound=answer.get('son')
+    if exact_remake(j) and sound in ('source','clips') and sound!=(j['config'].get('remake_audio') or 'source'):
+        j['config']['remake_audio']=sound;changed.append('son : '+('voix des clips' if sound=='clips' else 'son d’origine'))
+    summary=str(answer.get('resume') or '')[:300]
+    j['montage_review']={'at':now(),'verdict':answer['verdict'],'summary':summary,'changes':changed}
+    if answer['verdict']=='ok' and not changed:
+        j['status']='done';event(j,'Montage vérifié par ChatGPT : rien à corriger.'+(' '+summary if summary else ''));return
+    j['sync_overrides']=overrides
+    event(j,'Montage vérifié par ChatGPT : '+(', '.join(changed) or 'ajustements')+'.'+(' '+summary if summary else '')+' Remontage avec les mêmes clips.')
+    j.pop('final',None);j.pop('montage_stale',None);j['stage']='edit';j['status']='rendering';start_render(j['id'])
+
+def sync_shift(j,i,speech):
+    """Seconds to move clip i so its first spoken word starts with the original line (faithful remake, source sound).
+    Positive: hold the first image that long; negative: start the clip later. Small gaps and unknown timings: 0."""
+    windows=(j.get('source_analysis') or {}).get('exact_windows') or []
+    words=(speech or {}).get('words') if isinstance(speech,dict) else None
+    if i>=len(windows) or not windows[i] or not words:return 0.0
+    try:first=float(words[0].get('start'))
+    except (TypeError,ValueError,AttributeError):return 0.0
+    shift=float(windows[i][0][0])-first
+    return 0.0 if abs(shift)<0.15 else max(-3.0,min(3.0,round(shift,2)))
+
+def clock_text(seconds):
+    """75 → « 1:15 »."""
+    seconds=int(round(float(seconds or 0)));return f'{seconds//60}:{seconds%60:02d}'
+
+def remake_remaining(j):
+    """Seconds of the source after what this episode reproduces (after its last kept clip when finished early)."""
+    analysis=j.get('source_analysis') or {}
+    if not exact_remake(j) or not analysis.get('duration') or not j.get('scenes'):return 0.0
+    full=float(analysis.get('full_duration') or analysis['duration'])
+    return max(0.0,full-source_offset(j)-exact_span(j))
+
+def finish_with_clips(j):
+    """« Terminer avec les clips reçus »: the episode keeps the clips received from its start, the rest is dropped,
+    and production goes on to the cover and the montage (owner 10/11/2026: 40 clips was too long)."""
+    keep=0
+    while keep<len(j['scenes']) and j['scenes'][keep].get('clip'):keep+=1
+    j.pop('finish_now',None)
+    if not keep:
+        j['status']='attention';alert(j,'action','Aucun clip reçu au début de l’épisode : rien à monter pour l’instant.');return False
+    dropped=len(j['scenes'])-keep
+    for t in STATE['tasks']:
+        if t['job']==j['id'] and t['status']=='queued':t['status']='cancelled'
+    j['scenes']=j['scenes'][:keep];j['config']['scene_count']=keep
+    if j.get('script'):
+        j['script']['scenes']=j['script']['scenes'][:keep]
+        (job_dir(j)/'scenario.json').write_text(json.dumps(j['script'],ensure_ascii=False,indent=2),'utf-8')
+    j['alerts']=[a for a in j.get('alerts',[]) if a.get('level')!='action']
+    j['stage']='clips';j['status']='running';j['finished_early']={'at':now(),'kept':keep,'dropped':dropped}
+    event(j,f'Épisode terminé avec les {keep} premiers clips reçus ({dropped} scène(s) abandonnée(s)) : montage de la vidéo.')
+    return True
+
+def minute_ranges(count,seconds,minute=REMAKE_PART):
+    """Clip ranges of about one minute each, cut at the clip closest to every minute (8 s clips: 8, 7, 8, 7…)."""
+    import math
+    ranges,start,k=[],0,1
+    while start<count:
+        end=min(count,max(start+1,math.ceil(k*minute/seconds)));ranges.append((start,end));start=end;k+=1
+    return ranges
+
+def split_into_minutes(j):
+    """« Découper en parties d'une minute » (owner 10/11/2026, LA BOUTEILLE SOUS LE LIT): a long faithful remake becomes
+    one episode per minute of the source. Each part keeps its clips, boards, cast and the source sound of its minute,
+    then goes on alone to the cover and the montage. Nothing is generated again."""
+    j.pop('split_minutes',None)
+    if not exact_remake(j):return []
+    seconds=engines.spec(j)['seconds'];ranges=minute_ranges(len(j['scenes']),seconds)
+    if len(ranges)<2:return []
+    src=job_dir(j);analysis=j['source_analysis'];offset=source_offset(j)
+    full=float(analysis.get('full_duration') or analysis['duration'])+(0 if analysis.get('full_duration') else offset)
+    base=re.sub(r'\s*— partie \d+$','',j.get('title','Épisode'));first=series.part_of(j)
+    shared=[c.get('file') for c in j.get('characters',[])]+[j.get('character_sheet_file')]+[x.get('file') for x in j.get('state_sheets') or []]+['source.mp4']
+    created=[];previous=j
+    for n,(a,b) in enumerate(ranges[1:],start=1):
+        start=offset+a*seconds
+        part={'id':uid(),'title':f'{base} — partie {first+n}','brief':j.get('brief',''),'config':{**copy.deepcopy(j['config']),'source_offset':round(start,2),'scene_count':b-a},
+              'series':{'id':j.get('series',{}).get('id',j['id']),'part':first+n,'previous':previous['id']},'selected':copy.deepcopy(j.get('selected')),
+              'flow_profile':j.get('flow_profile'),'flow_projects':copy.deepcopy(j.get('flow_projects',{})),'status':'running','stage':'clips','created':now(),'updated':now(),
+              'events':[],'candidates':[],'characters':copy.deepcopy(j.get('characters',[])),'character_sheet_file':j.get('character_sheet_file'),
+              'state_sheets':copy.deepcopy(j.get('state_sheets') or []),'scenes':copy.deepcopy(j['scenes'][a:b]),'autopilot':j.get('autopilot'),
+              'remake_translated':j.get('remake_translated'),'script':{**copy.deepcopy(j.get('script') or {}),'scenes':copy.deepcopy((j.get('script') or {}).get('scenes',[])[a:b])},
+              'source_analysis':{**copy.deepcopy(analysis),'offset':round(start,2),'full_duration':full,'duration':round(min(full-start,(b-a)*seconds),2),
+                                 'exact_windows':copy.deepcopy(analysis['exact_windows'][a:b]),'window_frames':copy.deepcopy((analysis.get('window_frames') or [])[a:b])}}
+        for key in ('editorial_version','retention_version','hook_version','quality_version','cover_style','character_sheet','script_approved'):
+            if key in j:part[key]=copy.deepcopy(j[key])
+        dst=job_dir(part)
+        for name in dict.fromkeys([x for x in shared if x]+[s.get(k) for s in part['scenes'] for k in ('clip','image') if s.get(k)]):
+            if (src/name).is_file() and not (dst/name).exists():shutil.copyfile(src/name,dst/name)
+        STATE['jobs'].insert(0,part);previous['next_part']=part['id'];previous=part;created.append(part)
+        event(part,f'Partie {first+n} de « {base} » : {clock_text(start)}–{clock_text(start+(b-a)*seconds)} de la vidéo d’origine, {b-a} clips déjà reçus, mêmes personnages. Miniature puis montage.')
+    a,b=ranges[0]
+    j['scenes']=j['scenes'][a:b];j['config']['scene_count']=b-a;j['title']=f'{base} — partie {first}'
+    if j.get('script'):
+        j['script']['scenes']=j['script']['scenes'][a:b]
+        (src/'scenario.json').write_text(json.dumps(j['script'],ensure_ascii=False,indent=2),'utf-8')
+    if not analysis.get('full_duration'):analysis['full_duration']=full
+    analysis['duration']=round(min(full-offset,(b-a)*seconds),2);analysis['exact_windows']=analysis['exact_windows'][a:b]
+    if analysis.get('window_frames'):analysis['window_frames']=analysis['window_frames'][a:b]
+    j.setdefault('series',{'id':j['id'],'part':first})
+    event(j,f'Épisode découpé en {len(ranges)} parties d’environ une minute : cette partie {first} couvre {clock_text(offset)}–{clock_text(offset+(b-a)*seconds)}. Les autres parties se montent chacune de leur côté.')
+    for part in created:schedule(part)
+    return created
+
+def language_code(language):
+    """« Français (fr-FR) » → « fr »."""
+    m=re.search(r'\(([a-z]{2})[-_)]',str(language or ''),re.I)
+    return m[1].lower() if m else ''
+
+def remake_translated(j):
+    """« Reproduire cette vidéo » in another language than the video's (owner 10/11/2026): translated lines, the
+    clips' own voices in the montage instead of the source soundtrack."""
+    return exact_remake(j) and bool(j.get('remake_translated'))
+
+def validate_source_dialogue(j,scenes,source_language=None):
+    """Same language as the video: every word of the transcription, in order. Another language chosen: one translated
+    line per original line, the same speaker turns, silences kept silent. Returns True when the lines are translated."""
+    target=language_code(j['config'].get('language'))
+    source=str(source_language or '').strip().lower()[:2]
+    translated=bool(source and target and source!=target)
+    for i,(scene,window) in enumerate(zip(scenes,j['source_analysis']['exact_windows']),1):
+        lines=scene.get('dialogue',[])
+        actual=' '.join(line['text'] for line in lines)
+        expected=' '.join(line[1] for line in window)
+        if not translated:
+            if actual.split()!=expected.split():
+                raise ValueError(f'Scène {i} : paroles différentes de la transcription d’origine. Reprends chaque mot dans l’ordre, y compris les répétitions.')
+            continue
+        if not window:
+            if actual.strip():raise ValueError(f'Scène {i} : silence dans la vidéo d’origine, aucune réplique ici.')
+            continue
+        if len(lines)!=len(window) or any(not str(line.get('text','')).strip() for line in lines):
+            raise ValueError(f'Scène {i} : traduis chaque réplique d’origine en une réplique, dans le même ordre ({len(window)} réplique(s) attendue(s)).')
+        if len(actual.split())>max(8,int(len(expected.split())*1.7)+3):
+            raise ValueError(f'Scène {i} : traduction trop longue pour tenir dans le même temps que l’original ; raccourcis-la sans changer le sens.')
+    return translated
+
 def correction_ready(j):
     return bool(j.get('rejected_script') and j.get('editorial_feedback'))
 
@@ -994,7 +1390,7 @@ def correction_prompt(j):
 
 def script_prompt(j):
     if (j.get('variant') or {}).get('kind')=='language':return translation_prompt(j)
-    if correction_ready(j):return correction_prompt(j)
+    if not exact_remake(j) and correction_ready(j):return correction_prompt(j)
     ref=j['selected']; n=j['config']['scene_count']
     language=j['config'].get('language','Deutsch (de-DE)')
     schema={'production_id':j['id'],'title':'Titre dans la langue choisie','cover_title':'Question courte dans la langue choisie','hook_text':'Accroche écrite à l’écran pendant les 3 premières secondes : 4 à 7 mots, question ou promesse choc, sans révéler la fin','description':'Description TikTok dans la langue choisie, mentionnant la création par IA','lieu':'LE MONDE DE TOUT L’ÉPISODE, une fois : époque, lumière, matières ; sans enseignes ni logos','lieux':{'CUISINE':'la pièce décrite pour un dessinateur'},'su_du_public':'ce que le spectateur VOIT avant les personnages','cliffhanger':'la dernière réplique','characters':[{'id':'fruit_a','name':'Prénom dans la langue choisie','role':'protagoniste | antagoniste | témoin','appearance':'âge, TÊTE DE FRUIT décrite (couleur, matière, signe), vêtements précis, attitude','tenue':'la tenue en quelques mots, toujours la même','detail':'LE détail reconnaissable de loin (ex. une mèche blanche sur le front)','place':'sa position de départ habituelle dans le cadre vertical : « À DROITE — la prune violette en sweat gris »','voice':'Voix native de la langue choisie, âge, timbre, ton','veut':'ce qu’il veut','image_prompt':'Prompt de référence dans la langue choisie'}],'scenes':[{'title':'Titre court du plan (2 à 4 mots, MAJUSCULES, langue choisie)','sert':'moteur | obstacle | aggravation | twist | revanche | appel','apporte':'ce que le spectateur apprend de NEUF dans ce plan, une phrase','lieu':'CUISINE','characters':['fruit_a'],'muets':['personnages présents qui ne parlent pas'],'meaning':'Action compréhensible sans le son','montre':'CE QUE L’IMAGE MONTRE, en majuscules : qui, où, quel geste, quel objet, quelle émotion exagérée','cadre':'PLAN TAILLE / GROS PLAN… : qui est où dans le cadre vertical','camera':'ce que fait la caméra, quelques mots','actions':['ACTION 1.','ACTION 2.','LE GESTE QUI FERME LE PLAN et appelle le suivant.'],'image_prompt':'Prompt d’image dans la langue choisie, 9:16','video_prompt':'Animation, caméra, action, position des locuteurs, lèvres et personnages silencieux','dialogue':[{'speaker':'fruit_a','text':'Réplique naturelle dans la langue choisie, avec une intention claire','jeu':'3 à 6 mots de jeu : « dans un souffle, les mains sur la bouche »'}]}],'state_changes':[{'from_scene':2,'character':'fruit_a','change':'Changement d’apparence visible à partir de cette scène (blessure, vêtement déchiré, objet perdu, maquillage coulé…), langue choisie'}]}
@@ -1004,11 +1400,53 @@ def script_prompt(j):
     # Use the same dialogue budget in the prompt and in validation.
     word_limit=engines.word_limit(j)
     schema['scenes'][0]['deplacement']='Facultatif : personnage, point de départ, trajet et destination'
+    schema['scenes'][0]['critical_mark']='Facultatif : inscription exacte et emplacement précis sur un objet ou un personnage, seulement si nécessaire à l’intrigue'
+    if exact_remake(j):
+        analysis=j['source_analysis'];seconds=engines.spec(j)['seconds']
+        schema['characters'][0]['appearance']='NOUVEAU personnage selon le choix du propriétaire : espèce ou type, visage, couleurs, coiffure et tenue DIFFÉRENTS de la personne d’origine ; même rôle et même âge relatif'
+        schema['characters'][0]['place']='Position de départ observée dans la source'
+        schema['scenes'][0]['actions']=['Actions visibles de la source, dans leur ordre']
+        schema['scenes'][0]['dialogue'][0]['text']=f'Réplique en {language} : la parole de la source, mot pour mot si la source est déjà dans cette langue, sinon sa traduction fidèle'
+        schema['source_language']='code à deux lettres de la langue parlée dans la vidéo source (ex. de, fr, en)'
+        source=source_video.guidance('reference',analysis)
+        timeline='\n'.join(f'Scène {i+1} ({i*seconds:g}–{min((i+1)*seconds,analysis["duration"]):g} s) : '
+                           +(' / '.join(f'+{at:g} s « {line} »' for at,line in window) or 'silence, dialogue vide')
+                           for i,window in enumerate(analysis['exact_windows']))
+        return ('Recrée la vidéo source en remplaçant les personnages, et seulement eux. '
+                f'REMPLACEMENT CHOISI PAR LE PROPRIÉTAIRE : {cast_text(j)}. '
+                'Chaque personne de la source devient un personnage nouveau de ce type : ne reprends ni son visage, ni sa coiffure, ni sa couleur de peau, ni ses vêtements ; '
+                'personne ne doit reconnaître les personnages d’origine. Garde leur nombre, leur rôle, leur âge relatif (enfant, adulte, âgé), leur place dans le cadre, leurs gestes et leurs expressions. '
+                'Conserve exactement les actions, les décors, les objets, les cadrages, les coupes, les mouvements, le rythme et la fin. '
+                'Dans video_prompt, indique quand chaque action, coupe et prise de parole arrive dans son segment. '
+                f'LANGUE DES DIALOGUES CHOISIE PAR LE PROPRIÉTAIRE : {language}. Indique dans source_language la langue parlée dans la vidéo source. '
+                f'Si la source parle déjà {language}, recopie chaque parole mot pour mot dans dialogue. '
+                f'Sinon, traduis chaque réplique en {language} : une réplique traduite pour chaque réplique d’origine, dans le même ordre, avec le même locuteur, '
+                'le même sens, le même ton et une longueur proche pour être dite dans le même temps ; les voix des personnages sont natives de cette langue. '
+                'Respecte les répétitions et les silences. N’ajoute ni narration, ni accroche écrite, ni appel final. '
+                f'Utilise exactement {n} segments consécutifs. Réponds uniquement avec le JSON du schéma.\n'
+                f'{source}\nDÉCOUPAGE OBLIGATOIRE :\n{timeline}\n'
+                f'Autres consignes du propriétaire : {j.get("brief") or "aucune"}.\n'
+                f'Corrections demandées : {json.dumps(j.get("editorial_feedback", []),ensure_ascii=False)}\n'
+                f'Schéma : {json.dumps(schema,ensure_ascii=False)}')
     if identical:
-        # A faithful remake never receives the originality rules (five new concepts, history to avoid): they made the
-        # writer invent another story (real case 05/11/2026: a maid hiding her poverty became two sisters and a pendant).
-        guidance=editorial.retention_instructions(j)
-    elif j.get('editorial_version')==2:
+        schema['characters'][0]['appearance']='Âge apparent, silhouette, tenue et signe distinctif d’après la source, dans le style choisi'
+        schema['characters'][0]['place']='Position de départ observée dans la source'
+        schema['scenes'][0]['montre']='Action et réaction visibles à ce moment dans la source'
+        schema['scenes'][0]['actions']=['Gestes observés, dans l’ordre']
+        schema['scenes'][0]['sert']='Fonction de ce passage dans l’histoire d’origine'
+        reference=source_video.guidance('identical',j.get('source_analysis'),len(j.get('source_captures') or []),n)
+        return (f'Prépare une recréation fidèle en {n} scènes de {engines.spec(j)["seconds"]} secondes. '
+                f'Langue des dialogues, des voix et des prompts : {language}. Réponds uniquement avec le JSON du schéma. '
+                f'Au plus {word_limit} mots parlés par scène, trois répliques et deux locuteurs. Garde les silences et le jeu de la source. '
+                'Reprends en priorité le cadrage, la position des personnes et des objets dès la première image de chaque scène. '
+                'Dans video_prompt, décris les gestes, déplacements et mouvements de caméra réellement observés. '
+                'Conserve un plan fixe si la source est fixe. Préserve la même tenue et les mêmes accessoires entre les scènes. '
+                'Si un détail est illisible, décris seulement ce que tu peux confirmer. N’ajoute aucune réplique d’appel. '
+                f'Remplace chaque personnage de la source par {cast_text(j)} : visage, couleurs et tenue différents de l’original, même rôle, même place et mêmes gestes. '
+                f'Consignes du propriétaire : {j.get("brief") or "aucune"}.\n'
+                f'{reference}\nCorrections demandées : {json.dumps(j.get("editorial_feedback", []),ensure_ascii=False)}\n'
+                f'Schéma : {json.dumps(schema,ensure_ascii=False)}')
+    if j.get('editorial_version')==2:
         if not j.get('sheet_approved'):
             schema['creative_selection']={'candidates':[{'title':'Titre du concept','hook':'Première réplique','conflict':'Conflit','setting':'Décor','twist':'Retournement','ending':'Fin','scores':{'hook':4,'clarity':4,'emotion':4,'novelty':5}} for _ in range(5)],'selected_index':0,'reason':'Justification éditoriale, pas une prédiction de vues'}
         if j.get('hook_version')==1:
@@ -1016,11 +1454,9 @@ def script_prompt(j):
         schema['story_signature']={'relationship':'short English relationship','setting':'short English setting','central_object':'short English object','twist_mechanism':'short English plot mechanism'}
         guidance=editorial.instructions(j,STATE['jobs'])+'\nRéférences comparées : '+json.dumps(j.get('candidates',[])[:6],ensure_ascii=False)+'\nCorrections demandées : '+json.dumps(j.get('editorial_feedback',[]),ensure_ascii=False)
     else:guidance=editorial.STORY_CRAFT
-    if identical and j.get('editorial_feedback'):guidance+='\nCorrections demandées : '+json.dumps(j['editorial_feedback'],ensure_ascii=False)
     guidance+=PLAN_RULES
     if engines.of(j)=='flow' or engine_chain.flow_grok_policy(STATE.get('settings'),j['config']):
         guidance+=FLOW_SCENE_RULES
-    schema['scenes'][0]['critical_mark']='Facultatif : inscription exacte et emplacement précis sur un objet ou un personnage, seulement si nécessaire à l’intrigue'
     if not identical:
         guidance+=(
             '\nDramaturgie : suis un seul protagoniste et rends visible ce qu’il veut dès l’ouverture. '
@@ -1046,10 +1482,13 @@ def script_prompt(j):
             'Dans dialogue[0].text, écris uniquement les paroles de la première réplique, sans le nom du locuteur ni son jeu.'
         )
     reference=(source_video.guidance(j['config'].get('recreate','inspired'),j.get('source_analysis'),len(j.get('source_captures') or []),n)+(f"\nInstructions en plus du propriétaire (à respecter) : {j['brief']}" if j.get('brief','').strip() else '')) if owner_link else None
-    return f'''Crée une mini-fiction de fruits {'qui refait fidèlement la vidéo indiquée' if identical else 'entièrement ORIGINALE'}. Langue demandée pour les dialogues, les voix, les textes de couverture, la description et les prompts (sauf les clés techniques et la signature narrative) : {language}. La langue demandée prime sur la langue française des instructions et des descriptions du schéma. Aucune traduction ni réplique dans une autre langue. Les personnages parlent avec des voix natives de la langue demandée. Réponds UNIQUEMENT avec du JSON valide, sans explication. Conserve les clés techniques du schéma en anglais. {reference if reference else 'Référence comme indice de tendance seulement, jamais copier les répliques ou les plans : '+json.dumps(ref,ensure_ascii=False)+'.'} Idée : {j['brief']}. Exactement {n} scènes de {engines.spec(j)['seconds']} secondes, {'les mêmes personnages que la vidéo d’origine (5 au plus : fusionne ou laisse en figurant muet les rôles secondaires)' if identical else '2 à 5 personnages (au moins 3 quand l’histoire le permet : héros, adversaire, témoin ou figurant)'}. Au plus {word_limit} mots parlés par scène pour les langues avec espaces ; dans toutes les langues, vérifie que la scène peut être jouée au rythme naturel dans la durée du clip. Jusqu’à trois répliques, avec au maximum deux locuteurs par scène. {'HOOK : garde l’ouverture de la vidéo d’origine (elle a déjà prouvé qu’elle accroche) ; sa première réplique, reformulée, est dite dans les 2 premières secondes ; hook_text pose une question résolue seulement à la fin.' if identical else 'HOOK OBLIGATOIRE : la scène 1 s’ouvre sur l’instant le plus fort (danger, injustice, secret révélé), la première réplique est une phrase choc de moins de 10 mots dite dans les 2 premières secondes, et hook_text pose une question résolue seulement à la fin.'} Mouvement : chaque scène a un cadrage différent (gros plan, plan large, plongée), un mouvement de caméra motivé (travelling, panoramique, zoom), des gestes précis et un arrière-plan vivant par les objets, la lumière ou la météo ; au moins deux lieux différents dans l’épisode. Retournement visible, conclusion satisfaisante. Pas de présentation comme fait réel. Animation 3D premium, fruits anthropomorphes avec peau de fruit aussi sur les mains, vêtements couvrants sans logos, grands visages expressifs, {'mêmes décors que la vidéo d’origine' if identical else 'décor cohérent avec l’intrigue choisie et différent des épisodes récents'}, vertical 9:16. Même identité et tenue partout, aucune voix de narrateur, personnages parlant à l'écran, caméra en mouvement continu dans chaque clip. Sous-titres ajoutés au montage. {guidance} Champ state_changes FACULTATIF : seulement si l’histoire change vraiment l’apparence visible d’un personnage (blessure, vêtement déchiré, objet perdu, maquillage coulé…), de 0 à 3 entrées, from_scene = numéro de la première scène (1 à {n}) où le changement se voit, character = identifiant du personnage, change = description courte ; sinon une liste vide []. Le champ cover_title doit être une accroche de couverture de 3 à 5 mots maximum dans la langue demandée, sans révéler la fin. Schéma : {json.dumps(schema,ensure_ascii=False)}'''
+    return f'''Crée une mini-fiction de fruits {'qui refait fidèlement la vidéo indiquée' if identical else 'entièrement ORIGINALE'}. Langue demandée pour les dialogues, les voix, les textes de couverture, la description et les prompts (sauf les clés techniques et la signature narrative) : {language}. La langue demandée prime sur la langue française des instructions et des descriptions du schéma. Aucune traduction ni réplique dans une autre langue. Les personnages parlent avec des voix natives de la langue demandée. Réponds UNIQUEMENT avec du JSON valide, sans explication. Conserve les clés techniques du schéma en anglais. {reference if reference else 'Référence comme indice de tendance seulement, jamais copier les répliques ou les plans : '+json.dumps(ref,ensure_ascii=False)+'.'} Idée : {j['brief']}. Exactement {n} scènes de {engines.spec(j)['seconds']} secondes, {'les mêmes personnages que la vidéo d’origine (5 au plus : fusionne ou laisse en figurant muet les rôles secondaires)' if identical else '2 à 5 personnages (au moins 3 quand l’histoire le permet : héros, adversaire, témoin ou figurant)'}. Au plus {word_limit} mots parlés par scène pour les langues avec espaces ; dans toutes les langues, vérifie que la scène peut être jouée au rythme naturel dans la durée du clip. Jusqu’à trois répliques, avec au maximum deux locuteurs par scène. {'HOOK : garde l’ouverture de la vidéo d’origine (elle a déjà prouvé qu’elle accroche) ; sa première réplique, reformulée, est dite dans les 2 premières secondes ; hook_text pose une question résolue seulement à la fin.' if identical else 'HOOK OBLIGATOIRE : la scène 1 s’ouvre sur l’instant le plus fort (danger, injustice, secret révélé), la première réplique est une phrase choc de moins de 10 mots dite dans les 2 premières secondes, et hook_text pose une question résolue seulement à la fin.'} Mouvement et continuité, comme un film : les scènes s’enchaînent sans saut d’image (une scène qui se passe au même endroit que la précédente reprend ses positions, sa lumière et ses objets et le dit dans le champ lieu), cadrages moyens ou larges qui gardent les corps et le décor visibles, gros plan seulement pour un moment très fort, mouvement de caméra lent et fluide (travelling, panoramique), jamais de zoom brusque, des gestes précis et un arrière-plan vivant par les objets, la lumière ou la météo ; au moins deux lieux différents dans l’épisode. Retournement visible, conclusion satisfaisante. Pas de présentation comme fait réel. Animation 3D premium, fruits anthropomorphes avec peau de fruit aussi sur les mains, vêtements couvrants sans logos, grands visages expressifs, {'mêmes décors que la vidéo d’origine' if identical else 'décor cohérent avec l’intrigue choisie et différent des épisodes récents'}, vertical 9:16. Même identité et tenue partout, aucune voix de narrateur, personnages parlant à l'écran, caméra en mouvement continu dans chaque clip. Sous-titres ajoutés au montage. {guidance} Champ state_changes FACULTATIF : seulement si l’histoire change vraiment l’apparence visible d’un personnage (blessure, vêtement déchiré, objet perdu, maquillage coulé…), de 0 à 3 entrées, from_scene = numéro de la première scène (1 à {n}) où le changement se voit, character = identifiant du personnage, change = description courte ; sinon une liste vide []. Le champ cover_title doit être une accroche de couverture de 3 à 5 mots maximum dans la langue demandée, sans révéler la fin. Schéma : {json.dumps(schema,ensure_ascii=False)}'''
 
 def horizontal(j): return (j.get('config') or {}).get('format')=='horizontal'
-def frame_size(j): return (1920,1080) if horizontal(j) else (1080,1920)  # best resolution for TikTok (owner priority)
+def frame_size(j):
+    # Owner 11/11/2026: « je ne veux plus l'agrandissement »: with upscale off, the video keeps the clips' native 720p.
+    if not montage.of(j.get('config') or {}).get('upscale',True):return (1280,720) if horizontal(j) else (720,1280)
+    return (1920,1080) if horizontal(j) else (1080,1920)  # best resolution for TikTok (owner priority)
 
 def normalize_flow_resolution(cfg):
     """Our Omni Flash/Lite Flow connectors generate in native 720p; export size is separate.
@@ -1127,16 +1566,22 @@ def check_originality(j):
 
 def flow_scan(state,client,accounts,only_profile=None):
     """Google accounts found in this Chrome: one Flow profile each, real credits, automatic rotation."""
-    added=updated=0;names=[]
+    added=updated=skipped=0;names=[]
     for a in accounts[:40]:
         email=str(a.get('email') or '').strip().lower()
         if not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+',email):continue
         if only_profile and email!=only_profile.get('flow_email','').lower():continue
         p=only_profile or next((x for x in state['profiles'] if (x.get('flow_email') or x.get('label','')).lower()==email),None)
-        if p and any(c.get('role') == 'flow' and c.get('flow_profile') == p['id']
-                     and c['id'] != client['id'] and not c.get('disabled')
-                     for c in state['clients'].values()):
-            continue
+        if p and p.get('flow_client') != client['id']:
+            owner=state['clients'].get(p.get('flow_client'))
+            claimed=any(t.get('profile')==p['id'] and t.get('status')=='claimed' for t in state['tasks'])
+            # The same Google account may be signed in to several Chrome profiles: the session using it keeps it.
+            # …but only while that session really has it: an account its window no longer finds (slot None, out of
+            # rotation: borismoussa53, 10/11/2026) goes to the profile where it is signed in.
+            if claimed or (owner and client_online(owner) and (owner.get('role')=='flow' or (client.get('pool') and p.get('slot') is not None))):
+                skipped+=1
+                continue
+            p.pop('credit_probe',None)
         if not p:
             p={'id':uid(),'label':email,'balance':0};state['profiles'].append(p);added+=1
         else:updated+=1
@@ -1149,10 +1594,20 @@ def flow_scan(state,client,accounts,only_profile=None):
             p['flow_url']=f"https://flow.google.com/u/{int(a.get('slot',0))}/project/home";p['flow_url_home']=True
         p['flow_url']=flow_accounts.at_slot(p['flow_url'],p['slot'])
         # This scan just verified the email at its current Google slot. An older wrong-slot warning is obsolete.
-        if (p.get('readiness') or {}).get('state')=='fix' and 'Autre compte Google ouvert' in p['readiness'].get('reason',''):
+        reason=(p.get('readiness') or {}).get('reason','')
+        if 'Autre compte Google ouvert' in reason or re.search(r'Tabs cannot be edited right now|user may be dragging a tab',reason,re.I):
             p.pop('readiness',None)
+        # 11/11/2026 (borismoussa51/53): Google's « /unavailable » page still shows an address and a number. The scan (0.1.96.29)
+        # says so: no access, no balance. Only a scan that saw the real Flow page (unavailable False) lifts an old « no access ».
+        if a.get('unavailable') is True:
+            why=' '.join(str(a.get('why') or '').split())[:240]
+            p['readiness']={'state':'no_access','reason':'Ce compte Google n’a pas accès à Flow'+(' — Google : « '+why+' »' if why else ''),'at':now()};p['blocked']='unavailable'
+        elif a.get('unavailable') is False and (p.get('readiness') or {}).get('state')=='no_access':
+            p.pop('readiness',None)
+            if p.get('blocked')=='unavailable':p.pop('blocked',None)
         if isinstance(a.get('balance'),int) and 0<=a['balance']<=100000:
             flow_refill.read(p,a['balance'],time.time(),int(state.get('settings',{}).get('flow_daily',flow_refill.DAILY)));p['balance']=a['balance'];p['credit_source']='read';p['checked']=now();p.pop('blocked',None) if a['balance']>0 else p.update(blocked='credits')
+            p.pop('credit_error',None)
         names.append(email)
     if names and not only_profile:
         # Google renumbers /u/N when accounts are added or removed: an account of this browser that the scan no
@@ -1164,6 +1619,7 @@ def flow_scan(state,client,accounts,only_profile=None):
     if names:state.setdefault('settings',{})['flow_auto']=True
     total=sum(int(x.get('balance') or 0) for x in state['profiles'] if (x.get('flow_email') or '') in names)
     if not names:
+        if skipped:return f'{skipped} compte(s) Google de cette fenêtre, déjà suivi(s) par une autre session.'
         if only_profile:return 'Aucun compte correspondant dans ce profil Chrome. Ouvre la bonne session Google dans ce profil, puis réessaie.'
         return 'Aucun compte Google détecté dans cette fenêtre. Connecte-toi avec « Ajouter un compte Google », puis clique sur « Détecter les comptes Flow ».'
     # Says "in this window": with several FruchtDrama windows the table below adds up all of them.
@@ -1175,22 +1631,50 @@ def prepare_source(id):
         j=job_by(id)
         if not j or j.get('status')!='waiting_source':return
         url=(j.get('selected') or {}).get('url','');d=job_dir(j)
+        exact=exact_remake(j);seconds=engines.spec(j)['seconds']
     analysis={}
     try:
-        info=source_video.download(url,d/'source.mp4');analysis.update(info)
+        info=source_video.download(url,d/'source.mp4')
+        if exact:
+            probe=shutil.which('ffprobe')
+            info['duration']=(clip_duration(probe,d/'source.mp4') if probe else None) or info['duration']
+        analysis.update(info)
         if source_video.board(d/'source.mp4',d/'source_board.jpg',info['duration']):analysis['board']='source_board.jpg'
         try:analysis['sheets']=source_video.frame_sheets(d/'source.mp4',d,info['duration'])
         except Exception as e:log_error('Images de la vidéo d’origine',e)
-        analysis['transcript']=source_video.transcribe(d/'source.mp4',ROOT)
+        analysis['transcript']=source_video.transcribe(d/'source.mp4',ROOT,required=exact)
+        if exact:
+            if not (analysis.get('sheets') or analysis.get('board')) or info['duration']<=0:
+                raise ValueError('Images ou durée de la vidéo d’origine indisponibles.')
+            # One minute at a time: a 5-minute video made 40 clips at once (owner 10/11/2026, « c'est trop long »).
+            offset=source_offset(j);full=float(info['duration']);part=min(REMAKE_PART,full-offset)
+            if part<=1:raise ValueError('Plus rien à reproduire après '+clock_text(offset)+' dans cette vidéo.')
+            analysis['transcript']=source_video.slice_transcript(analysis['transcript'],offset,part)
+            analysis.update(full_duration=full,offset=offset,duration=part)
+            windows=source_video.exact_windows(analysis['transcript'],part,seconds)
+            if len(windows)>40:raise ValueError('La vidéo dépasse les 40 clips pris en charge.')
+            analysis['window_frames']=source_video.window_frames(d/'source.mp4',seconds,len(windows),**({'offset':offset} if offset else {}))
+            analysis['exact_windows']=windows
         message='Vidéo d’origine analysée : '+(f"{sum(1 for x in analysis['sheets'])} images (début, une toutes les 6 s, chaque changement de plan)" if analysis.get('sheets') else 'planche des moments clés' if analysis.get('board') else 'description')+(' et transcription' if analysis.get('transcript') else '')+' transmises à l’IA.'
     except Exception as e:
         analysis['error']=str(e)[:200];message='Vidéo d’origine non récupérée ('+str(e)[:160]+') : l’histoire s’appuie sur '+('tes captures et ' if j.get('source_captures') else '')+'son lien seulement.'
     with LOCK:
         j=job_by(id)
         if not j:return
+        if j.get('status')!='waiting_source':return
         j['source_analysis']=analysis
-        if j.get('status')=='waiting_source':j['status']='running'
-        event(j,message);schedule(j);save()
+        if exact and 'exact_windows' not in analysis:
+            j['status']='attention'
+            alert(j,'action','Reproduction fidèle en attente : '+analysis.get('error','source incomplète')+' Clique sur Reprendre pour réessayer.')
+        else:
+            if exact:
+                j['config']['scene_count']=len(analysis['exact_windows'])
+                if remake_remaining(j)>1:
+                    message+=(f" Vidéo de {clock_text(analysis['full_duration'])} : cet épisode reproduit {clock_text(analysis['offset'])}–{clock_text(analysis['offset']+analysis['duration'])}."
+                              ' « Faire la suite de la vidéo » produira la minute suivante avec les mêmes personnages.')
+            j['status']='running'
+            event(j,message);schedule(j)
+        save()
 
 def captures_of(j):
     return [asset_url(j,f) for f in (j.get('source_captures') or []) if (job_dir(j)/f).is_file()]
@@ -1214,6 +1698,15 @@ def approve_sheet(j,sheet,title_index,hook_index,message,call_index=0):
 def schedule(j):
     # Consultation only (access ended, revoked, unchecked for 3 days): nothing advances, nothing is sent or paid.
     if not LICENCE.allowed(): return
+    # « Terminer avec les clips reçus »: once the clip already sent is back (it may be paid), keep what came in.
+    if j.get('finish_now'):
+        if any(t['job']==j['id'] and t['status']=='claimed' and t.get('kind') in ('flow_video','engine_video','flow_collect') for t in STATE['tasks']):return
+        split=j.get('split_minutes')
+        if not finish_with_clips(j):return
+        if split:split_into_minutes(j)
+    # A finished video left « en cours » (11/11/2026: « Die Tochter… » shown running for three days): back to done.
+    if j.get('stage')=='done' and j.get('final') and j.get('status')=='running' and not any(t['job']==j['id'] and t['status'] in ('queued','claimed') for t in STATE['tasks']):
+        j['status']='done';event(j,'Vidéo terminée : épisode remis à « Prêt à télécharger ».');return
     # « Préparer mes comptes » before starting: nothing is queued until the check answers (2 min at most).
     if j.get('accounts_check'): return
     if j['status']=='waiting_quota' and j.get('quota_lane')=='chat' and j['stage']=='images':
@@ -1226,6 +1719,10 @@ def schedule(j):
     if step=='clips' and not any(t['job']==j['id'] and t['status'] in ('queued','claimed') and lane_of(t)=='chat' for t in STATE['tasks']):
         if schedule_clips(j):return
     if any(t['job']==j['id'] and t['status'] in ('queued','claimed') for t in STATE['tasks']): return
+    if step=='script' and is_identical(j) and (not source_attachments(j) or (exact_remake(j) and 'exact_windows' not in (j.get('source_analysis') or {}))):
+        j['status']='attention'
+        alert(j,'action','Recréation fidèle en attente : aucune image de la vidéo d’origine n’a été récupérée. Reprendre retentera le téléchargement. Tu peux aussi créer la recréation avec des captures jointes.')
+        return
     if step=='ideas':
         if j.get('ideas'):
             j['status']='waiting_review';event(j,'Dix histoires proposées : choisissez celle qui deviendra votre épisode.');return
@@ -1246,7 +1743,7 @@ def schedule(j):
         add_task(j,'tiktok_search',{'query':query},'research')
     elif step=='script':
         if j.get('editorial_version')==2:editorial.direction(j,STATE['jobs'])
-        add_task(j,'chat_text',{'provider':j['config']['provider'],'prompt':script_prompt(j),'scene_count':j['config']['scene_count'],**({'attachments':source_attachments(j)} if source_attachments(j) and not correction_ready(j) else {})},'script')
+        add_task(j,'chat_text',{'provider':j['config']['provider'],'prompt':script_prompt(j),'scene_count':j['config']['scene_count'],**({'attachments':source_attachments(j)} if source_attachments(j) and (exact_remake(j) or not correction_ready(j)) else {})},'script')
     elif step=='characters':
         if review_pending(j):
             # Nothing is paid before the owner has read the story (P1-1).
@@ -1293,14 +1790,21 @@ def schedule(j):
 FLOW_REWRITE_FIELDS=('image_prompt','video_prompt','meaning','montre','cadre','camera','actions','deplacement','dialogue')
 
 
+def rewrite_fields(j):
+    """A faithful remake keeps the source words: its adaptation changes the picture and the staging only."""
+    return tuple(k for k in FLOW_REWRITE_FIELDS if not (exact_remake(j) and k=='dialogue'))
+
 def flow_rewrite_prompt(j,i):
     scene=j['scenes'][i]
-    fields={k:scene[k] for k in FLOW_REWRITE_FIELDS if k in scene}
+    fields={k:scene[k] for k in rewrite_fields(j) if k in scene}
+    words=(('Ne change pas les paroles : ce sont celles de la vidéo d’origine'+(' traduites et validées' if remake_translated(j) else '')+', elles restent telles quelles. '
+            f'Paroles de la scène (pour information, ne les renvoie pas) : {json.dumps(scene.get("dialogue") or [],ensure_ascii=False)}. ')
+           if exact_remake(j) else 'Garde des dialogues parlés et naturels, jusqu’à trois répliques et 24 mots en tout. ')
     return (f'Adapte uniquement cette scène de {j["config"]["language"]} pour une animation Flow de 8 secondes. '
             'Conserve les personnages, les locuteurs, la conséquence dans l’histoire et tout signe indispensable. '
             'Conçois une nouvelle composition et, si nécessaire, remplace une action ou un accessoire problématique par une action réellement différente, '
             'originale et tous publics. Évite les références reconnaissables à une œuvre ou à une personne réelle. '
-            'Garde des dialogues parlés et naturels, jusqu’à trois répliques et 24 mots en tout. '
+            +words+
             'La planche décrit le départ, puis le clip décrit un mouvement réalisable. '
             'Renvoie uniquement le JSON avec production_id, generation_task_id et scene_rewrite contenant les champs modifiés. '
             'Inclue au minimum image_prompt et video_prompt, réellement différents. '
@@ -1321,9 +1825,10 @@ def apply_flow_rewrite(j,t,result):
         value=changes.get(key)
         if not isinstance(value,str) or not value.strip() or value.strip()==scene[key].strip():
             raise ValueError('L’adaptation doit fournir deux nouveaux prompts.')
-    updated={**scene,**{key:changes[key] for key in FLOW_REWRITE_FIELDS if key in changes}}
+    updated={**scene,**{key:changes[key] for key in rewrite_fields(j) if key in changes}}
     lines=updated['dialogue']
-    if (not isinstance(lines,list) or not 1<=len(lines)<=engines.MAX_DIALOGUE_TURNS
+    # A faithful remake keeps its source words untouched (a silent passage stays silent): nothing to check there.
+    if not exact_remake(j) and (not isinstance(lines,list) or not (1 if scene['dialogue'] else 0)<=len(lines)<=engines.MAX_DIALOGUE_TURNS
             or any(not isinstance(line,dict) or not isinstance(line.get('text'),str) or not line['text'].strip() for line in lines)
             or {line.get('speaker') for line in lines}!={line['speaker'] for line in scene['dialogue']}
             or sum(len(line['text'].split()) for line in lines)>engines.words_for('flow')):
@@ -1340,7 +1845,7 @@ def apply_flow_rewrite(j,t,result):
     if j.get('board_review'):
         j['board_review']['boards']=[board for board in j['board_review']['boards'] if board['index']!=i]
     if j.get('script'):
-        j['script']['scenes'][i].update({k:copy.deepcopy(updated[k]) for k in FLOW_REWRITE_FIELDS if k in updated})
+        j['script']['scenes'][i].update({k:copy.deepcopy(updated[k]) for k in rewrite_fields(j) if k in updated})
         (job_dir(j)/'scenario.json').write_text(json.dumps(j['script'],ensure_ascii=False,indent=2),'utf-8')
     event(j,f'Clip {i+1} : scène adaptée. Nouvelle planche avant le deuxième essai Flow.')
 
@@ -1355,7 +1860,13 @@ def schedule_images(j):
                                        'response_kind':'flow_rewrite'},f'flow_rewrite:{i}');break
             if not s.get('image'):
                 attachments,states=scene_references(j,i)
-                add_task(j,'chat_image',{'provider':'chatgpt','prompt':s['image_prompt']+plan_image_block(j,s)+' Use attached character references. Same identity and outfit, 9:16. Dynamic cinematic composition with a camera angle different from the other scenes, characters caught in action, detailed living background. Highest resolution available (at least 1024×1536), ultra sharp, no blur.'+state_note(j,states)+correction(j.get('corrections',{}).get(f'image:{i}')),'attachments':attachments},f'image:{i}');break
+                composition=(' Recreate the source framing and pose described above.' if is_identical(j) else ' Dynamic cinematic composition with a camera angle different from the other scenes, characters caught in action, detailed living background.')
+                frames=(j.get('source_analysis') or {}).get('window_frames') or []
+                if exact_remake(j) and i<len(frames) and frames[i] and (job_dir(j)/frames[i]).is_file():
+                    attachments.append(asset_url(j,frames[i]))
+                    composition+=(' The last attached image is the original first frame: use it ONLY for camera framing, the place, the objects, the poses and the lighting. '
+                                  'Do NOT copy the people in it: their faces, hair, skin, species and clothes are replaced by the characters of the attached character sheet ('+cast_text(j,True)+').')
+                add_task(j,'chat_image',{'provider':'chatgpt','prompt':s['image_prompt']+plan_image_block(j,s)+' Use attached character references. Same identity and outfit, 9:16.'+composition+' Highest resolution available (at least 1024×1536), ultra sharp, no blur.'+state_note(j,states)+correction(j.get('corrections',{}).get(f'image:{i}')),'attachments':attachments},f'image:{i}');break
         else:
             if not board_gate(j):
                 # Every board drawn and validated: the clips stage waits for a clip still in progress, then goes on.
@@ -1372,6 +1883,10 @@ def held_clips(j):
     """Clips that wait for the owner: a Flow submission that may have been charged, or every engine tried.
     The other clips go on (owner 06/11/2026); « Action requise » comes only when nothing else is left to make."""
     out={int(t['slot'].split(':')[1]) for t in uncertain_clip_tasks(j)}
+    if engine_chain.flow_grok_policy(STATE.get('settings'),j.get('config')):
+        # A clip held before a newer rule gives it one more try (Grok slow): it goes again, no « Reprendre » needed.
+        for s in j.get('scenes') or []:
+            if s.get('engine_exhausted') and not s.get('clip') and engine_chain.flow_grok_next(s):s.pop('engine_exhausted',None)
     return out|{i for i,s in enumerate(j.get('scenes') or []) if s.get('engine_exhausted') and not s.get('clip')}
 
 def held_message(j):
@@ -1380,6 +1895,45 @@ def held_message(j):
     rows=[f'clip {i+1} : '+engine_chain.summary(s) for i,s in enumerate(j['scenes']) if s.get('engine_exhausted') and not s.get('clip')]
     return 'Aucun moteur n’a pu faire '+('ces clips' if len(rows)>1 else 'ce clip')+', même avec le prompt adouci — '+' ; '.join(rows)+'. Modifie la scène (« Refaire » avec une consigne) ou importe un clip, puis Reprendre.'
 
+# Raccord (owner 11/11/2026, « pas de saut d'image, une continuité comme un film »): when two following scenes happen
+# in the same place, the clip of the second one starts from the LAST image of the first clip instead of its own board.
+# The second clip waits for the first; clips of other places still go in parallel.
+def raccord_from(j,i):
+    """Index of the clip whose last image opens clip i, or None."""
+    if i<=0 or i>=len(j.get('scenes') or []) or exact_remake(j) or not montage.of(j.get('config') or {}).get('raccord'):return None
+    s,p=j['scenes'][i],j['scenes'][i-1]
+    place=s.get('lieu')
+    if not isinstance(place,str) or not place.strip() or place!=p.get('lieu') or s.get('raccord') is False:return None
+    return i-1
+
+def raccord_waiting(j,i):
+    k=raccord_from(j,i)
+    return k is not None and not j['scenes'][k].get('clip')
+
+def last_frame(j,clip,name):
+    """Last image of a clip as a PNG of the episode folder (made once); None when it cannot be read."""
+    ff=shutil.which('ffmpeg')
+    src=safe_child(job_dir(j),clip)
+    if not ff or not src.exists():return None
+    st=src.stat();target=job_dir(j)/f'{name}_{st.st_size:x}{int(st.st_mtime):x}.png'
+    if not target.exists():
+        for back in ('0.12','0.4','1.0'):
+            subprocess.run([ff,'-v','error','-y','-sseof','-'+back,'-i',str(src),'-frames:v','1','-update','1',str(target)],capture_output=True,timeout=90)
+            if target.exists() and target.stat().st_size>0:break
+    return target.name if target.exists() and target.stat().st_size>0 else None
+
+def start_image(j,i):
+    """First frame given to the video engine for clip i: the raccord image, else the scene board."""
+    s=j['scenes'][i];k=raccord_from(j,i)
+    if k is not None and j['scenes'][k].get('clip'):
+        try:
+            name=last_frame(j,j['scenes'][k]['clip'],f'raccord{i}')
+        except (OSError,ValueError,subprocess.SubprocessError):name=None
+        if name:
+            s['raccord_image']=name;return name
+    s.pop('raccord_image',None)
+    return s['image']
+
 def schedule_clips(j):
     """Clips stage. Returns True while clips remain to make (queued, in flight or waiting); False when every clip is in.
     One clip first (unchanged rules: switch, wait for credits); then, with Flow and the automatic switch, more clips at
@@ -1387,12 +1941,14 @@ def schedule_clips(j):
     active=video_tasks(j);busy={int(t['slot'].split(':')[1]) for t in active if str(t.get('slot','')).startswith('clip:')}
     held=held_clips(j)
     todo=[i for i,s in enumerate(j['scenes']) if not s.get('clip') and i not in busy and i not in held]
+    waiting=[i for i in todo if raccord_waiting(j,i)]
+    todo=[i for i in todo if i not in waiting]
     if not todo:
         if active:return True
         if held:
             if j['status']=='running':j['status']='attention';event(j,held_message(j))
             return True
-        return False
+        return bool(waiting)
     if not active:
         # Find ready work before setting a global account/credit wait for the first scene.
         for i in list(todo):
@@ -1415,7 +1971,7 @@ def early_clip(j):
     active=video_tasks(j)
     if len(active)>=video_slots(j):return False
     busy={int(t['slot'].split(':')[1]) for t in active if str(t.get('slot','')).startswith('clip:')};held=held_clips(j)
-    i=next((i for i,s in enumerate(j['scenes']) if not s.get('clip') and i not in busy and i not in held and board_ready(j,i)),None)
+    i=next((i for i,s in enumerate(j['scenes']) if not s.get('clip') and i not in busy and i not in held and board_ready(j,i) and not raccord_waiting(j,i)),None)
     return i is not None and schedule_clip(j,i,early=True,parallel=bool(active))
 
 # Bascule par clip (0.1.93, owner 06/11/2026: « un essai par cas »): each clip tries Flow, then Arena, Vidogrid, Grok
@@ -1425,7 +1981,7 @@ def current_account(j,engine):
 
 def flow_can_pay(j):
     """A Flow account can pay this clip now or after the clip it works on (busy accounts count: the clip waits its turn)."""
-    return bool(flow_accounts.choose(STATE,j.get('flow_profile'),int(j['config'].get('flow_cost',12))))
+    return bool(flow_accounts.choose(STATE,j.get('flow_profile'),int(j['config'].get('flow_cost',OMNI_FLOW_COST))))
 
 def engine_ready(j,engine,moment=None):
     """This engine may take a clip of this episode: an account known ready, never one « À régler » or at its limit.
@@ -1470,20 +2026,55 @@ def clip_engine_for(j,i,early=False):
     s['engine_exhausted']=True;alert(j,'action','Clip '+str(i+1)+' : '+held_message(j))
     return None
 
+# 11/11/2026 (crèche, clip 7): a 5 708-character prompt; Flow started nothing and showed the previous clip, so the
+# send stayed « incertain » twice. The cast is already drawn on the board: past this size its descriptions and the
+# staging are shortened, never the dialogue.
+CLIP_PROMPT_MAX=4000
+COMPACT_LIMITS=((None,None,None,200),(220,100,1200,160),(140,60,800,120),(90,40,450,90))  # appearance, voice, scene text, each action
+
 def clip_prompt(j,i,engine):
-    s=j['scenes'][i]
-    visible=s.get('characters') or [c['id'] for c in j['characters']]
-    cast='\n'.join(c['id']+': '+c['appearance']+' Voice: '+c['voice'] for c in j['characters'] if c['id'] in visible)
+    for level in range(len(COMPACT_LIMITS)):
+        prompt=_clip_prompt(j,i,engine,level)
+        if len(prompt)<=CLIP_PROMPT_MAX:break
+    return prompt
+
+# Owner 11/11/2026: « comme un film, très naturel, pas de zoom excessif sur les personnages ».
+FILM_DIRECTION=('Cinematic film look: steady, smooth and slow camera; medium or wide framing that keeps the characters’ heads, '
+                'shoulders and hands in frame with headroom; no extreme close-up, no sudden zoom, no jump cut. Natural acting and '
+                'natural conversational voices with breaths and short pauses; lips match every syllable.')
+RACCORD_DIRECTION=('The attached image is the last frame of the previous shot: continue seamlessly from it with the same '
+                   'positions, framing, light and props, then move on to this scene’s action.')
+
+def _clip_prompt(j,i,engine,level=0):
+    s=j['scenes'][i];appearance,voice,scene_text,action=COMPACT_LIMITS[level]
+    cut=lambda v,limit:_txt(v,limit) if limit else v
+    visible=s.get('characters',[]) if exact_remake(j) else s.get('characters') or [c['id'] for c in j['characters']]
+    cast='\n'.join(c['id']+': '+cut(c['appearance'],appearance)+' Voice: '+cut(c['voice'],voice) for c in j['characters'] if c['id'] in visible)
     dialog=dialogue_lines(j,s);language=j['config'].get('language','Deutsch (de-DE)');seconds=engines.ENGINES[engine]['seconds']
-    prompt=(f"One continuous shot, {seconds} seconds, portrait 9:16. Animate the attached image with the directed camera motion and gestures. "
-            f"No music. Spoken language ONLY: {language}. Natural native voices, no translation or extra narration. "
-            f"Only the following cast appears. Preserve their identity.\n{cast}\n{s['video_prompt']}{plan_video_block(j,s)}\n"
+    direction=('Follow the source shot order, cuts, framing and timing in the scene directions.' if exact_remake(j) else 'One continuous shot. '+FILM_DIRECTION)
+    if raccord_from(j,i) is not None and s.get('raccord_image'):
+        direction+=' '+RACCORD_DIRECTION
+    voices=(f'Spoken language ONLY: {language}. Speak only the dialogue below with natural native voices. Keep silences and the source timing.' if remake_translated(j)
+            else 'Speak only the verbatim dialogue below in its original language. Keep silences and the source timing.' if exact_remake(j)
+            else f'Spoken language ONLY: {language}. Natural native voices, no translation or extra narration.')
+    extras=_txt(j['config'].get('extras_rule'),240)
+    if extras and not exact_remake(j):voices+=' '+extras
+    accent=_txt(j['config'].get('voice_accent'),200)
+    if accent and not exact_remake(j):
+        # Owner 11/11/2026 (La Malédiction de Mango): « le ton africain très respecté », never a Paris accent.
+        voices+=f' Every character speaks with this accent and intonation: {accent}. Keep every interjection and onomatopoeia exactly as written.'
+    prompt=(f"{direction} {seconds} seconds, portrait 9:16. Animate the attached image with the directed camera motion and gestures. "
+            f"No music. {voices} "
+            f"Only the following cast appears. Preserve their identity.\n{cast}\n{cut(s['video_prompt'],scene_text)}{plan_video_block(j,s,action)}\n"
             f"Exact dialogue in this order; only the named speaker moves their lips, all others stay silent:\n{dialog}")
     if engine=='flow':
         prompt+='\nUse the reference as the first frame. Keep the fictional cast and setting original, and use a general-audience presentation.'
+    elif exact_remake(j) and seconds>engines.spec(j)['seconds']:
+        # Grok makes 10 s, the source segment lasts 8 s: everything said in time, the montage keeps the first 8 s.
+        prompt+=f"\nEvery action and every line must be finished within the first {engines.spec(j)['seconds']:g} seconds; after that only hold the final pose, silent."
     prompt+=correction(j.get('corrections',{}).get(f'clip:{i}'))
     # Last round (every engine refused): the scene is reworded once so that an engine accepts it.
-    return engine_chain.soften(prompt) if engine_chain.round_of(s)>=engine_chain.FINAL_ROUND else prompt
+    return engine_chain.soften(prompt) if not exact_remake(j) and engine_chain.round_of(s)>=engine_chain.FINAL_ROUND else prompt
 
 def schedule_clip(j,i,early=False,parallel=False):
     """Queue clip i on the engine of its next try (Flow, Arena, Vidogrid or Grok). early=True (during the boards): returns
@@ -1496,6 +2087,19 @@ def schedule_clip(j,i,early=False,parallel=False):
     if not engine:
         if early:return False
         return True  # held for the owner: schedule_clips goes on with the other clips
+    if exact_remake(j) and engines.ENGINES[engine]['seconds']<engines.spec(j)['seconds']:
+        if engine_chain.flow_grok_policy(STATE.get('settings'),j['config']):
+            # Owner's rule: after two Flow refusals, Grok. Its shorter clip keeps the source rhythm: the montage holds its
+            # last image until the end of the segment (the source sound plays on).
+            s=j['scenes'][i]
+            if not s.get('short_engine_note'):
+                s['short_engine_note']=engine
+                event(j,f'Clip {i+1} sur {engines.ENGINES[engine]["label"]} ({engines.ENGINES[engine]["seconds"]} s) : la dernière image est tenue jusqu’à la fin des {engines.spec(j)["seconds"]:g} s de la source.')
+            return schedule_engine_clip(j,i,engine,early,parallel)
+        if early:return False
+        j['status']='attention'
+        alert(j,'action',f'Clip {i+1} : le moteur de secours est trop court pour conserver le rythme de la source.')
+        return True
     if engine!='flow':return schedule_engine_clip(j,i,engine,early,parallel)
     return schedule_flow_clip(j,i,early,parallel)
 
@@ -1508,7 +2112,7 @@ def schedule_engine_clip(j,i,engine,early=False,parallel=False):
     s=j['scenes'][i]
     if parallel and engine_busy(engine):return False
     seconds=engines.ENGINES[engine]['seconds']
-    payload={'engine':engine,'prompt':clip_prompt(j,i,engine),'attachments':[asset_url(j,flow_reference(j,s['image']))],'seconds':seconds}
+    payload={'engine':engine,'prompt':clip_prompt(j,i,engine),'attachments':[asset_url(j,flow_reference(j,start_image(j,i)))],'seconds':seconds}
     if engine_accounts.accounts(STATE,engine) and not j['config'].get('dry_run'):
         moment=time.time();account=engine_accounts.choose(STATE,engine,current_account(j,engine),moment)
         if not account:
@@ -1545,6 +2149,10 @@ def schedule_flow_clip(j,i,early=False,parallel=False):
     if not p and busy and flow_accounts.choose(STATE,j.get('flow_profile'),cost):
         # Every account able to pay already works on a clip: this one waits its turn (nothing changes, no message).
         return not early
+    if (not p or p['balance']<cost) and j['config'].get('grok_when_no_credits') and not j['config'].get('dry_run') and engine_ready(j,'grok'):
+        # Owner 11/11/2026: « si les crédits finissent sur Flow, continue directement avec Grok » (this episode only).
+        if not early or parallel:event(j,f'Clip {i+1} : plus aucun compte Flow avec {cost} crédits, envoyé à Grok comme autorisé pour cet épisode.')
+        return schedule_engine_clip(j,i,'grok',early,parallel)
     if not p and STATE.get('settings',{}).get('flow_auto'):
         unready=[x for x in readiness.candidates(STATE,cost,lambda x:flow_accounts.eligible(STATE,x)) if not flow_accounts.usable(x)]
         if unready:
@@ -1564,7 +2172,7 @@ def schedule_flow_clip(j,i,early=False,parallel=False):
     if p['id']!=j.get('flow_profile') and not parallel:
         previous=profile_by(j.get('flow_profile'))
         j['flow_profile']=p['id'];account_usage.number_flow(STATE);event(j,account_usage.switch_line(previous,p))
-    payload={'prompt':clip_prompt(j,i,'flow'),'attachments':[asset_url(j,flow_reference(j,s['image']))],'cost':cost,'balance':p['balance'],'seconds':8,**({'model':j['config']['flow_model'],'resolution':j['config'].get('flow_resolution','720p')} if j['config'].get('flow_model') else {})}
+    payload={'prompt':clip_prompt(j,i,'flow'),'attachments':[asset_url(j,flow_reference(j,start_image(j,i)))],'cost':cost,'balance':p['balance'],'seconds':8,**({'model':j['config']['flow_model'],'resolution':j['config'].get('flow_resolution','720p')} if j['config'].get('flow_model') else {})}
     if j['config'].get('dry_run'):payload['dry_run']=True
     target=flow_accounts.route(p) if STATE.get('settings',{}).get('flow_auto') else None
     if target:
@@ -1595,6 +2203,12 @@ def clip_failed(j,t,result,kind):
             schedule(j);return True
         if result.get('flow_blocked') in ('credits','unavailable','not_ready') and (t.get('payload') or {}).get('flow_route'):
             return False  # this Google account, not Flow itself: the next Flow account, then the next engine (schedule_clip)
+    # Owner 10/11/2026: « Flow, adaptation par ChatGPT, Flow encore, puis Grok » also for « Reproduire cette vidéo »
+    # (the source words stay untouched, see flow_rewrite_prompt). Only without that rule does a refusal stop here.
+    if exact_remake(j) and kind=='refusal' and not engine_chain.flow_grok_policy(STATE.get('settings'),j['config']):
+        t['status']='failed';j['status']='attention'
+        alert(j,'action',f'Clip {i+1} : refus du fournisseur. La scène et les paroles de la source sont conservées. '+engine_chain.short(reason))
+        return True
     if engine_chain.flow_grok_policy(STATE.get('settings'),j['config']):
         engine_chain.record(scene,engine,kind,reason,now())
         nxt=engine_chain.flow_grok_next(scene)
@@ -1733,6 +2347,10 @@ def redo(j,slot,note='',include_clip=False,start=True):
     kind=slot.split(':')[0]
     if kind not in REDO_STAGES or not re.fullmatch(r'(?:cover|characters|character:[a-z][a-z0-9_]{0,24}|state:\d+|image:\d+|clip:\d+)',slot):raise ValueError('Élément à refaire inconnu')
     if j.get('status')=='rendering' or j['id'] in BUSY:raise ValueError('Montage en cours : attendez sa fin avant de refaire un élément')
+    if j.get('status')=='paused':
+        # Paused: tasks still waiting in the queue were never sent; they are dropped and rebuilt on « Reprendre ».
+        for t in STATE['tasks']:
+            if t['job']==j['id'] and t['status']=='queued':t['status']='cancelled'
     if any(t['job']==j['id'] and t['status'] in ('queued','claimed') for t in STATE['tasks']):raise ValueError('Une tâche est en cours sur cette production : attendez sa fin')
     if not j.get('scenes'):raise ValueError('Aucun scénario : rien à refaire')
     scenes=j['scenes'];history=j.setdefault('redo_history',[])
@@ -1918,8 +2536,10 @@ def edit_script(j,changes):
             if not isinstance(lines,list):raise ValueError('Dialogue de scène attendu')
             scene['dialogue']=[{'speaker':str(x.get('speaker','')),'text':' '.join(str(x.get('text','')).split())} for x in lines if isinstance(x,dict)]
     if draft==j['script']:return False
-    validate_script(draft,j['config']['scene_count'],word_limit=max(25,engines.word_limit(j)))
-    if j.get('editorial_version')==2 and j.get('retention_version')==1:
+    exact=exact_remake(j)
+    validate_script(draft,j['config']['scene_count'],check_size=not exact,word_limit=max(25,engines.word_limit(j)),allow_silent=exact)
+    if exact:j['remake_translated']=validate_source_dialogue(j,draft['scenes'],draft.get('source_language'))
+    elif j.get('editorial_version')==2 and j.get('retention_version')==1:
         for i,scene in enumerate(draft['scenes']):
             if len(scene['dialogue'])>engines.MAX_DIALOGUE_TURNS or len({x['speaker'] for x in scene['dialogue']})>2 or sum(len(x['text'].split()) for x in scene['dialogue'])>engines.word_limit(j):
                 raise ValueError(f"Scène {i+1} : trois répliques entre deux personnages et {engines.word_limit(j)} mots au plus pour tenir dans le clip de {engines.spec(j)['seconds']} secondes")
@@ -1932,8 +2552,17 @@ def edit_script(j,changes):
 def store_script(j,s):
     if s.get('production_id') and s['production_id']!=j['id']:raise ValueError('Ce scénario appartient à une autre production')
     identical=is_identical(j)
-    validate_script(s,j['config']['scene_count'],check_size=not identical,word_limit=engines.word_limit(j))
-    if identical:
+    exact=exact_remake(j)
+    owner=owner_script(j)
+    validate_script(s,j['config']['scene_count'],check_size=not identical,word_limit=engines.word_limit(j),allow_silent=exact or owner)
+    if exact:
+        if 'exact_windows' not in (j.get('source_analysis') or {}):raise ValueError('Analyse complète de la vidéo d’origine requise.')
+        translated=validate_source_dialogue(j,s['scenes'],s.get('source_language'))
+        if translated!=bool(j.get('remake_translated')):
+            event(j,'Paroles traduites en '+j['config'].get('language','')+' (vidéo d’origine en « '+str(s.get('source_language'))+' ») : les voix des clips remplacent la bande-son d’origine au montage.'
+                  if translated else 'Paroles d’origine gardées mot pour mot : la bande-son d’origine sera reprise au montage.')
+        j['remake_translated']=translated
+    elif identical:
         # Faithful remake: no concept comparison, no novelty check against the history; only what fits in the clips.
         # Like the Atelier, every defect is listed in one refusal: one rewrite fixes them all (one per refusal cost 5 min each).
         problems=size_problems(s['characters'])
@@ -1944,6 +2573,10 @@ def store_script(j,s):
             lines=scene.get('dialogue',[]);words=sum(len(x['text'].split()) for x in lines)
             if len(lines)>engines.MAX_DIALOGUE_TURNS or len({line['speaker'] for line in lines})>2 or words>limit:
                 problems.append(f"Scène {i+1} : {len(lines)} réplique(s) et {words} mots, trois répliques entre deux personnages et {limit} mots au plus pour tenir dans le clip de {engines.spec(j)['seconds']} secondes ; enlève des mots, n'allonge rien")
+        if problems:raise ValueError(' ; '.join(problems))
+    elif owner:
+        problems=[f"Scène {i+1} : {len(sc.get('dialogue',[]))} répliques, {engines.MAX_DIALOGUE_TURNS} au plus entre deux personnages"
+                  for i,sc in enumerate(s['scenes']) if len(sc.get('dialogue',[]))>engines.MAX_DIALOGUE_TURNS or len({x['speaker'] for x in sc.get('dialogue',[])})>2]
         if problems:raise ValueError(' ; '.join(problems))
     else:
         if j.get('sheet_approved'):
@@ -1967,7 +2600,11 @@ def store_script(j,s):
         if reused:event(j,'Série : images de référence reprises de la partie précédente pour '+', '.join(reused)+' (aucune image repayée).')
     d=job_dir(j); (d/'scenario.json').write_text(json.dumps(s,ensure_ascii=False,indent=2),'utf-8'); (d/'description.txt').write_text(s['description'],'utf-8'); event(j,'Scénario structuré validé ; langue de création : '+j['config'].get('language','Deutsch (de-DE)')+'.')
 
+RESEARCH_RETRIES=3
+RESEARCH_RETRY_AFTER=600
+
 def apply_research(j,rows):
+    j.pop('research_retries',None)
     if j.get('filon_only'):
         # Filon refresh: keep the gallery, never start a story.
         candidates=rank_candidates(rows,j['config'].get('language','Deutsch (de-DE)'))[:60]
@@ -2013,6 +2650,16 @@ def accept_task_result(t,result):
         return
     if not result.get('ok'):
         kind=errors.classify(result);t['error_kind']=kind
+        if t.get('kind')=='tiktok_search' and kind in errors.RETRYABLE and not was_paused and j.get('research_retries',0)<RESEARCH_RETRIES:
+            # 11/11/2026: « Aucun résultat vidéo TikTok après 45 s » 5 times, each one waiting for the owner. The page
+            # is often just slow: a new try in 10 minutes, up to three times, before « Action requise ».
+            t['status']='failed';j['research_retries']=j.get('research_retries',0)+1
+            j['status']='waiting_quota';j['wait_until']=time.time()+RESEARCH_RETRY_AFTER;j['retry_reason']='research'
+            event(j,f"Recherche TikTok sans résultat ({j['research_retries']}/{RESEARCH_RETRIES}) : nouvel essai automatique vers {clock_in(j['wait_until'])}.");return
+        if t.get('slot')=='montage_review':
+            # The video already made stays as it is; the owner may ask again.
+            t['status']='failed';j['status']='done' if j.get('final') else j['status']
+            event(j,'Vérification du montage non aboutie ('+str(result.get('error',''))[:120]+') : la vidéo montée reste inchangée.');return
         if (not was_paused and j.get('autopilot') and t.get('slot')=='cover_review'
                 and kind in errors.RETRYABLE and j.get('cover_file')
                 and (t.get('payload') or {}).get('file')==j['cover_file']):
@@ -2089,6 +2736,7 @@ def accept_task_result(t,result):
     slot=t['slot']
     if slot=='research': apply_research(j,result.get('candidates',[]))
     elif slot.startswith('flow_rewrite:'):apply_flow_rewrite(j,t,result)
+    elif slot=='montage_review':apply_montage_review(j,t,result)
     elif slot=='board_review':
         j['board_review']=board_check.validate(parse_json(result.get('text','')),j,t['id'])
     elif slot=='cover_review':
@@ -2203,6 +2851,9 @@ def make_variant(j,kind,language=''):
     if not j.get('script') or not any(x.get('image') for x in j['scenes']):raise ValueError('Il faut une histoire et ses planches')
     if kind not in ('horizontal','language'):raise ValueError('Version inconnue')
     cfg={**copy.deepcopy(j['config']),'dry_run':False,'also_horizontal':False}
+    if exact_remake(j):
+        cfg.pop('remake_exact',None)
+        cfg['recreate']='inspired'
     if kind=='horizontal':
         if horizontal(j):raise ValueError('Cet épisode est déjà horizontal')
         cfg['format']='horizontal'
@@ -2232,7 +2883,15 @@ def make_variant(j,kind,language=''):
         event(nxt,'Version '+cfg['language']+' de « '+j['title']+' » : mêmes planches, répliques et voix refaites.')
     schedule(nxt);return nxt
 
+# One montage at a time (11/11/2026: four ffmpeg at once, 3 GB of memory and a saturated processor left the studio
+# unable to answer). The others wait their turn, still shown « Montage ».
+RENDER_SLOT=threading.Semaphore(1)
+
 def render_job(id):
+    with RENDER_SLOT:
+        return _render_job(id)
+
+def _render_job(id):
     try:
         with LOCK:
             current=job_by(id)
@@ -2248,13 +2907,18 @@ def render_job(id):
              # Hook written on screen during the first seconds (owner priority: the hook keeps viewers).
              f'Style: Hook,Arial,{round(caption_size*1.45)},&H00FFFFFF,&H0000E5FF,&H00101010,&H90000000,-1,0,0,0,100,100,0,0,1,{m(5)},{m(2)},8,{m(60)},{m(60)},{m(250)},1','[Events]','Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text']
         def stamp(s): return f'{int(s//3600)}:{int(s//60)%60:02}:{int(s)%60:02}.{int(s%1*100):02}'
-        if hook_text and j['config'].get('hook_overlay',True):
+        exact=exact_remake(j)
+        if hook_text and not exact and j['config'].get('hook_overlay',True):
             words=hook_text.upper().replace('\\','').replace('{','').replace('}','').split()
             # Last word in yellow, like TikTok hooks.
             text=' '.join(words[:-1])+(' ' if len(words)>1 else '')+'{\\c&H0000E5FF&}'+words[-1] if words else ''
             ass.append('Dialogue: 1,'+stamp(0)+','+stamp(3.2)+',Hook,,0,0,0,,{\\fad(120,300)}'+text)
         start=0.0;mset=montage.of(j['config']);fade=montage.FADES[mset['transition']];lengths=[]
-        subtitles=j['config'].get('subtitles',True)
+        # A remake translated into the chosen language has the clips' own voices: subtitles as for any episode.
+        # « Voix des clips » (remontage): the voices Flow generated with the lips, instead of the source sound.
+        translated=remake_translated(j) or (exact and j['config'].get('remake_audio')=='clips')
+        subtitles=(not exact or translated) and j['config'].get('subtitles',True)
+        if exact:fade=0.0
         probe=shutil.which('ffprobe');plan=[]
         for i,s in enumerate(j['scenes']):
             src=safe_child(d,s['clip'])
@@ -2268,13 +2932,31 @@ def render_job(id):
             # "Couper les silences": blanks before the first and after the last word, from the real word timings.
             plan.append([src,audio,full,speech,montage.trim(speech,full) if mset['cut_silences'] else (0.0,full)])
         # Durée garantie: trimmed silence is given back until the episode reaches its chosen duration.
-        goal=montage.target(j['config'].get('duration'))
-        fitted,expected=montage.fit([p[2] for p in plan],[p[4] for p in plan],goal,fade)
+        if exact:
+            # Its minute of the source, or up to its last kept clip when finished early.
+            expected=exact_span(j)
+            seconds=engines.spec(j)['seconds']
+            fitted=[(0.0,min(seconds,expected-i*seconds)) for i in range(len(plan))]
+            if translated:
+                # 12/11/2026 (« La méchante éducatrice », clip 3): a line said past the segment's 8 s was cut mid-word.
+                # With the clips' own voices nothing is tied to the source sound: the shot lasts until its last word.
+                for k,p in enumerate(plan):
+                    end=speech_end(p[0],p[3],p[2])
+                    if end and end+0.25>fitted[k][1]:fitted[k]=(0.0,round(min(p[2],end+0.25),3))
+        else:
+            goal=montage.target(j['config'].get('duration'))
+            fitted,expected=montage.fit([p[2] for p in plan],[p[4] for p in plan],goal,fade)
         for p,c in zip(plan,fitted):p[4]=c
         for i,s in enumerate(j['scenes']):
             src,audio,_,speech,(cut,length)=plan[i]; out=d/f'normalized_{i:02}.mp4'
+            # Source sound kept: each clip is moved so that its lips start with the original line (owner 10/11/2026,
+            # « décalage de voix »: Flow speaks at 0 s, the source line came up to 2 s later).
+            lead=0.0
+            shift=clip_shift(j,i,speech,exact,translated)  # « Vérifier et remonter » may have set it for any episode
+            if shift>0:lead=shift
+            elif shift<0:cut=max(cut,-shift)
             speech=montage.shift(speech,cut)
-            args=[ff,'-y',*(['-ss',f'{cut:g}'] if cut else []),'-i',str(src),'-f','lavfi','-i','anullsrc=r=48000:cl=stereo','-map','0:v:0','-map','0:a:0' if audio else '1:a:0','-vf',f'scale={frame_size(j)[0]}:{frame_size(j)[1]}:force_original_aspect_ratio=increase:flags=lanczos,crop={frame_size(j)[0]}:{frame_size(j)[1]},fps=30,'+(f"zoompan=z='{montage.zoom(i,length,mset['fast_cuts'])}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={frame_size(j)[0]}x{frame_size(j)[1]}:fps=30," if j['config'].get('dynamic',True) else '')+'unsharp=5:5:0.5:5:5:0,setsar=1,tpad=stop_mode=clone:stop_duration='+f'{length:g}','-af','apad','-t',f'{length:g}','-c:v','libx264','-preset','medium','-crf','17','-pix_fmt','yuv420p','-c:a','aac','-ar','48000','-ac','2',str(out)]
+            args=[ff,'-y',*(['-ss',f'{cut:g}'] if cut else []),'-i',str(src),'-f','lavfi','-i','anullsrc=r=48000:cl=stereo','-map','0:v:0','-map','0:a:0' if audio else '1:a:0','-vf',(f'tpad=start_mode=clone:start_duration={lead:g},' if lead else '')+f'scale={frame_size(j)[0]}:{frame_size(j)[1]}:force_original_aspect_ratio=increase:flags=lanczos,crop={frame_size(j)[0]}:{frame_size(j)[1]},fps=30,'+(f"zoompan=z='{montage.zoom(i,length,mset['fast_cuts'])}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={frame_size(j)[0]}x{frame_size(j)[1]}:fps=30," if not exact and j['config'].get('dynamic',True) and (mset.get('zoom',True) or mset['fast_cuts']) else '')+'unsharp=5:5:0.5:5:5:0,setsar=1,tpad=stop_mode=clone:stop_duration='+f'{length:g}','-af','apad','-t',f'{length:g}','-c:v','libx264','-preset','medium','-crf','17','-pix_fmt','yuv420p','-c:a','aac','-ar','48000','-ac','2',str(out)]
             run_command(args)
             # With a fade, the next clip starts while this one ends: captions move with it.
             offset=start;start+=length-(fade if i<len(j['scenes'])-1 else 0);lengths.append(length)
@@ -2302,7 +2984,12 @@ def render_job(id):
         (d/'concat.txt').write_text('\n'.join(f"file 'normalized_{i:02}.mp4'" for i in range(len(j['scenes']))),'utf-8')
         encode=['-c:v','libx264','-preset','slow','-crf','17','-profile:v','high','-pix_fmt','yuv420p','-c:a','aac','-b:a','192k','-movflags','+faststart','final.mp4']
         graph=montage.crossfade(lengths,fade)
-        if graph:
+        if exact and not translated:
+            if not (d/'source.mp4').is_file():raise ValueError('Vidéo d’origine absente pour le montage de la bande-son.')
+            # The source sound of this episode's minute (part 2 starts at 1:00 of the source…).
+            run_command([ff,'-y','-f','concat','-safe','0','-i','concat.txt',*(['-ss',f'{source_offset(j):g}'] if source_offset(j) else []),'-i','source.mp4',
+                         '-map','0:v:0','-map','1:a:0?','-t',f'{expected:g}',*encode],cwd=d)
+        elif graph:
             # "Fondu léger / long": each clip melts into the next, sound included.
             run_command([ff,'-y',*[x for i in range(len(lengths)) for x in ('-i',f'normalized_{i:02}.mp4')],'-filter_complex',graph,'-map','[v]','-map','[ao]',*encode],cwd=d)
         else:
@@ -2321,8 +3008,10 @@ def render_job(id):
         with LOCK:
             actual=job_by(id)
             if actual is None:return
-            actual['stage']='done'; actual['status']='done'; actual['rendered_at']=now(); actual['final']=asset_url(actual,'final.mp4'); actual['cover']=asset_url(actual,cover_file); actual['qc']={'export':'Réussi : MP4 '+('horizontal 1920 × 1080' if horizontal(j) else 'vertical 1080 × 1920')+', haute qualité, audio normalisé.','subtitles':f'{aligned_count}/{len(j["scenes"])} scènes calées sur reconnaissance vocale ; autres timings estimés. Contrôle à l’écoute nécessaire.','lips':'Synchronisation labiale non vérifiée automatiquement.','duration':round(sum(lengths)-fade*max(len(lengths)-1,0)),'duration_target':montage.target(j['config'].get('duration')),'montage':montage.summary({**mset,'karaoke':bool(j['config'].get('karaoke'))})+('' if subtitles else ' · sans sous-titres')}; event(actual,'Export terminé. Un contrôle visuel et audio reste nécessaire avant publication.')
-            goal=montage.target(actual['config'].get('duration'));got=sum(lengths)-fade*max(len(lengths)-1,0)
+            actual['stage']='done'; actual['status']='done'; actual['rendered_at']=now(); actual['final']=asset_url(actual,'final.mp4'); actual['cover']=asset_url(actual,cover_file); actual['qc']={'export':'Réussi : MP4 '+('horizontal ' if horizontal(j) else 'vertical ')+'{} × {}'.format(*frame_size(j))+', haute qualité, audio normalisé.','subtitles':f'{aligned_count}/{len(j["scenes"])} scènes calées sur reconnaissance vocale ; autres timings estimés. Contrôle à l’écoute nécessaire.','lips':'Synchronisation labiale non vérifiée automatiquement.','duration':round(sum(lengths)-fade*max(len(lengths)-1,0)),'duration_target':montage.target(j['config'].get('duration')),'montage':montage.summary({**mset,'karaoke':bool(j['config'].get('karaoke'))})+('' if subtitles else ' · sans sous-titres')}; event(actual,'Export terminé. Un contrôle visuel et audio reste nécessaire avant publication.')
+            if exact:
+                actual['qc'].update(duration_target=expected,montage='Coupes au rythme de la source et bande-son d’origine.',subtitles='Aucun sous-titre ajouté.')
+            goal=expected if exact else montage.target(actual['config'].get('duration'));got=sum(lengths)-fade*max(len(lengths)-1,0)
             if goal and got<goal-0.05:event(actual,f'Durée finale {got:.1f} s, en dessous des {goal:g} s visés : il manque des plans. Ajoutez une scène ou reprenez avec une durée plus courte.'); check_originality(actual)
             backup_story(actual)
             if actual['config'].get('also_horizontal') and not horizontal(actual) and not any((x.get('variant') or {}).get('of')==actual['id'] and x['variant'].get('kind')=='horizontal' for x in STATE['jobs']):
@@ -2348,10 +3037,10 @@ def make_cover(src,out,title,size=(720,1280)):
     from PIL import Image, ImageOps, ImageDraw, ImageFont
     im=ImageOps.fit(Image.open(src).convert('RGB'),size); draw=ImageDraw.Draw(im,'RGBA'); draw.rectangle((0,0,size[0],320*size[1]//1280),fill=(10,12,20,205))
     preferred=[]
-    if re.search('[\u3040-\u30ff]',title): preferred=[r'C:/Windows/Fonts/YuGothB.ttc']
-    elif re.search('[\uac00-\ud7af]',title): preferred=[r'C:/Windows/Fonts/malgunbd.ttf']
-    elif re.search('[\u3400-\u9fff]',title): preferred=[r'C:/Windows/Fonts/msyhbd.ttc']
-    font_path=next((p for p in preferred+[r'C:/Windows/Fonts/arialbd.ttf','/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'] if pathlib.Path(p).exists()),None)
+    if re.search('[\u3040-\u30ff]',title): preferred=[r'C:/Windows/Fonts/YuGothB.ttc','/System/Library/Fonts/ヒラギノ角ゴシック W6.ttc']
+    elif re.search('[\uac00-\ud7af]',title): preferred=[r'C:/Windows/Fonts/malgunbd.ttf','/System/Library/Fonts/AppleSDGothicNeo.ttc']
+    elif re.search('[\u3400-\u9fff]',title): preferred=[r'C:/Windows/Fonts/msyhbd.ttc','/System/Library/Fonts/PingFang.ttc']
+    font_path=next((p for p in preferred+[r'C:/Windows/Fonts/arialbd.ttf','/System/Library/Fonts/Supplemental/Arial Bold.ttf','/Library/Fonts/Arial Bold.ttf','/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'] if pathlib.Path(p).exists()),None)
     k=min(size)/720
     font=ImageFont.truetype(font_path,round(58*k)) if font_path else ImageFont.load_default()
     words=title.upper().split(); separator=' '
@@ -2402,17 +3091,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     pending=STATE.get('bridge_requests',[])
                     def addressed(request):
                         kind=request.get('type')
+                        if request.get('client'):return request['client']==c['id']
                         if kind=='show' and request.get('profile'):
                             owner=(profile_by(request['profile']['id']) or {}).get('flow_client')
                             return owner==c['id'] if owner else c['role']=='all'
                         if kind=='scan_flow' and request.get('profile'):
                             return (profile_by(request['profile']) or {}).get('flow_client')==c['id']
-                        if kind in ('open','show','add_google','scan_flow'):
+                        if c.get('pool'):return kind=='readiness'  # only its own accounts; everything else stays for the main window
+                        if kind in ('open','show','add_google','scan_flow','register_flow'):
                             return c['role']=='all'
                         return True
                     if urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get('light',[''])[0]=='1':
                         # A task is running: only the owner's clicks that show a tab are done now; checks wait for idle lanes.
-                        quick=[r for r in pending if r.get('type') in ('open','show','add_google') and addressed(r)]
+                        # 11/11/2026 (owner: « actualise les comptes »): the balances of a busy window were never read again
+                        # during a production. A scan works read-only in its own background tab: it goes now too, except while
+                        # this window has a Flow clip in hand (same Google sessions).
+                        flow_busy=any(t.get('status')=='claimed' and t.get('kind') in ('flow_video','flow_collect') and t.get('client')==c['id'] for t in STATE['tasks'])
+                        quick=[r for r in pending if (r.get('type') in ('open','show','add_google') or (r.get('type')=='scan_flow' and not flow_busy)) and addressed(r)]
                         STATE['bridge_requests']=[r for r in pending if r not in quick];save();return self.send_json(quick)
                     ready_requests, remaining = [], []
                     for request in pending:
@@ -2470,8 +3165,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     # lane=chat|video: the extension runs one task per lane at once; without lane (0.1.88 and older) any task, one at a time.
                     lane=q.get('lane',[''])[0]
                     if lane not in ('','chat','video'):return self.send_json({'error':'Voie inconnue'},400)
-                    c['seen']=now();c['version']=q.get('v',[c.get('version')])[0]
-                    if c.get('disabled') and c.get('auto') and take_over(c):event_all('Fenêtre FruchtDrama rechargée : elle reprend le travail de l’ancienne, hors ligne.')
+                    previous=flow_credits.seconds(c.get('seen'));c['seen']=now();c['version']=q.get('v',[c.get('version')])[0]
+                    if c.get('disabled') and session_rejoined(c,previous)=='takeover':event_all('Fenêtre FruchtDrama rechargée : elle reprend le travail de l’ancienne, hors ligne.')
                     # A gateway switched off by the owner never receives work (several browsers paired).
                     if c.get('disabled') or not LICENCE.allowed():save();return self.send_json(None)
                     # The working window takes what an old, gone pairing was holding or was meant to do (06/11/2026).
@@ -2600,7 +3295,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             # A generation running for another scene keeps its owner: its result stays acceptable.
                             if other['job']==id and (other['status']=='queued' or other['status']=='claimed' and other['slot']==slot): other['status']='cancelled'
                         if not t: t={'job':id,'slot':slot}
-                        j['status']='running'; accept_task_result(t,{'ok':True,'file':name}); save()
+                        # A paused episode stays paused when a clip already sent comes back (11/11/2026: Mango resumed alone).
+                        if j['status']!='paused':j['status']='running'
+                        accept_task_result(t,{'ok':True,'file':name}); save()
                     return self.send_json({'file':name})
             b=json.loads(raw or b'{}')
             if path=='/api/licence':
@@ -2620,13 +3317,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     # Still one working browser at a time, but the one pairing now takes over: it is the extension
                     # reinstalled or reloaded (key lost) or the official copy replacing an older one. Never while
                     # another browser is running a task.
-                    if not any(t['status']=='claimed' and STATE['clients'].get(t.get('client'),{}).get('auto') for t in STATE['tasks']):
-                        for c in STATE['clients'].values():
-                            if c.get('auto'):c['disabled']=True
-                    others=[c for c in STATE['clients'].values() if not c.get('disabled') and c.get('role') in ('all','flow') and time.time()-flow_credits.seconds(c.get('seen'))<75]
+                    replaced=[]
+                    if not any(t['status']=='claimed' and STATE['clients'].get(t.get('client'),{}).get('auto') and not STATE['clients'].get(t.get('client'),{}).get('pool') for t in STATE['tasks']):
+                        replaced=switch_off_main_windows()
+                    others=[c for c in STATE['clients'].values() if not c.get('disabled') and not c.get('pool') and c.get('role') in ('all','flow') and time.time()-flow_credits.seconds(c.get('seen'))<75]
                     client=b.get('client') if b.get('client') in STATE['clients'] else uid()
                     STATE['clients'][client]={'id':client,'label':str(b.get('label','Fenêtre FruchtDrama'))[:60],'flow_profile':None,'role':'all','ai_provider':'both','seen':now(),'disabled':bool(others),'auto':True}
-                    flow_accounts.follow_active_browser(STATE)
+                    remember_replaced(STATE['clients'][client],replaced)
+                    remember_taken(STATE['clients'][client])
                     save();return self.send_json({'client':client,'token':STATE['token'],'enabled':not others})
                 if path=='/api/bridge/pair':
                     if not hmac.compare_digest(str(b.get('code','')),STATE['pair_code']): return self.send_json({'error':'Code incorrect'},403)
@@ -2641,7 +3339,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     url=flow_accounts.project_url(b.get('url',''));email=str(b.get('email','')).strip().lower()
                     if not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+',email):raise ValueError('Identité du compte Google non détectée')
                     p=next((p for p in STATE['profiles'] if p.get('flow_email',p.get('label','')).lower()==email),None)
-                    if not p:raise ValueError('Ajoutez ce compte dans Connexions et renseignez son solde vérifié avant de le mémoriser')
+                    if c.get('disabled') or (c.get('role')=='flow' and (not p or c.get('flow_profile')!=p['id'])):
+                        raise ValueError('Ce connecteur est réservé à un autre compte Flow. Utilise le connecteur principal pour ajouter un compte.')
+                    if not p:
+                        p={'id':uid(),'label':email,'balance':0}
+                        STATE['profiles'].append(p)
                     if any(t['status']=='claimed' and t.get('profile')==p['id'] for t in STATE['tasks']):raise ValueError('Attendez la fin du clip en cours avant de modifier ce compte')
                     if p.get('flow_client') != c['id']:
                         p.pop('readiness', None)
@@ -2649,7 +3351,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         if p.get('blocked') == 'unavailable':
                             p.pop('blocked', None)
                     p.pop('flow_url_home', None)
-                    p.update(flow_url=url,flow_email=email,flow_client=c['id'],auto_enabled=True)
+                    slot=re.search(r'/u/(\d+)/',url)
+                    p.update(flow_url=url,flow_email=email,flow_client=c['id'],auto_enabled=True,slot=int(slot[1]) if slot else 0)
+                    balance=b.get('balance')
+                    if type(balance) is int and 0<=balance<=100000:
+                        flow_refill.read(p,balance,time.time(),int(STATE['settings'].get('flow_daily',flow_refill.DAILY)))
+                        p.update(balance=balance,credit_source='read',checked=now())
+                        if balance:p.pop('blocked',None)
+                        else:p['blocked']='credits'
                     STATE['settings']['flow_auto']=True;save();return self.send_json({'ok':True,'profile':p['id']})
                 if path=='/api/bridge/flow-slot':
                     # The Google account numbers moved (/u/N): the same account is found at another number by its address.
@@ -2682,6 +3391,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     return self.send_json({'ok':True})
                 if path=='/api/bridge/retry-research':
                     client=b.get('client');c=STATE['clients'].get(client)
+                    if c and c.get('pool'):return self.send_json({'ok':True})  # its extension copy still asks: nothing to resume here
                     if not c or c.get('role') not in ('all','creation'):raise ValueError('Passerelle de recherche requise')
                     resumed=[]
                     for j in STATE['jobs']:
@@ -2830,7 +3540,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         if time.time()-flow_credits.seconds(c.get('seen'))<75:raise ValueError('Ce navigateur est en ligne : désactivez-le plutôt')
                         if any(t['status']=='claimed' and t.get('client')==c['id'] for t in STATE['tasks']):raise ValueError('Cette passerelle exécute une tâche : attendez sa fin')
                         del STATE['clients'][c['id']]
-                    else:c['disabled']=bool(b.get('disabled'))
+                    else:c['disabled']=c['owner_off']=bool(b.get('disabled'))
                 elif path=='/api/sites':
                     action=b.get('action')
                     if action=='open' and b.get('site') not in SITES:raise ValueError('Site inconnu')
@@ -2861,21 +3571,30 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             raise ValueError('Ouvre d’abord le profil Chrome de ce compte Flow.')
                         item['profile']=profile['id']
                     if item not in queue:queue.append(item)
+                    if action=='scan_flow' and not b.get('profile'):
+                        # « Actualiser » also reaches the other Chrome profiles that are open; the main window's check covers their accounts.
+                        for extra in (x for x in STATE['clients'].values() if x.get('pool') and client_online(x)):
+                            personal={'type':'scan_flow','client':extra['id']}
+                            if personal not in queue:queue.append(personal)
                     if action in ('open','register_flow','tidy','recover','scan_flow','add_google'):STATE['bridge_notice']={'at':now(),'action':action,'pending':True,'text':'Demande en attente du connecteur FruchtDrama…'}
                     if action=='check':STATE.setdefault('sites',{})['_requested']=now()
                 elif path=='/api/bridge/flow-scan':
                     c=STATE['clients'].get(b.get('client'))
                     if not c:raise ValueError('Passerelle inconnue')
+                    # A switched-off window must not take accounts away from the ones that work.
+                    if c.get('disabled'):return self.send_json({'ok':True,'detected':False,'message':'Fenêtre désactivée : détection ignorée.'})
                     only_profile=profile_by(b.get('profile') or c.get('flow_profile'))
-                    if (b.get('profile') or c.get('role')=='flow') and (not only_profile or only_profile.get('flow_client')!=c['id']):
+                    if (b.get('profile') or (c.get('role')=='flow' and not c.get('pool'))) and (not only_profile or only_profile.get('flow_client')!=c['id']):
                         raise ValueError('Ce compte Flow est associé à un autre profil Chrome.')
                     STATE['bridge_notice']={'at':now(),'action':'scan_flow','ok':True,'text':''}
                     message=flow_scan(STATE,c,b.get('accounts') or [],only_profile)
+                    remember_chrome_folder(c,b.get('accounts') or [])
                     detected=not message.startswith('Aucun compte')
                     STATE['bridge_notice'].update(text=message,ok=detected)
                     save();return self.send_json({'ok':True,'detected':detected,'message':message})
                 elif path=='/api/bridge/notice':
                     if b.get('client') not in STATE['clients']:raise ValueError('Passerelle inconnue')
+                    if STATE['clients'][b['client']].get('disabled'):return self.send_json({'ok':True})
                     STATE['bridge_notice']={'at':now(),'action':str(b.get('action',''))[:20],'ok':bool(b.get('ok')),'text':str(b.get('text',''))[:300]}
                     save();return self.send_json({'ok':True})
                 elif path=='/api/bridge/readiness':
@@ -2922,6 +3641,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 elif path=='/api/bridge/sites':
                     c=STATE['clients'].get(b.get('client'))
                     if not c:raise ValueError('Passerelle inconnue')
+                    # ChatGPT, Claude... are read in the main window: another profile must not mark them disconnected.
+                    if c.get('pool') or c.get('disabled'):return self.send_json({'ok':True})
                     sites={k:{'connected':bool(v.get('connected')),'email':str(v.get('email') or '')[:120] or None,'challenge':bool(v.get('challenge')),'checked':now()} for k,v in (b.get('sites') or {}).items() if k in SITES}
                     # partial: one site re-read after « Se connecter » ; the others keep their last state.
                     if b.get('partial'):
@@ -2999,8 +3720,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         # Durée garantie: enough plans for the target (more than 60 s for "1 min"), fades included.
                         fade=montage.FADES[montage.validate({},STATE['settings'].get('montage'))['transition']]
                         cfg['scene_count']=montage.scenes_for(int(duration),cfg['clip_seconds'],fade)
-                    cfg['flow_cost']=int(b.get('config',{}).get('flow_cost',{'gemini_omni_flash':12,'veo_3_1_lite':10,'veo_3_1_fast':20,'veo_3_1_quality':100}[cfg['flow_model']]))
-                    if cfg['flow_cost'] not in {'gemini_omni_flash':(12,), 'veo_3_1_lite':(10,5), 'veo_3_1_fast':(20,10), 'veo_3_1_quality':(100,)}[cfg['flow_model']]:raise ValueError('Coût incompatible avec le modèle Flow choisi. Le coût réel sera vérifié avant tout envoi.')
+                    cfg['flow_cost']=int(b.get('config',{}).get('flow_cost',{'gemini_omni_flash':OMNI_FLOW_COST,'veo_3_1_lite':10,'veo_3_1_fast':20,'veo_3_1_quality':100}[cfg['flow_model']]))
+                    if cfg['flow_cost'] not in {'gemini_omni_flash':(OMNI_FLOW_COST,), 'veo_3_1_lite':(10,5), 'veo_3_1_fast':(20,10), 'veo_3_1_quality':(100,)}[cfg['flow_model']]:raise ValueError('Coût incompatible avec le modèle Flow choisi. Le coût réel sera vérifié avant tout envoi.')
                     cfg['language']=creation_language(cfg.get('language','Deutsch (de-DE)'))
                     # Claude model and effort: request first, then the last choice kept in the settings.
                     for k in CLAUDE_DEFAULTS:cfg[k]=claude_choice(k,cfg.get(k))
@@ -3029,6 +3750,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         # Atelier-like "create from a link": the given TikTok video replaces the research step.
                         u=urllib.parse.urlparse(source)
                         if u.scheme!='https' or u.hostname not in ('www.tiktok.com','tiktok.com','vm.tiktok.com','m.tiktok.com') or u.username or u.password:raise ValueError('Lien TikTok attendu (https://www.tiktok.com/@compte/video/…)')
+                    # Asked before anything is created: who replaces the characters of the video (faithful remake only).
+                    cast=cast_choice(req) if source and req.get('recreate')=='identical' else None
+                    cfg.pop('cast',None);cfg.pop('cast_note',None)
                     requested_query=str(b.get('config',{}).get('query','')).strip()
                     # An omitted or untouched German default follows the chosen language.
                     cfg['query']=RESEARCH_QUERIES[cfg['language']] if not requested_query or requested_query in RESEARCH_QUERIES.values() else requested_query[:200]
@@ -3042,12 +3766,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     if source:
                         j['selected']={'title':'Vidéo fournie par le propriétaire','url':urllib.parse.urlunparse(('https',u.hostname,u.path,'','','')),'source':'owner_link'};thumbs.warm([j['selected']['url']],DATA);j['stage']='script'
                         j['config']['recreate']='identical' if req.get('recreate')=='identical' else 'inspired'
+                        j['config']['remake_exact']=is_identical(j)
+                        if cast:j['config']['cast']=cast
                         j['source_captures']=source_video.save_captures(captures,job_dir(j))
                         # The video is fetched and analysed first (key frames, transcription): the AI sees it, not only its link.
                         j['status']='waiting_source';threading.Thread(target=prepare_source,args=(j['id'],),daemon=True).start()
-                        event(j,'Projet créé d’après le lien fourni : recherche sautée. '+('Recréation à l’identique : mêmes scènes, répliques reformulées.' if j['config']['recreate']=='identical' else 'Histoire originale inspirée de cette vidéo (sans copier dialogues ni plans).')+(f" {len(j['source_captures'])} capture(s) jointe(s)." if j['source_captures'] else ''))
+                        event(j,'Projet créé d’après le lien fourni : recherche sautée. '+('Recréation à l’identique : mêmes scènes et mêmes dialogues, dits en '+j['config'].get('language','')+' (traduits si la vidéo parle une autre langue) ; personnages remplacés par '+cast_text(j)+'.' if j['config']['recreate']=='identical' else 'Histoire originale inspirée de cette vidéo (sans copier dialogues ni plans).')+(f" {len(j['source_captures'])} capture(s) jointe(s)." if j['source_captures'] else ''))
                     mode=b.get('mode')
-                    if mode not in (None,'','link','ideas','idea','research'):raise ValueError('Option de création inconnue')
+                    if mode not in (None,'','link','ideas','idea','research','script'):raise ValueError('Option de création inconnue')
                     cfg['auto_sheet']=bool(b.get('config',{}).get('auto_sheet',False));cfg['niche']=str(b.get('config',{}).get('niche','Fruits'))[:40]
                     if mode=='ideas' and not source:
                         # Atelier "Pas d'idée": ten stories first, nothing paid before the sheet is validated.
@@ -3055,6 +3781,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     elif mode=='idea' and not source:
                         if len(j['brief'].strip())<15:raise ValueError('Décrivez votre idée en quelques phrases')
                         j['stage']='sheet';j['selected']={'title':'Idée du propriétaire','source':'owner_idea'};event(j,'Projet créé d’après votre idée : fiche de décision en cours.')
+                    elif mode=='script' and not source:
+                        # « Mon scénario »: the owner's complete script, no research and no rewriting by the AI.
+                        given=b.get('script')
+                        if not isinstance(given,dict) or not isinstance(given.get('scenes'),list):raise ValueError('Scénario JSON complet attendu')
+                        j['config']['scene_count']=len(given['scenes']);j['stage']='script'
+                        j['selected']={'title':'Scénario écrit par le propriétaire','source':'owner_script'}
+                        if b.get('config',{}).get('grok_when_no_credits'):j['config']['grok_when_no_credits']=True
+                        if b.get('config',{}).get('voice_accent'):j['config']['voice_accent']=_txt(b['config']['voice_accent'],200)
+                        try:store_script(j,copy.deepcopy(given))
+                        except ValueError:
+                            STATE['jobs'].remove(j);raise
+                        event(j,f"Projet créé d’après votre scénario complet : {len(given['scenes'])} plans gardés mot pour mot, recherche et réécriture sautées.")
                     elif not source:event(j,'Projet créé. Recherche préalable et comparaison de cinq concepts obligatoires.')
                     if start_check(j):schedule(j)
                 elif path.startswith('/api/job/'):
@@ -3078,6 +3816,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         # Reprendre / Boucle complète: nothing is relaunched while a needed account is known « À régler ».
                         found=gate_blockers(j)
                         if found:raise AccountsNotReady(found)
+                        if j.get('stage')=='script' and is_identical(j) and (not source_attachments(j) or (exact_remake(j) and 'exact_windows' not in (j.get('source_analysis') or {}))):
+                            if j.get('status')!='waiting_source':
+                                j['status']='waiting_source'
+                                threading.Thread(target=prepare_source,args=(id,),daemon=True).start()
+                            save();return self.send_json(public_state())
                         if j.get('stage')=='script' and j.get('rejected_script'):
                             try:store_script(j,copy.deepcopy(j['rejected_script']))
                             except ValueError:pass
@@ -3125,9 +3868,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         # Only the lane that does not move: a clip generating beside a stuck board keeps going.
                         blocked=next((t for t in STATE['tasks'] if t['id']==info.get('task')),None)
                         stuck=[t for t in STATE['tasks'] if t['job']==id and t['status'] in ('queued','claimed') and (not blocked or lane_of(t)==lane_of(blocked))]
-                        if any(t['kind'] in ('flow_video','engine_video') for t in stuck) and not b.get('confirm_paid'):
+                        untouched=lambda t:not t.get('progress') and not t.get('progress_at')
+                        if any(t['kind'] in ('flow_video','engine_video') and not untouched(t) for t in stuck) and not b.get('confirm_paid'):
                             raise ValueError('Un clip est peut-être déjà en cours chez le fournisseur : vérifie dans Flow, puis confirme la relance.')
-                        for t in stuck:t['status']='failed';t['error']='Relancée par le propriétaire : étape bloquée ('+info['reason'][:120]+')'
+                        for t in stuck:
+                            t['status']='failed';t['error']='Relancée par le propriétaire : étape bloquée ('+info['reason'][:120]+')'
+                            # A clip the window never started reached nothing: its local credit reservation is given back.
+                            r=t.get('reservation')
+                            if t['kind']=='flow_video' and untouched(t) and r and not r.get('refunded'):
+                                p=profile_by(r.get('profile'))
+                                if p:p['balance']+=r['amount'];r['refunded']=True;event(j,'Réservation locale de crédits annulée : la fenêtre n’avait jamais commencé ce clip.')
                         if any(t['kind'] in ('flow_video','engine_video') for t in stuck):
                             for t in stuck:t['acknowledged']=now()
                         j.pop('last_error',None);event(j,'Étape relancée par le propriétaire : '+info['reason']);schedule(j)
@@ -3176,9 +3926,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         j['config']['flow_resolution']=resolution;j.pop('dry_run_passed',None)
                         normalize_flow_resolution(j['config']);resolution=j['config']['flow_resolution']
                         event(j,'Résolution de génération Flow : '+resolution+'. Dimensions du montage final conservées.')
-                    elif action=='rerender':
+                    elif action=='montage_check':
+                        # « Vérifier et remonter »: ChatGPT reads the measures of every clip, the studio applies its fixes.
+                        if not j.get('final'):raise ValueError('Montez d’abord la vidéo')
+                        if j['id'] in BUSY:raise ValueError('Montage déjà en cours')
+                        if any(t['job']==id and t['status'] in ('queued','claimed') for t in STATE['tasks']):raise ValueError('Une tâche est en cours : attendez sa fin')
+                        j['status']='running'
+                        add_task(j,'chat_text',{'provider':'chatgpt','prompt':montage_review_prompt(j),'response_kind':'montage_review'},'montage_review')
+                        event(j,'Vérification du montage demandée à ChatGPT (mesures de chaque clip, aucun crédit) ; remontage automatique s’il y a des corrections.')
+                    elif action in ('rerender','rerender_source','rerender_clips'):
                         # "Remonter…": same clips, new montage (new hook, subtitles or resolution).
                         if not all(x.get('clip') for x in j['scenes']):raise ValueError('Il manque des clips')
+                        if action!='rerender':
+                            # Faithful remake: source sound with each clip synchronised, or the clips' own voices.
+                            if not exact_remake(j):raise ValueError('Choix du son réservé aux reproductions fidèles')
+                            j['config']['remake_audio']='clips' if action=='rerender_clips' else 'source'
+                            event(j,'Son du remontage : '+('voix des clips (synchronisées avec les bouches), sous-titres ajoutés.' if action=='rerender_clips' else 'son d’origine, chaque clip recalé sur la voix d’origine.'))
                         if j['id'] in BUSY:raise ValueError('Montage déjà en cours')
                         for task in STATE['tasks']:
                             if task['job']==id and task['slot']=='cover_review' and task['status'] in ('queued','claimed'):
@@ -3252,6 +4015,37 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         if j['status']!='waiting_account':raise ValueError('Aucun changement de compte en attente')
                         switch=j.pop('account_switch',{});j['status']='running'
                         event(j,'Changement de compte confirmé ('+str(switch.get('to'))+'). Le connecteur vérifie l’identité affichée avant tout envoi.');schedule(j)
+                    elif action in ('finish_now','finish_split'):
+                        if j.get('stage') not in ('images','clips') or j.get('status')=='done':raise ValueError('Seul un épisode en cours de planches ou de clips peut être terminé ainsi')
+                        if not (j.get('scenes') or [{}])[0].get('clip'):raise ValueError('Aucun clip reçu au début de l’épisode : rien à monter pour l’instant')
+                        for t in STATE['tasks']:
+                            if t['job']==id and t['status']=='queued':t['status']='cancelled'
+                        j['finish_now']=now();j['status']='running'
+                        if action=='finish_split' and exact_remake(j):j['split_minutes']=True  # « Terminer et découper en parties d'une minute »
+                        busy=any(t['job']==id and t['status']=='claimed' and t.get('kind') in ('flow_video','engine_video','flow_collect') for t in STATE['tasks'])
+                        event(j,'Fin demandée : plus aucun nouveau clip.'+(' Le clip déjà envoyé se termine, puis le montage démarre avec les clips reçus.' if busy else ' Montage avec les clips reçus.'))
+                        schedule(j)
+                    elif action=='continue_video':
+                        LICENCE.require()
+                        # « Faire la suite de la vidéo »: the next minute of the same source, same characters (images reused).
+                        if not exact_remake(j):raise ValueError('Réservé aux reproductions fidèles d’une vidéo')
+                        left=remake_remaining(j)
+                        if left<=1:raise ValueError('La vidéo d’origine est entièrement reproduite')
+                        if not any(c.get('file') for c in j.get('characters',[])):raise ValueError('Attendez que les personnages soient dessinés')
+                        start=source_offset(j)+exact_span(j);part=series.part_of(j)+1
+                        cfg={**copy.deepcopy(j['config']),'dry_run':False,'source_offset':round(start,2)}
+                        cast=[{key:c[key] for key in ('id','name','appearance','tenue','detail','voice','place') if c.get(key)} for c in j.get('characters',[])]
+                        brief=(f'SUITE de la même vidéo (partie {part}, à partir de {clock_text(start)}) : garde exactement les mêmes personnages de remplacement '
+                               f'(mêmes id, noms, apparences et voix) : {json.dumps(cast,ensure_ascii=False)}.'+(' '+j['brief'] if j.get('brief','').strip() else ''))[:4000]
+                        nxt={'id':uid(),'title':re.sub(r'\s*— partie \d+$','',j.get('title','Épisode'))+' — partie '+str(part),'brief':brief,'config':cfg,
+                             'series':{'id':j.get('series',{}).get('id',j['id']),'part':part,'previous':j['id']},'selected':copy.deepcopy(j.get('selected')),
+                             'flow_profile':j.get('flow_profile'),'status':'waiting_source','stage':'script','created':now(),'updated':now(),'events':[],'candidates':[],'characters':[],'scenes':[]}
+                        for key in ('editorial_version','retention_version','hook_version','quality_version','cover_style','character_sheet'):
+                            if key in j:nxt[key]=j[key]
+                        STATE['jobs'].insert(0,nxt)
+                        event(nxt,f'Partie {part} de « {j.get("title")} » : la vidéo d’origine à partir de {clock_text(start)}, mêmes personnages (images reprises), même langue et même règle Flow.')
+                        threading.Thread(target=prepare_source,args=(nxt['id'],),daemon=True).start()
+                        save();return self.send_json({**public_state(),'created':nxt['id']})
                     elif action=='continue_series':
                         LICENCE.require()
                         # P3-1: next part with the same cast; research is skipped (the story continues).
@@ -3319,6 +4113,41 @@ def recover_after_restart():
                 j['status']='running';event(j,'Redémarrage pendant le montage : reprise locale sans nouvelle génération.');schedule(j)
         save()
 
+WATCH_EVERY=60   # seconds between two self-checks
+WATCH_MISSES=3   # unanswered self-checks in a row before the studio stops itself
+
+def self_ping(timeout=20):
+    import urllib.request
+    with urllib.request.urlopen(f'http://127.0.0.1:{PORT}/api/version',timeout=timeout) as r:r.read()
+
+def watchdog_loop(ping=None,stop=None,interval=WATCH_EVERY,limit=WATCH_MISSES,sleep=time.sleep,busy=None):
+    """A studio that no longer answers stops itself so it can be started again (owner 10/11/2026).
+
+    Real case: the PC ran out of memory (MemoryError), the server kept its port but answered nothing; the extension
+    asked for a start every minute and the launcher refused it, the port being taken. Here the studio checks that it
+    answers; after `limit` silent checks it waits for any state write in progress, then exits: the port is free and the
+    FruchtDrama extension starts the studio again (studio-start.js). Claimed tasks are kept by recover_after_restart."""
+    ping=ping or self_ping;stop=stop or (lambda:os._exit(3))
+    # A montage saturates the processor for minutes: slow answers then are not a freeze (11/11/2026: the watchdog
+    # stopped the studio in the middle of four montages, which then started again from zero).
+    busy=busy or (lambda:bool(BUSY))
+    misses=0;sleep(interval)
+    while True:
+        if busy():
+            misses=0;sleep(interval);continue
+        try:ping();misses=0
+        except Exception as e:
+            misses+=1
+            print(f'[{now()}] Surveillance : le studio ne répond pas ({misses}/{limit}) : {e}',file=sys.stderr,flush=True)
+            if misses>=limit:
+                print(f'[{now()}] Surveillance : studio figé, arrêt pour être relancé par l’extension FruchtDrama.',file=sys.stderr,flush=True)
+                if LOCK.acquire(timeout=30):  # never in the middle of writing state.json
+                    try:stop()
+                    finally:LOCK.release()
+                else:stop()
+                return
+        sleep(interval)
+
 def licence_loop():
     # A fresh signed verdict once a day; without internet the current one lasts the 3-day grace period.
     while True:
@@ -3327,9 +4156,24 @@ def licence_loop():
         except Exception as e:log_error('Vérification de la clé',e)
         time.sleep(3600)
 
+class StudioServer(http.server.ThreadingHTTPServer):
+    """One studio per port. On Windows SO_REUSEADDR lets a second studio bind the same port: both answered in
+    turn and both wrote data/state.json (real case 10/11/2026: during a restart, the extensions of two Chrome
+    profiles each started one). The port is taken exclusively, before the state is touched."""
+    allow_reuse_address=os.name!='nt'
+    def server_bind(self):
+        import socket
+        if os.name=='nt' and hasattr(socket,'SO_EXCLUSIVEADDRUSE'):
+            self.socket.setsockopt(socket.SOL_SOCKET,socket.SO_EXCLUSIVEADDRUSE,1)
+        super().server_bind()
+
 if __name__=='__main__':
+    try:HTTPD=StudioServer(('127.0.0.1',PORT),Handler)
+    except OSError:
+        print(f'FruchtDrama Studio déjà en marche sur le port {PORT} : ce démarrage s’arrête sans rien modifier.',flush=True);sys.exit(0)
     recover_after_restart()
     print(f'FruchtDrama Studio : http://127.0.0.1:{PORT}',flush=True)
     threading.Thread(target=flow_dispatch_loop,daemon=True).start()
     threading.Thread(target=licence_loop,daemon=True).start()
-    http.server.ThreadingHTTPServer(('127.0.0.1',PORT),Handler).serve_forever()
+    threading.Thread(target=watchdog_loop,daemon=True).start()
+    HTTPD.serve_forever()

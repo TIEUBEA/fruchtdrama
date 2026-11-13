@@ -10,7 +10,7 @@ globalThis.FruchtReadiness={
  async retryTabEdit(operation,wait){
   for(let attempt=0;;attempt++){
    try{return await operation();}
-   catch(error){if(!this.tabBusy(error)||attempt>=3)throw error;await wait(750*(attempt+1));}
+   catch(error){if(!this.tabBusy(error)||attempt>=5)throw error;await wait(1000*(attempt+1));}
   }
  },
  // Pure: what the page shows -> Prêt / À régler (reason) / Pas d'accès.
@@ -41,7 +41,7 @@ globalThis.FruchtReadiness={
   const labels=[...doc.querySelectorAll('button,a,[role="button"]')].filter(b=>b.getClientRects().length).map(b=>[b.getAttribute('aria-label'),b.innerText].filter(Boolean).join(' ').replace(/\s+/g,' ').trim());
   const signIn=labels.some(l=>/^(log in|sign in|se connecter|connexion|anmelden|einloggen)$/i.test(l));
   return {editor:visibleEditor,connected:site.connected,signIn:name==='flow'?false:signIn&&!site.connected,challenge:!!globalThis.FruchtComposer?.challenge(doc),
-   loggedOut:name==='vidogrid'&&site.connected===false,email:name==='flow'?(globalThis.FruchtFlowSession?.identity(doc)||null):(site.email||null),text:String(doc.body?.innerText||'').trim().length>0,
+   loggedOut:name==='vidogrid'&&site.connected===false,email:name==='flow'?(globalThis.FruchtFlowSession?.identity(doc)||null):(site.email||null),text:String(doc.body?.innerText||'').trim().length>0,loading:String(doc.body?.innerText||'').length<400&&/wird geladen|loading|chargement|cargando|carregando/i.test(String(doc.body?.innerText||'')),
    ready:['interactive','complete'].includes(doc.readyState)};
  },
  hostOf(url){try{return new URL(url).hostname;}catch{return '';}},
@@ -67,7 +67,7 @@ globalThis.FruchtReadiness={
  },
  // One page: wait for it, read it a few times (a page still loading looks empty), classify.
  async look(chrome,tab,name,extra,wait,tries=6){
-  let info={},verdict={state:'fix',reason:'Page vide'};
+  let info={},verdict={state:'fix',reason:'Page vide'},extraTries=0;
   for(let k=0;k<tries;k++){
    let current;try{current=await chrome.tabs.get(tab.id);}catch{return {verdict:{state:'fix',reason:'Onglet fermé pendant la vérification'},info};}
    const host=this.hostOf(current.url||current.pendingUrl);
@@ -75,6 +75,9 @@ globalThis.FruchtReadiness={
    if(this.HOSTS[name].includes(host)&&!info.unavailable){if(name!=='flow')await this.reveal(chrome,tab.id);try{Object.assign(info,await this.probeTab(chrome,tab.id,name));}catch{}}
    verdict=this.classify(info);
    if(verdict.state!=='fix'||info.challenge||(k>=2&&!this.HOSTS[name].includes(host)))break;
+   // 11/11/2026 (borismoussa55 « sans zone de saisie »): a Flow project in a background tab showed « Wird geladen… »
+   // for more than 15 s, then its editor. While the page says it is loading, wait up to 30 s more.
+   if(k===tries-1&&extraTries<10&&info.loading){tries++;extraTries++;}
    await wait(3000);
   }
   return {verdict,info};

@@ -1,11 +1,12 @@
 const assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs'),path=require('node:path');
 const c={};vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../extension/flow-controls.js'),'utf8'),c);const f=c.FruchtFlow;
-for(const name of ['Gemini Omni Flash','Gemini Omni Flash 1.1','Gemini Omni 1.1 Flash'])assert.ok(f.modelPattern('gemini_omni_flash').test(name));
+for(const name of ['Gemini Omni 1.2 Flash','Omni 1.2 Flash','Gemini Omni Flash 1.2'])assert.ok(f.modelPattern('gemini_omni_flash').test(name));
+for(const name of ['Gemini Omni Flash','Gemini Omni Flash 1.1','Gemini Omni 1.1 Flash','Omni Flash 1.20'])assert.ok(!f.modelPattern('gemini_omni_flash').test(name));
 assert.ok(!f.modelPattern('gemini_omni_flash').test('Veo 3.1 Fast'));
 assert.ok(!f.modelPattern('gemini_omni_flash').test('Veo 3.1 Lite'));
 for(const text of ['Video · 720p · 8 Sek. · 1-mal','Vidéo · 720p · 8 s · x1','Video · 720p · 8 seconds · x1']){assert.equal(f.resolution(text),'720p');assert.equal(f.seconds(text),8);}
 assert.equal(f.resolution('360p 720p'),null);assert.equal(f.seconds('8 s 10 s'),null);
-function fixture({missing=false,ambiguous=false,wrongResolution=false,wrongDuration=false,target="Gemini Omni Flash 1.1",aspect='9:16'}={}){
+function fixture({missing=false,ambiguous=false,wrongResolution=false,wrongDuration=false,target="Gemini Omni 1.2 Flash",aspect='9:16'}={}){
  let menu=false,current='Veo 3.1 - Lite',resolution=wrongResolution?'360p':'720p',seconds=wrongDuration?10:8,picked=[];
  const element=(text,click,checked=true)=>({innerText:text,getClientRects:()=>[{}],getAttribute:k=>k==='aria-checked'?String(checked):null,click});
  const radios=['Video',aspect,'x1'].map(x=>element(x,()=>picked.push(x)));

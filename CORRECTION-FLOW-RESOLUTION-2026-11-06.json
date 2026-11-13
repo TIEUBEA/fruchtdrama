@@ -1,0 +1,24 @@
+{
+  "date": "2026-11-06T20:50:09.7724454+01:00",
+  "cause": "1080p selected by default; actual Flow settings offered 360p and 720p",
+  "fixes": [
+    "720p selected for the current production",
+    "720p first/default in new-production form",
+    "Resolution dropdown button labels recognized in FR/DE/EN",
+    "Available resolution labels included in failure diagnostics",
+    "Flow technical failure stops the production before repeating across every scene",
+    "Changing resolution invalidates the previous dry-run result"
+  ],
+  "extension": "0.1.96.2",
+  "test_passed": "2026-11-06T20:49:22.679112+01:00",
+  "verified_cost": 12,
+  "generation_submitted": false,
+  "credits_spent": 0,
+  "output_dimensions": "1080x1920; generation clips are 720p",
+  "project_status": "paused",
+  "generation_resolution": "720p",
+  "characters": 2,
+  "scene_images": 5,
+  "routing": "flow_grok_per_clip",
+  "backup": "data/backups/flow-resolution-20261106"
+}

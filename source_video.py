@@ -3,7 +3,7 @@
 Before, the AI only received the link. Now the studio fetches the public video once, makes one board of
 key frames and a local transcription, and the writing AI receives both. Two ways to redo it:
 - inspired (default): an original story that keeps what made the video work;
-- identical ("Recréer à l'identique"): same scenes in the same order, every line reworded.
+- identical ("Recréer à l'identique"): same scenes, in the same order, with the original dialogue.
 The video stays in the episode folder and is never published or sent anywhere else.
 Standard library only (urllib, cookies); ffmpeg for the board; faster-whisper only if already installed.
 """
@@ -167,10 +167,11 @@ def frame_sheets(video: pathlib.Path, folder: pathlib.Path, duration: float) -> 
     return out
 
 
-def transcribe(video: pathlib.Path, root: pathlib.Path) -> str:
+def transcribe(video: pathlib.Path, root: pathlib.Path, *, required: bool = False) -> str:
     """Spoken lines with their time, if the local checks (faster-whisper) are installed; '' otherwise."""
     models = root / '.qc-models'
     if not models.is_dir():
+        if required:raise ValueError('Transcription locale indisponible.')
         return ''
     try:
         sys.path.insert(0, str(root / '.qc-runtime'))
@@ -180,8 +181,10 @@ def transcribe(video: pathlib.Path, root: pathlib.Path) -> str:
         # Tenth of a second, like the Atelier: the writer can match each line with the stamped frames.
         lines = [f'[{int(s.start // 60):02d}:{s.start % 60:04.1f}] {s.text.strip()}' for s in segments]
     except Exception:
+        if required:raise ValueError('Transcription de la source impossible.') from None
         return ''
-    return '\n'.join(lines)[:TRANSCRIPT_CHARS]
+    text='\n'.join(lines)
+    return text if required else text[:TRANSCRIPT_CHARS]
 
 
 def decode_captures(items) -> list[tuple[str, bytes]]:
@@ -231,6 +234,39 @@ def beats(transcript: str, duration: float | None, scenes: int) -> list[list[str
     return groups
 
 
+def window_frames(video: pathlib.Path, seconds: int, count: int, offset: float = 0) -> list[str | None]:
+    ff=shutil.which('ffmpeg')
+    frames=[]
+    for i in range(count):
+        path=video.parent / f'source_window_{i:02d}.jpg'
+        frames.append(path.name if ff and _frame(ff,video,offset+i*seconds,path,960) else None)
+    return frames
+
+
+def slice_transcript(transcript: str, start: float, length: float) -> str:
+    """The lines spoken in [start, start + length), stamped from the start of that part (one minute per episode)."""
+    if not start and length >= 1e9:return transcript
+    out=[]
+    for line in str(transcript or '').splitlines():
+        match=re.fullmatch(r'\[(\d+):(\d+(?:\.\d+)?)\]\s*(.+)',line.strip())
+        if not match:continue
+        at=int(match[1])*60+float(match[2])-start
+        if 0<=at<length:out.append(f'[{int(at//60):02d}:{at%60:04.1f}] {match[3]}')
+    return '\n'.join(out)
+
+
+def exact_windows(transcript: str, duration: float, seconds: int) -> list[list[tuple[float, str]]]:
+    import math
+    windows=[[] for _ in range(math.ceil(duration/seconds))]
+    for line in transcript.splitlines():
+        match=re.fullmatch(r'\[(\d+):(\d+(?:\.\d+)?)\]\s*(.+)',line)
+        if not match:raise ValueError('Horodatage de la transcription invalide.')
+        start=int(match[1])*60+float(match[2])
+        index=min(int(start//seconds),len(windows)-1)
+        windows[index].append((round(start-index*seconds,1),match[3]))
+    return windows
+
+
 def guidance(mode: str, analysis: dict | None, captures_count: int = 0, scenes: int = 0) -> str:
     """What the writing AI is told about the video to redo."""
     analysis = analysis or {}
@@ -254,7 +290,7 @@ def guidance(mode: str, analysis: dict | None, captures_count: int = 0, scenes: 
         text += ('\nMODE RECRÉER À L’IDENTIQUE, choisi par le propriétaire. C’est LA MÊME HISTOIRE : mêmes personnages et mêmes rôles '
                  '(même métier, même âge, même lien entre eux, même méchant, même victime), mêmes lieux, mêmes objets, mêmes événements dans le même ordre, '
                  'même accroche, même retournement, même fin et même émotion. N’invente aucun autre conflit, aucun autre personnage principal, aucun secret, '
-                 'aucun objet que la vidéo ne montre pas. Les personnages deviennent des fruits anthropomorphes qui gardent les vêtements, signes distinctifs et '
+                 'aucun objet que la vidéo ne montre pas. Les personnages suivent le style choisi et gardent les vêtements, signes distinctifs et '
                  'attitudes de l’original. Seules les répliques sont reformulées en mots simples, au plus près du sens de l’original (jamais mot pour mot), '
                  'et les prénoms changent.')
         groups = beats(analysis.get('transcript', ''), analysis.get('duration'), scenes)
@@ -262,7 +298,7 @@ def guidance(mode: str, analysis: dict | None, captures_count: int = 0, scenes: 
             text += ('\nDÉCOUPAGE OBLIGATOIRE : chaque scène reprend les moments de l’original indiqués ci-dessous (condense en gardant chaque '
                      'événement et chaque émotion ; si une scène n’a pas de réplique, montre l’action correspondante de la planche) :\n'
                      + '\n'.join(f'Scène {k + 1} : ' + (' / '.join(g) if g else '(action visible sur la planche à ce moment)') for k, g in enumerate(groups)))
-    else:
+    elif mode == 'inspired':
         text += ('\nINSPIRÉE de cette vidéo : garde sa mécanique émotionnelle (le même type de victime et d’antagoniste, la même injustice, '
                  'le même genre de retournement, la même fin et la même émotion, le même rythme et le même type d’accroche), '
                  'mais change les personnages, le lieu, les objets et toutes les répliques ; ne copie ni ses répliques ni ses plans.')

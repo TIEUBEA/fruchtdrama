@@ -55,6 +55,7 @@ class StallTests(unittest.TestCase):
             finally:s.schedule = previous
             self.assertEqual(t['status'], 'failed'); self.assertEqual(calls, [j['id']]); self.assertIn('Étape relancée', j['events'][-1]['text'])
             j, t = setup(kind='flow_video', seen=40, claimed=42, event=41)
+            t['progress'] = 'Import de la planche dans Flow…'; t['progress_at'] = t['claimed']  # started: credits may be at stake
             self.assertIn('vérifie dans Flow', post({'action': 'retry_step'}).get('error', '')); self.assertEqual(t['status'], 'claimed')
             j, _ = setup()
             self.assertIn('rien à relancer', post({'action': 'retry_step'}).get('error', ''))

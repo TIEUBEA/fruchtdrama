@@ -8,7 +8,8 @@ globalThis.FruchtFlowSession={
  home(value){const url=this.project(value);if(!url)return null;const u=new URL(url);return u.origin+u.pathname.split('/project/')[0]+'/';},
  identity(doc){
   const emails=new Set();
-  for(const b of doc.querySelectorAll('button,[role="button"]')){
+  // 11/11/2026: on Google's « no access to Flow » page the account control is a link (a[aria-label]), not a button.
+  for(const b of doc.querySelectorAll('button,[role="button"],a[aria-label]')){
    if(!b.getClientRects().length)continue;
    const label=b.getAttribute('aria-label')||'';
    if(!/\bGoogle\b/i.test(label))continue;

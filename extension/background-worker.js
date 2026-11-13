@@ -160,7 +160,9 @@ async function checkActive(active){
  if(!active.startedAt)active.startedAt=Date.now();
  const context=await call('/api/bridge/status?client='+encodeURIComponent(active.client)+'&task='+encodeURIComponent(active.task.id));
  if(context.task_status==='done'||context.task_status==='cancelled'||(FruchtRecovery.isScenario(active.task)&&context.job_stage!=='script')){await clearBinding(active);return;}
- if(context.job_status==='paused'){await chrome.storage.local.set({status:'Production en pause ; association avec l’onglet conservée.'});return;}
+ // 11/11/2026: a paused episode froze its tasks here and held both lanes for hours (« La crèche » blocked every other
+ // episode). Paused, nothing new is sent (a Flow project still to prepare waits), but what is already asked is collected.
+ if(context.job_status==='paused'&&active.preparingProject){await chrome.storage.local.set({status:'Production en pause ; association avec l’onglet conservée.'});return;}
  if(context.task_status==='failed'&&!FruchtRecovery.isScenario(active.task)){await clearBinding(active);return;}
  if(active.preparingProject){
   const cfg=await chrome.storage.local.get(null),tab=await FruchtFlowSession.tabFor(active.task,chrome);
@@ -486,6 +488,18 @@ async function watchLogins(onlyTab){
  if(changed)await chrome.storage.local.set({pendingLogins});
 }
 chrome.tabs?.onUpdated?.addListener((id,info)=>{if(info.status==='complete')setTimeout(()=>{watchLogins(id).catch(recordBackgroundError);watchGoogle(id).catch(recordBackgroundError);},2500);});
+let scanRunning=false;
+async function runScan(cfg,r){
+ let text,ok=false;
+ try{
+  const accounts=await FruchtFlowScan.scan(chrome,FruchtWorkspace);
+  const result=await call('/api/bridge/flow-scan',{client:cfg.client,accounts,profile:r.profile});
+  text=result.message;ok=result.detected??accounts.length>0;
+ }catch(e){text='Détection interrompue : '+e.message;}
+ await call('/api/bridge/notice',{client:cfg.client,action:'scan_flow',ok,text});
+ // « Vérifier » in Mes comptes › Google Flow: the accounts found are then each checked (next pass).
+ if(r.then_check&&(!r.profile||ok))await call('/api/bridge/readiness-request',{client:cfg.client,background:false,flow_only:!r.check_all,profile:r.profile});
+}
 // Owner requests from "Mes comptes": open a site in the FruchtDrama window, or re-check every site.
 async function handleRequests(cfg,light=false){
  // light: a task is running; only the owner's clicks that show a tab (Se connecter, Régler maintenant, Ajouter) are done now.
@@ -499,8 +513,12 @@ async function handleRequests(cfg,light=false){
     :'Connecte-toi à '+label+' dans Chrome. FruchtDrama détectera la connexion automatiquement.'});
   }
   if(r.type==='add_google'){
-   await addGoogle();
-   await call('/api/bridge/notice',{client:cfg.client,action:'add_google',ok:true,text:'Google ouvert dans Chrome. Connecte-toi, puis laisse Flow s’ouvrir pour que le studio détecte le compte.'});
+   try{
+    await FruchtReadiness.retryTabEdit(addGoogle,delay);
+    await call('/api/bridge/notice',{client:cfg.client,action:'add_google',ok:true,text:'Google ouvert dans Chrome. Connecte-toi, puis laisse Flow s’ouvrir pour que le studio détecte le compte.'});
+   }catch(e){
+    await call('/api/bridge/notice',{client:cfg.client,action:'add_google',ok:false,text:'Ouverture de Google interrompue : '+e.message});
+   }
   }
   if(r.type==='check'){const sites=await FruchtSites.check(chrome,FruchtWorkspace);await call('/api/bridge/sites',{client:cfg.client,sites});}
   // « Préparer mes comptes »: read only, background tabs; a check asked while the window is closed waits for it.
@@ -513,15 +531,9 @@ async function handleRequests(cfg,light=false){
   // Former gateway-tab buttons, now clicked in the studio's Mes comptes page.
   if(r.type==='scan_flow'){
    if(r.background&&!await FruchtWorkspace.isOpen(chrome))continue;
-   let text,ok=false;
-   try{
-    const accounts=await FruchtFlowScan.scan(chrome,FruchtWorkspace);
-    const result=await call('/api/bridge/flow-scan',{client:cfg.client,accounts,profile:r.profile});
-    text=result.message;ok=result.detected??accounts.length>0;
-   }catch(e){text='Détection interrompue : '+e.message;}
-   await call('/api/bridge/notice',{client:cfg.client,action:'scan_flow',ok,text});
-   // « Vérifier » in Mes comptes › Google Flow: the accounts found are then each checked (next pass).
-   if(r.then_check&&(!r.profile||ok))await call('/api/bridge/readiness-request',{client:cfg.client,background:false,flow_only:!r.check_all,profile:r.profile});
+   // Busy window (a task running): the read-only scan runs on its own, one at a time, without delaying the lanes.
+   if(light){if(!scanRunning){scanRunning=true;runScan(cfg,r).catch(recordBackgroundError).finally(()=>{scanRunning=false;});}continue;}
+   await runScan(cfg,r);
   }
   if(['register_flow','tidy','recover'].includes(r.type)){
    let result;try{result=r.type==='register_flow'?await registerFlow(true):r.type==='tidy'?await tidyChats(true):await recover(r.job,true);}catch(e){result={ok:false,error:e.message};}
@@ -809,8 +821,14 @@ async function registerFlow(owned=false){
  await chrome.scripting.executeScript({target:{tabId:tab.id},files:['flow-session.js']});
  const account=await chrome.tabs.sendMessage(tab.id,{type:'frucht-flow-session'});
  if(!account)throw Error('Compte Google non identifiable. Vérifiez la connexion dans Flow.');
- await call('/api/bridge/register-flow',{client:cfg.client,...account});
- return {ok:true,message:'Compte Flow mémorisé. Ouverture et passage automatiques activés.'};
+ let balance=null;
+ try{
+  await chrome.scripting.executeScript({target:{tabId:tab.id},files:['flow-credits.js','flow-scan.js']});
+  const [r]=await chrome.scripting.executeScript({target:{tabId:tab.id},func:async()=>globalThis.FruchtFlowScan.read(document,ms=>new Promise(resolve=>setTimeout(resolve,ms)))});
+  if(r?.result?.email===account.email&&Number.isInteger(r.result.balance))balance=r.result.balance;
+ }catch{}
+ await call('/api/bridge/register-flow',{client:cfg.client,...account,balance});
+ return {ok:true,message:balance===null?'Compte Flow ajouté. Clique sur « Actualiser tous les comptes » pour lire son solde.':'Compte Flow ajouté · '+balance+' crédits lus dans Flow.'};
 }
 function triggerPoll(){selfUpdate().then(()=>poll()).catch(recordBackgroundError);}
 function createAlarm(){try{Promise.resolve(chrome.alarms.create('studio-poll',{periodInMinutes:.5})).catch(recordBackgroundError);}catch(e){recordBackgroundError(e);}}

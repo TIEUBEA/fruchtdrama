@@ -6,7 +6,8 @@ check then use the engine of the clip itself (scene['engine']), the scenario kee
 ENGINES = {
     # seconds: duration asked in the prompt; range: accepted clip duration (QC) and montage clamp.
     'flow': {'label': 'Google Flow', 'seconds': 8, 'range': (7.5, 8.5), 'home': 'https://labs.google/fx/tools/flow'},
-    'grok': {'label': 'Grok Imagine', 'seconds': 6, 'range': (5.5, 10.5), 'home': 'https://grok.com/imagine'},
+    # 11/11/2026: 10 s (Grok offers 6 / 10 / 15 s; the extension chooses 10): the lines are no longer rushed.
+    'grok': {'label': 'Grok Imagine', 'seconds': 10, 'range': (5.5, 10.5), 'home': 'https://grok.com/imagine'},
     'arena': {'label': 'LMArena (vidéo)', 'seconds': 8, 'range': (4.0, 10.5), 'home': 'https://arena.ai/video'},
     # vidogrid.ai, model « Grok Imagine Video 1.5 Lite », 10 s clips in 720p (parcours vérifié dans fruit-france, V57).
     'vidogrid': {'label': 'Vidogrid (Grok Lite)', 'seconds': 10, 'range': (5.5, 10.5), 'home': 'https://vidogrid.ai/app/video-gen/grok'},

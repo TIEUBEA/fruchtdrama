@@ -1,0 +1,3 @@
+# Scripts Mac et Linux : fins de ligne Unix, sinon macOS refuse de les lancer
+*.sh text eol=lf
+*.command text eol=lf

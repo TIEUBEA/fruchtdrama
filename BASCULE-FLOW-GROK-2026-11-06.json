@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-06T20:37:56.6842940+01:00",
+  "mode": "flow_grok_per_clip",
+  "scope": "Current project 426a6e2b35814e1a and future productions",
+  "rules": [
+    "Each clip begins with Flow",
+    "Confirmed Flow generation refusal uses Grok for that clip only",
+    "The next clip starts with Flow again",
+    "Technical failure, credits exhaustion and uncertain submission do not trigger Grok",
+    "Arena and Vidogrid excluded in this mode"
+  ],
+  "validation": "83 Python tests passed, including per-clip fallback and uncertain-submission protection",
+  "server_restarted_while_idle": true,
+  "accounts_preserved": true,
+  "profiles_preserved": 8,
+  "productions_preserved": 22,
+  "project_status": "paused",
+  "media_preserved": "2 characters and 5 scene images",
+  "backup": "data/backups/flow-grok-routing-20261106"
+}

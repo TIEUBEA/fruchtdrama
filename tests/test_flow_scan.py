@@ -45,6 +45,21 @@ class ScanTests(unittest.TestCase):
         s.STATE = s.fresh(); c = {'id': 'win', 'role': 'all'}
         self.assertIn('Ajouter un compte', s.flow_scan(s.STATE, c, []))
 
+    def test_verified_session_replaces_only_offline_dedicated_connector(self):
+        s.STATE = s.fresh()
+        main = {'id': 'win', 'role': 'all'}
+        old = {'id': 'old', 'role': 'flow', 'flow_profile': 'p', 'seen': s.now()}
+        s.STATE['clients'] = {'win': main, 'old': old}
+        p = {'id': 'p', 'label': 'flow@x.com', 'flow_client': 'old', 'balance': 0}
+        s.STATE['profiles'] = [p]
+        account = {'email': 'flow@x.com', 'slot': 2, 'balance': 30}
+        s.flow_scan(s.STATE, main, [account])
+        self.assertEqual(p['flow_client'], 'old')
+        old['seen'] = '2000-01-01T00:00:00Z'
+        s.flow_scan(s.STATE, main, [account])
+        self.assertEqual((p['flow_client'], p['slot'], p['balance']), ('win', 2, 30))
+        self.assertEqual(len(s.STATE['profiles']), 1)
+
     def test_detected_account_uses_its_slot_and_clears_obsolete_mismatch(self):
         s.STATE=s.fresh();c={'id':'online','role':'all'}
         s.STATE['profiles']=[{'id':'p','label':'owner@x.com','balance':50,'flow_url':'https://flow.google.com/project/old',

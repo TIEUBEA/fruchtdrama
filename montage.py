@@ -5,9 +5,12 @@ silences trimmed at the edges of each clip, karaoke subtitles. Pure functions, f
 
 import math
 
-DEFAULT = {'transition': 'cut', 'fast_cuts': True, 'cut_silences': True, 'karaoke': True}
-# Episodes made before these settings keep their old look: slow zoom, straight cuts, nothing trimmed.
-LEGACY = {'transition': 'cut', 'fast_cuts': False, 'cut_silences': False}
+# « Rendu film » (owner 11/11/2026: « pas de saut d'image, pas de zoom excessif, comme un film »): no digital zoom or
+# reframing added at the montage, light fade, natural pauses kept, and each clip starts from the last image of the
+# previous clip when both happen in the same place (raccord).
+DEFAULT = {'transition': 'fade_short', 'fast_cuts': False, 'cut_silences': False, 'karaoke': True, 'zoom': False, 'raccord': True, 'upscale': False}
+# Episodes made before these settings keep their old look: slow zoom, straight cuts, nothing trimmed, no raccord.
+LEGACY = {'transition': 'cut', 'fast_cuts': False, 'cut_silences': False, 'zoom': True, 'raccord': False, 'upscale': True}
 FADES = {'cut': 0.0, 'fade_short': 0.25, 'fade_long': 0.6}
 LABELS = {'cut': 'coupes franches', 'fade_short': 'fondu léger', 'fade_long': 'fondu long'}
 
@@ -22,7 +25,7 @@ def validate(value, current=None):
             if v not in FADES:
                 raise ValueError('Transition inconnue')
             out[key] = v
-        elif key in ('fast_cuts', 'cut_silences', 'karaoke'):
+        elif key in ('fast_cuts', 'cut_silences', 'karaoke', 'zoom', 'raccord', 'upscale'):
             out[key] = bool(v)
         else:
             raise ValueError('Réglage de montage inconnu')
@@ -37,6 +40,9 @@ def of(config):
 def summary(settings):
     s = {**DEFAULT, **(settings or {})}
     return ' · '.join([LABELS[s['transition']], 'coupes rapides' if s['fast_cuts'] else 'plans continus',
+                       'zoom de montage' if s.get('zoom') else 'sans zoom ajouté',
+                       'raccord entre clips' if s.get('raccord') else 'clips indépendants',
+                       'agrandi en 1080p' if s.get('upscale', True) else '720p natif',
                        'silences coupés' if s['cut_silences'] else 'silences gardés',
                        'sous-titres karaoké' if s['karaoke'] else 'sous-titres simples'])
 

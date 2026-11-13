@@ -110,6 +110,18 @@ class ChainScheduleTests(unittest.TestCase):
         self.assertEqual([x['image'] for x in j['scenes']],images)
         self.assertEqual(s.frame_size(j),(1080,1920))
 
+    def test_slow_grok_gets_one_more_try_and_a_grok_refusal_is_final(self):
+        # 11/11/2026, crèche clip 5: « Grok n'a pas rendu le clip à temps » left the clip for the owner.
+        tries=lambda *k:{'engine_tries':[{'engine':'flow','kind':'refusal'},{'engine':'flow','kind':'refusal'}]+[{'engine':'grok','kind':x} for x in k]}
+        self.assertEqual(engine_chain.flow_grok_next(tries('timeout')),'grok')
+        self.assertEqual(engine_chain.flow_grok_next(tries('interface')),'grok')
+        self.assertIsNone(engine_chain.flow_grok_next(tries('timeout','timeout')),'two Grok tries at most')
+        self.assertIsNone(engine_chain.flow_grok_next(tries('refusal')),'a refusal by Grok is final')
+        # A clip already held for the owner goes again by itself under the new rule.
+        s.STATE['settings']['clip_routing']='flow_grok_per_clip'
+        j=clip_job(n=2);j['scenes'][1].update(tries('timeout'),engine_exhausted=True)
+        self.assertNotIn(1,s.held_clips(j));self.assertNotIn('engine_exhausted',j['scenes'][1])
+
     def test_flow_refusal_uses_grok_for_only_that_clip_then_returns_to_flow(self):
         s.STATE['settings'].update(clip_routing='flow_grok_per_clip',parallel_clips=False)
         j=clip_job(engine='grok',n=2)
@@ -142,10 +154,67 @@ class ChainScheduleTests(unittest.TestCase):
         deliver(j,t)
         self.assertEqual(j['scenes'][1]['engine'],'flow')
 
+    def test_faithful_remake_follows_flow_adaptation_flow_then_grok_keeping_the_source_words(self):
+        # Owner 10/11/2026 (« LA BOUTEILLE SOUS LE LIT », clip 17 refused twice, production stopped): the same rule as
+        # every episode — Flow, adaptation by ChatGPT, Flow again, then Grok — and the source words never change.
+        s.STATE['settings'].update(clip_routing='flow_grok_per_clip',parallel_clips=False)
+        j=clip_job(n=2)
+        j['selected']['source']='owner_link';j['config'].update(recreate='identical',remake_exact=True)
+        j['source_analysis']={'duration':16,'exact_windows':[[(0.5,'Hallo Welt')],[(8.5,'Hallo Welt')]]}
+        self.assertTrue(s.exact_remake(j))
+        s.schedule(j);t=queued(j)[0];self.assertEqual((t['slot'],engine_of(t)),('clip:0','flow'))
+        fail(t,{'ok':False,'error_kind':'refusal','generation_submitted':True,'flow_failed':True,'error':'Flow : contenu refusé.'})
+        self.assertNotEqual(j['status'],'attention','no stop at the first refusal')
+        rewrite=queued(j)[0];self.assertEqual(rewrite['slot'],'flow_rewrite:0')
+        self.assertIn('Ne change pas les paroles',rewrite['payload']['prompt'])
+        rewrite['status']='claimed'
+        adapted={'image_prompt':'Kitchen seen from the window','video_prompt':'Oma turns away from the bed and walks to the window',
+                 'dialogue':[{'speaker':'orange','text':'Ganz andere Worte'}]}
+        s.accept_task_result(rewrite,{'ok':True,'text':json.dumps({'production_id':j['id'],'generation_task_id':rewrite['id'],'scene_rewrite':adapted})})
+        self.assertEqual(j['scenes'][0]['dialogue'][0]['text'],'Hallo Welt','the source words stay')
+        self.assertEqual(j['scenes'][0]['video_prompt'],adapted['video_prompt'])
+        board=queued(j)[0];self.assertEqual(board['slot'],'image:0')
+        from PIL import Image
+        Image.new('RGB',(32,64),(10,90,180)).save(s.job_dir(j)/'adapted.png')
+        board['status']='claimed';s.accept_task_result(board,{'ok':True,'file':'adapted.png'})
+        retry=queued(j)[0];self.assertEqual((retry['slot'],engine_of(retry)),('clip:0','flow'))
+        fail(retry,{'ok':False,'error_kind':'refusal','generation_submitted':True,'flow_failed':True,'error':'Flow : nouveau refus.'})
+        t=queued(j)[0];self.assertEqual((t['slot'],engine_of(t)),('clip:0','grok'))
+        self.assertNotEqual(j['status'],'attention')
+        self.assertIn('finished within the first 8 seconds',t['payload']['prompt'],'Grok 10 s, the 8 s segment is said in time')
+
+    def test_a_flow_refusal_never_pauses_the_other_clips(self):
+        # Owner 10/11/2026: « si Flow refuse, ça ne met pas en pause » — the refused scene is adapted by ChatGPT while the
+        # next scenes keep going on Flow; Flow stays first for every scene, Grok only after two refusals of that scene.
+        for exact in (False,True):
+            s.STATE=fresh();s.STATE['settings'].update(clip_routing='flow_grok_per_clip',flow_auto=True)
+            j=clip_job(n=4,balance=200)
+            s.STATE['clients']={'win':{'id':'win','role':'all','auto':True,'seen':s.now()}}
+            s.STATE['profiles']=[{'id':p,'label':p+'@x.com','flow_email':p+'@x.com','flow_client':'win','auto_enabled':True,'balance':100,'slot':k,
+                                  'flow_url':f'https://flow.google.com/u/{k}/project/p{k}'} for k,p in enumerate(('a','b','c'))]
+            j['flow_profile']='a'
+            if exact:
+                j['selected']['source']='owner_link';j['config'].update(recreate='identical',remake_exact=True)
+                j['source_analysis']={'duration':32,'exact_windows':[[(0.5,'Hallo Welt')]]*4}
+            s.schedule(j)
+            t0=next(t for t in queued(j) if t['slot']=='clip:0')
+            fail(t0,{'ok':False,'error_kind':'refusal','generation_submitted':True,'flow_failed':True,'error':'Flow : refusé.'})
+            s.schedule(j)
+            active={t['slot']:engine_of(t) if t['kind']!='chat_text' else 'chatgpt' for t in queued(j)}
+            self.assertEqual(j['status'],'running','no pause, no « Action requise »')
+            self.assertEqual(active.get('flow_rewrite:0'),'chatgpt','the refused scene goes to ChatGPT at once')
+            self.assertTrue({active.get(f'clip:{k}') for k in (1,2,3)}=={'flow'},'the next scenes go on with Flow meanwhile')
+
     def test_flow_technical_error_and_empty_credit_do_not_spend_grok(self):
         s.STATE['settings']['clip_routing']='flow_grok_per_clip'
         j=clip_job(n=2);s.schedule(j);t=queued(j)[0]
-        fail(t,{'ok':False,'error_kind':'interface','generation_submitted':False,'error':'Réglage resolution non reconnu ; aucun envoi effectué.'})
+        fail(t,{'ok':False,'error_kind':'interface','generation_submitted':False,'error':'Paramètres Flow indisponibles ; aucun envoi effectué.'})
+        # 10/11/2026: a technical failure before anything was sent gets one more Flow try, never Grok…
+        retry=queued(j)[0]
+        self.assertEqual((retry['slot'],engine_of(retry)),('clip:0','flow'))
+        self.assertNotEqual(j['status'],'attention')
+        fail(retry,{'ok':False,'error_kind':'interface','generation_submitted':False,'error':'Réglage resolution non reconnu ; aucun envoi effectué.'})
+        # …then the owner fixes the shared settings once, before the same failure repeats on every clip.
         self.assertFalse(any(engine_of(t)=='grok' for t in queued(j)))
         self.assertTrue(j['scenes'][0]['engine_exhausted'])
         self.assertEqual(j['status'],'attention','Fix shared Flow settings before repeating the same failure on every clip')
@@ -153,6 +222,31 @@ class ChainScheduleTests(unittest.TestCase):
         s.STATE=fresh();s.STATE['settings']['clip_routing']='flow_grok_per_clip'
         j=clip_job(balance=0);s.schedule(j)
         self.assertFalse(any(engine_of(t)=='grok' for t in queued(j)))
+
+    def test_two_clip_specific_flow_failures_go_to_grok(self):
+        # 12/11/2026 (« La méchante éducatrice », clip 2): image stuck in Flow, then its tab gone. Nothing sent, nothing
+        # wrong with the shared settings: the clip goes to Grok instead of stopping the episode.
+        import engine_chain
+        scene={'engine_tries':[{'engine':'flow','kind':'interface','reason':'image toujours en traitement, rien ne progresse depuis 90 s'}]}
+        self.assertEqual(engine_chain.flow_grok_next(scene),'flow')
+        scene['engine_tries'].append({'engine':'flow','kind':'other','reason':'No tab with id: 12'})
+        self.assertEqual(engine_chain.flow_grok_next(scene),'grok')
+        scene['engine_tries'].append({'engine':'grok','kind':'refusal','reason':'refus'})
+        self.assertIsNone(engine_chain.flow_grok_next(scene), 'a Grok refusal is final')
+
+    def test_flow_account_without_settings_is_set_aside_and_the_next_account_takes_the_clip(self):
+        s.STATE['settings'].update(clip_routing='flow_grok_per_clip',flow_auto=True)
+        j=clip_job(n=1)
+        win={'id':'win','role':'all','auto':True,'seen':s.now()};s.STATE['clients']={'win':win}
+        s.STATE['profiles']=[{'id':p,'label':p+'@x.com','flow_email':p+'@x.com','flow_client':'win','auto_enabled':True,'balance':100,'slot':k,
+                              'flow_url':f'https://flow.google.com/u/{k}/project/p{k}'} for k,p in enumerate(('a','b'))]
+        j['flow_profile']='a';s.schedule(j);t=queued(j)[0];self.assertEqual(t['profile'],'a')
+        fail(t,{'ok':False,'error_kind':'interface','generation_submitted':False,'flow_blocked':'not_ready',
+                'not_ready':{'state':'fix','reason':'Flow ne montre pas ses réglages sur ce compte'},'error':'Paramètres Flow indisponibles après 15 s sur ce compte ; aucun envoi effectué.'})
+        self.assertEqual(s.profile_by('a')['readiness']['state'],'fix','marked « À régler » in Mes comptes')
+        nxt=queued(j)[0]
+        self.assertEqual((engine_of(nxt),nxt['profile']),('flow','b'))
+        self.assertNotEqual(j['status'],'attention')
 
     def test_uncertain_flow_submission_is_never_replayed_on_grok(self):
         s.STATE['settings']['clip_routing']='flow_grok_per_clip'

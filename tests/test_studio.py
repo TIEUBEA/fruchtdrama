@@ -237,12 +237,12 @@ class StudioTests(unittest.TestCase):
 
 class HTTPTests(unittest.TestCase):
     def test_old_open_form_cannot_create_unsupported_native_1080p(self):
-        for model,cost in [('gemini_omni_flash',12),('veo_3_1_lite',10)]:
+        for model,cost in [('gemini_omni_flash',24),('veo_3_1_lite',10)]:
             self.req('/api/job',{'brief':'A family secret','config':{'flow_model':model,'flow_cost':cost,'flow_resolution':'1080p'}})
             cfg=s.STATE['jobs'][0]['config']
             self.assertEqual(cfg['flow_resolution'],'720p')
             self.assertEqual(cfg['flow_resolution_requested'],'1080p')
-            self.assertEqual(s.frame_size(s.STATE['jobs'][0]),(1080,1920))
+            self.assertEqual(s.frame_size(s.STATE['jobs'][0]),(720,1280))  # owner 11/11/2026: native 720p, no upscale
 
     def test_legacy_queued_flow_task_is_normalized_before_credit_reservation(self):
         j=job();j['stage']='script';j['config'].update(flow_model='gemini_omni_flash',flow_resolution='1080p',flow_cost=12)
@@ -302,12 +302,22 @@ class HTTPTests(unittest.TestCase):
         self.req('/api/job',{'brief':'A family secret','config':{'scene_count':4,'provider':'chatgpt','language':'Deutsch (de-DE)'}})
         new=s.STATE['jobs'][0]
         self.assertEqual(new['config']['flow_model'],'gemini_omni_flash')
-        self.assertEqual(new['config']['flow_cost'],12);self.assertEqual(new['config']['flow_resolution'],'720p')
+        self.assertEqual(new['config']['flow_cost'],24);self.assertEqual(new['config']['flow_resolution'],'720p')
         self.assertEqual(new['config']['clip_seconds'],8);self.assertEqual(old,before)
         count=len(s.STATE['jobs'])
         with self.assertRaises(urllib.error.HTTPError):
             self.req('/api/job',{'brief':'test','config':{'flow_model':'gemini_omni_flash','flow_cost':10}})
         self.assertEqual(len(s.STATE['jobs']),count)
+
+    def test_register_open_flow_account_creates_one_profile_with_verified_balance(self):
+        pair=self.req('/api/bridge/pair',{'code':s.STATE['pair_code']})
+        auth={'Authorization':'Bearer '+pair['token']}
+        account={'client':pair['client'],'email':'new-flow@example.com','url':'https://flow.google.com/u/2/project/demo','balance':36}
+        first=self.req('/api/bridge/register-flow',account,auth)
+        second=self.req('/api/bridge/register-flow',account,auth)
+        self.assertEqual(first['profile'],second['profile'])
+        p=s.profile_by(first['profile'])
+        self.assertEqual((p['balance'],p['credit_source'],p['slot']),(36,'read',2))
 
     def test_flow_model_costs_and_no_silent_fallback(self):
         for model,cost in [('veo_3_1_fast',20),('veo_3_1_fast',10),('veo_3_1_quality',100),('veo_3_1_lite',5)]:

@@ -100,6 +100,21 @@ globalThis.FruchtEngines={
  problem(text,engine){const s=this.site(engine);if(s.quota.test(text))return 'quota';if(s.refusal.test(text))return 'refusal';return null;},
  // Arena (preload="none") and Grok in a background tab keep readyState 0: an https .mp4 address is enough there.
  // Arena's own promo clip (/videos/cta/) is never ours.
+ // 11/11/2026: the German Grok says « Video-Dauer » / « Videoauflösung » (with or without hyphen); a missed label left 6 s / 480p.
+ async setMenu(doc,label,want,h){
+  const trigger=this.buttons(doc).find(b=>label.test((b.getAttribute('aria-label')||b.getAttribute('title')||'').trim()));
+  if(!trigger||(trigger.innerText||'').replace(/\s+/g,'').toLowerCase()===want)return !!trigger;
+  for(const type of ['pointerdown','mousedown','pointerup','mouseup'])trigger.dispatchEvent(new h.Event(type,{bubbles:true}));trigger.click();await h.sleep(700);
+  const pick=[...doc.querySelectorAll('[role="menuitemradio"],[role="menuitem"],[role="radio"],[role="option"]')].find(e=>e.getClientRects().length&&(e.innerText||'').replace(/\s+/g,'').toLowerCase()===want);
+  if(pick){pick.click();await h.sleep(500);}
+  return !!pick;
+ },
+ async setDuration(doc,seconds,h){
+  return this.setMenu(doc,/^(?:Video[- ]?duration|Video[- ]?Dauer|Videolänge|Durée de la vidéo|Durée vidéo|Duración del vídeo)$/i,String(seconds)+'s',h);
+ },
+ async setResolution(doc,value,h){
+  return this.setMenu(doc,/^(?:Video[- ]?resolution|Video[- ]?Auflösung|Résolution(?: de la)? vidéo|Resolución del vídeo)$/i,String(value).toLowerCase(),h);
+ },
  newVideo(doc,old){
   return [...doc.querySelectorAll('video')].find(v=>{const src=v.currentSrc||v.src||v.querySelector?.('source')?.src;if(!src||old.has(src)||/\/videos\/cta\//.test(src))return false;
    return (v.readyState>=1&&!(v.duration<2))||/^https:\/\/[^#?]+\.mp4(?:[?#]|$)/i.test(src);})||null;
@@ -228,6 +243,11 @@ globalThis.FruchtEngines={
     if(!uploaded)throw h.fail('interface',site.label+' : image non importée après 60 s. Aucun envoi effectué.');
    }
   }
+  // Owner 11/11/2026: « Grok aussi à 8 s, que les gens ne parlent pas aussi vite ». Grok opens on 6 s and offers
+  // 6 / 10 / 15 s (menu « Video duration », real page 0.1.98): 10 s is chosen; a faithful remake keeps its 8 s segment.
+  if(engine==='grok'&&task.payload.seconds)await this.setDuration(doc,task.payload.seconds,h);
+  // Owner 11/11/2026: « laisse en 720p » (Grok opens on 480p).
+  if(engine==='grok')await this.setResolution(doc,task.payload.resolution||'720p',h);
   const editor=this.editor(doc);if(!editor)throw h.fail('interface',site.label+' : zone de texte introuvable. Aucun envoi effectué.');
   h.fill(editor,task.payload.prompt);await h.sleep(700);
   let send=null;for(let i=0;i<40&&!send;i++){h.blocked();send=this.sendButton(doc,engine);if(!send)await h.sleep(700);}

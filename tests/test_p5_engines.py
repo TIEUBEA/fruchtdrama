@@ -38,8 +38,8 @@ class EngineUnitTests(unittest.TestCase):
 
     def test_word_limit_follows_duration(self):
         self.assertEqual(engines.word_limit({'config': {}}), 24)
-        self.assertEqual(engines.word_limit({'config': {'video_engine': 'grok'}}), 18)
-        self.assertEqual(engines.word_limit({'config': {'video_engine': 'grok'}}, 25), 18)
+        self.assertEqual(engines.word_limit({'config': {'video_engine': 'grok'}}), 30)
+        self.assertEqual(engines.word_limit({'config': {'video_engine': 'grok'}}, 25), 31)
 
     def test_montage_length(self):
         self.assertEqual(engines.clip_length({'config': {}}, 7.7), 8.0, 'Flow stays exactly 8 s')
@@ -50,7 +50,7 @@ class EngineUnitTests(unittest.TestCase):
 
     def test_editorial_limit_scales(self):
         j = {'config': {'video_engine': 'grok'}, 'retention_version': 1}
-        self.assertIn('18 mots parlés par scène de 6 secondes', editorial.retention_instructions(j))
+        self.assertIn('30 mots parlés par scène de 10 secondes', editorial.retention_instructions(j))
 
 
 class ScheduleTests(unittest.TestCase):
@@ -61,18 +61,18 @@ class ScheduleTests(unittest.TestCase):
         j = clip_job('grok'); s.schedule(j)
         t = s.STATE['tasks'][-1]
         self.assertEqual((t['kind'], t['slot']), ('engine_video', 'clip:0'))
-        self.assertEqual(t['payload']['engine'], 'grok'); self.assertEqual(t['payload']['seconds'], 6)
-        self.assertIn('6 seconds', t['payload']['prompt']); self.assertNotIn('cost', t['payload'])
+        self.assertEqual(t['payload']['engine'], 'grok'); self.assertEqual(t['payload']['seconds'], 10)
+        self.assertIn('10 seconds', t['payload']['prompt']); self.assertNotIn('cost', t['payload'])
         self.assertEqual(j['status'], 'running', 'no Flow profile or credit needed')
 
     def test_script_prompt_and_edit_follow_the_engine(self):
         j = clip_job('grok')
-        self.assertIn('scènes de 6 secondes', s.script_prompt(j))
+        self.assertIn('scènes de 10 secondes', s.script_prompt(j))
         j.update(stage='characters', editorial_version=2, retention_version=1); j['config']['review_script'] = True
         for c in j['characters']:
             c.pop('file', None)
-        with self.assertRaisesRegex(ValueError, '18 mots au plus pour tenir dans le clip de 6 secondes'):
-            s.edit_script(j, {'scenes': [{'dialogue': [{'speaker': 'orange', 'text': t}]} for t in (' '.join(['Wort'] * 19), 'b', 'c', 'd')]})
+        with self.assertRaisesRegex(ValueError, '30 mots'):  # Grok 10 s: 31 words refused
+            s.edit_script(j, {'scenes': [{'dialogue': [{'speaker': 'orange', 'text': t}]} for t in (' '.join(['Wort'] * 31), 'b', 'c', 'd')]})
 
     def test_dry_run_for_grok(self):
         j = clip_job('arena', dry=True); s.schedule(j)
@@ -125,7 +125,7 @@ class HttpTests(unittest.TestCase):
         self.assertIn('inconnu', json.load(e.exception)['error'])
         engines.AVAILABLE = ('flow', 'grok')
         self.req({'brief': 'x', 'config': {'video_engine': 'grok'}})
-        self.assertEqual(s.STATE['jobs'][0]['config']['clip_seconds'], 6)
+        self.assertEqual(s.STATE['jobs'][0]['config']['clip_seconds'], 10)
 
 
 @unittest.skipUnless(shutil.which('ffmpeg') and shutil.which('ffprobe'), 'ffmpeg requis')

@@ -151,6 +151,37 @@ def chrome_executable(platform=None, environ=None, which=shutil.which):
     return pathlib.Path(found) if found else None
 
 
+def chrome_user_data(platform=None, environ=None):
+    platform = platform or sys.platform; environ = os.environ if environ is None else environ
+    if platform.startswith('win'):
+        root = environ.get('LOCALAPPDATA')
+        return pathlib.Path(root) / 'Google/Chrome/User Data' if root else None
+    home = pathlib.Path(environ.get('HOME') or pathlib.Path.home())
+    return home / ('Library/Application Support/Google/Chrome' if platform == 'darwin' else '.config/google-chrome')
+
+
+def chrome_folders(local_state=None):
+    """{address: Chrome profile folder}, from Chrome's own list of profiles (names and addresses only)."""
+    import json
+    path = pathlib.Path(local_state) if local_state else (chrome_user_data() or pathlib.Path()) / 'Local State'
+    try:cache = json.loads(path.read_text('utf-8')).get('profile', {}).get('info_cache', {})
+    except (OSError, ValueError, AttributeError):return {}
+    found = {}
+    for folder, info in cache.items():
+        email = str((info or {}).get('user_name') or '').strip().lower()
+        if email and re.fullmatch(r'Default|Profile [0-9]+', folder):found.setdefault(email, folder)
+    return found
+
+
+def folder_of(accounts, folders, taken=()):
+    """The Chrome profile a FruchtDrama window runs in: the profile of its first Google account (/u/0 first).
+    A folder already known for another window is never given twice."""
+    for a in sorted(accounts, key=lambda a: int(a.get('slot') or 0)):
+        folder = folders.get(str(a.get('email') or '').strip().lower())
+        if folder and folder not in taken:return folder
+    return None
+
+
 def launch(profile):
     """Start Chrome in the background (no window, nothing brought to the front) for one saved account.
 
@@ -165,5 +196,9 @@ def launch(profile):
     args = [str(executable), '--no-startup-window']
     if folder:
         args.append('--profile-directory=' + folder)
+    if sys.platform == 'darwin':
+        # macOS: a running Chrome only receives the profile through « open -n »; -g keeps it in the background.
+        app = next((x for x in [pathlib.PurePath(executable), *pathlib.PurePath(executable).parents] if x.suffix == '.app'), None)
+        if app:args = ['open', '-gna', app.as_posix(), '--args'] + args[1:]
     subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
                      creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0), start_new_session=not sys.platform.startswith('win'))

@@ -1,0 +1,147 @@
+{
+  "title": "Oma, warum steht dein Koffer da?",
+  "cover_title": "MUSS OMA GEHEN?",
+  "description": "Er dachte, Oma müsste gehen. Dabei begann ihr größter Traum. Eine originelle KI-Geschichte. #FruchtDrama #KIGeschichten #Deutsch",
+  "characters": [
+    {
+      "id": "birne",
+      "name": "Ben",
+      "appearance": "Kleiner Birnenjunge mit grüner Fruchthaut, braunen Augen, blauer Latzhose und gelbem T-Shirt. Fruchthaut auch an Händen.",
+      "voice": "Helle, natürliche Jungenstimme, klares Standarddeutsch, besorgt und liebevoll.",
+      "image_prompt": "Originale Figurenreferenz eines kleinen Birnenjungen, vollständig sichtbarer birnenförmiger Körper, grüne Fruchthaut, blaue Latzhose, gelbes T-Shirt, große braune Augen, neutraler Hintergrund, hochwertige 3D-Animation, keine Schrift, keine Logos, 9:16."
+    },
+    {
+      "id": "orange",
+      "name": "Oma Oda",
+      "appearance": "Ältere Orangenfrau, orangefarbene Schalenhaut an Gesicht und Händen, grauer lockiger Dutt, cremefarbener Cardigan und brauner Rock.",
+      "voice": "Warme ältere Frauenstimme, klares Standarddeutsch, ruhig und herzlich.",
+      "image_prompt": "Originale Figurenreferenz einer älteren Orangenfrau, orangefarbene Schalenhaut auch an Händen, grauer Dutt, cremefarbener Cardigan, brauner Rock, große warme Augen, neutraler Hintergrund, hochwertige 3D-Animation, keine Schrift, keine Logos, 9:16."
+    },
+    {
+      "id": "mango",
+      "name": "Mia",
+      "appearance": "Erwachsene Mangofrau, goldorange Fruchthaut mit roter Wange, schwarzer schulterlanger Haarschnitt, türkiser Pullover und dunkelblaue Hose.",
+      "voice": "Natürliche warme Frauenstimme um dreißig, Standarddeutsch, zunächst eilig, später liebevoll.",
+      "image_prompt": "Originale Figurenreferenz einer erwachsenen Mangofrau, goldorange Fruchthaut auch an Händen, schwarzer schulterlanger Haarschnitt, türkiser Pullover, dunkelblaue Hose, neutraler Hintergrund, hochwertige 3D-Animation, keine Schrift, keine Logos, 9:16."
+    }
+  ],
+  "scenes": [
+    {
+      "characters": [
+        "birne",
+        "orange"
+      ],
+      "meaning": "Ben hält den Griff eines alten braunen Koffers fest; Oma steht neben der Wohnungstür. Ben blickt besorgt zu ihr auf.",
+      "image_prompt": "Hochwertige expressive 3D-Animation, Früchtehumanoide, warme gemütliche Wohnung, realistisches Licht, Hochformat 9:16, keine Schrift und keine Marken. Ben hält den Griff eines alten braunen Koffers fest; Oma steht neben der Wohnungstür. Ben blickt besorgt zu ihr auf. Verwende dieselben Figuren und Kleidungsstücke wie in den Referenzbildern.",
+      "video_prompt": "Ein durchgehender ruhiger Plan mit langsamer Annäherung. Ben hält den Griff eines alten braunen Koffers fest; Oma steht neben der Wohnungstür. Ben blickt besorgt zu ihr auf. Identität und Kleidung bleiben stabil. Münder der Sprecher sind sichtbar. Nur der jeweilige Sprecher bewegt die Lippen, andere Figuren bleiben stumm. Natürliches Standarddeutsch, keine zusätzlichen Stimmen oder Musik.",
+      "dialogue": [
+        {
+          "speaker": "birne",
+          "text": "Oma, hat Mama dich rausgeworfen?"
+        },
+        {
+          "speaker": "orange",
+          "text": "Nein, mein Schatz. Ich muss nur kurz weg."
+        }
+      ]
+    },
+    {
+      "characters": [
+        "birne",
+        "mango",
+        "orange"
+      ],
+      "meaning": "Mia kommt von rechts mit ihrem Handy. Ben schützt den Koffer; Oma steht hinten neben der Tür.",
+      "image_prompt": "Hochwertige expressive 3D-Animation, Früchtehumanoide, warme gemütliche Wohnung, realistisches Licht, Hochformat 9:16, keine Schrift und keine Marken. Mia kommt von rechts mit ihrem Handy. Ben schützt den Koffer; Oma steht hinten neben der Tür. Verwende dieselben Figuren und Kleidungsstücke wie in den Referenzbildern.",
+      "video_prompt": "Ein durchgehender ruhiger Plan mit langsamer Annäherung. Mia kommt von rechts mit ihrem Handy. Ben schützt den Koffer; Oma steht hinten neben der Tür. Identität und Kleidung bleiben stabil. Münder der Sprecher sind sichtbar. Nur der jeweilige Sprecher bewegt die Lippen, andere Figuren bleiben stumm. Natürliches Standarddeutsch, keine zusätzlichen Stimmen oder Musik.",
+      "dialogue": [
+        {
+          "speaker": "mango",
+          "text": "Mama, beeil dich. Das Auto wartet."
+        },
+        {
+          "speaker": "birne",
+          "text": "Dann gehe ich mit! Oma bleibt nicht allein!"
+        }
+      ]
+    },
+    {
+      "characters": [
+        "birne",
+        "mango"
+      ],
+      "meaning": "Mia kniet links neben Ben und zeigt ihm ein altes Foto von Oma vor einem Reiseplakat mit Meerblick.",
+      "image_prompt": "Hochwertige expressive 3D-Animation, Früchtehumanoide, warme gemütliche Wohnung, realistisches Licht, Hochformat 9:16, keine Schrift und keine Marken. Mia kniet links neben Ben und zeigt ihm ein altes Foto von Oma vor einem Reiseplakat mit Meerblick. Verwende dieselben Figuren und Kleidungsstücke wie in den Referenzbildern.",
+      "video_prompt": "Ein durchgehender ruhiger Plan mit langsamer Annäherung. Mia kniet links neben Ben und zeigt ihm ein altes Foto von Oma vor einem Reiseplakat mit Meerblick. Identität und Kleidung bleiben stabil. Münder der Sprecher sind sichtbar. Nur der jeweilige Sprecher bewegt die Lippen, andere Figuren bleiben stumm. Natürliches Standarddeutsch, keine zusätzlichen Stimmen oder Musik.",
+      "dialogue": [
+        {
+          "speaker": "mango",
+          "text": "Du hast etwas falsch verstanden. Oma hat ihr ganzes Leben für uns gearbeitet. Aber das Meer hat sie nie gesehen."
+        }
+      ]
+    },
+    {
+      "characters": [
+        "mango",
+        "orange"
+      ],
+      "meaning": "Mia überreicht Oma einen offenen Umschlag mit drei Fahrkarten. Oma blickt überrascht darauf; ihre Augen werden feucht.",
+      "image_prompt": "Hochwertige expressive 3D-Animation, Früchtehumanoide, warme gemütliche Wohnung, realistisches Licht, Hochformat 9:16, keine Schrift und keine Marken. Mia überreicht Oma einen offenen Umschlag mit drei Fahrkarten. Oma blickt überrascht darauf; ihre Augen werden feucht. Verwende dieselben Figuren und Kleidungsstücke wie in den Referenzbildern.",
+      "video_prompt": "Ein durchgehender ruhiger Plan mit langsamer Annäherung. Mia überreicht Oma einen offenen Umschlag mit drei Fahrkarten. Oma blickt überrascht darauf; ihre Augen werden feucht. Identität und Kleidung bleiben stabil. Münder der Sprecher sind sichtbar. Nur der jeweilige Sprecher bewegt die Lippen, andere Figuren bleiben stumm. Natürliches Standarddeutsch, keine zusätzlichen Stimmen oder Musik.",
+      "dialogue": [
+        {
+          "speaker": "orange",
+          "text": "Du hast dich daran erinnert?"
+        },
+        {
+          "speaker": "mango",
+          "text": "An deinen Traum? Jeden Tag. Hier sind unsere drei Fahrkarten."
+        }
+      ]
+    },
+    {
+      "characters": [
+        "birne",
+        "mango",
+        "orange"
+      ],
+      "meaning": "Ben steckt einen kleinen grünen Spielzeugdinosaurier in seinen Rucksack. Mia und Oma lachen.",
+      "image_prompt": "Hochwertige expressive 3D-Animation, Früchtehumanoide, warme gemütliche Wohnung, realistisches Licht, Hochformat 9:16, keine Schrift und keine Marken. Ben steckt einen kleinen grünen Spielzeugdinosaurier in seinen Rucksack. Mia und Oma lachen. Verwende dieselben Figuren und Kleidungsstücke wie in den Referenzbildern.",
+      "video_prompt": "Ein durchgehender ruhiger Plan mit langsamer Annäherung. Ben steckt einen kleinen grünen Spielzeugdinosaurier in seinen Rucksack. Mia und Oma lachen. Identität und Kleidung bleiben stabil. Münder der Sprecher sind sichtbar. Nur der jeweilige Sprecher bewegt die Lippen, andere Figuren bleiben stumm. Natürliches Standarddeutsch, keine zusätzlichen Stimmen oder Musik.",
+      "dialogue": [
+        {
+          "speaker": "birne",
+          "text": "Drei Fahrkarten? Dann muss mein Dinosaurier auch mit!"
+        },
+        {
+          "speaker": "orange",
+          "text": "Aber nur, wenn er schwimmen kann!"
+        }
+      ]
+    },
+    {
+      "characters": [
+        "birne",
+        "orange",
+        "mango"
+      ],
+      "meaning": "Die drei stehen glücklich an der offenen Wohnungstür. Ben trägt seinen kleinen Rucksack, Oma hält ihren Koffer, Mia die Fahrkarten.",
+      "image_prompt": "Hochwertige expressive 3D-Animation, Früchtehumanoide, warme gemütliche Wohnung, realistisches Licht, Hochformat 9:16, keine Schrift und keine Marken. Die drei stehen glücklich an der offenen Wohnungstür. Ben trägt seinen kleinen Rucksack, Oma hält ihren Koffer, Mia die Fahrkarten. Verwende dieselben Figuren und Kleidungsstücke wie in den Referenzbildern.",
+      "video_prompt": "Ein durchgehender ruhiger Plan mit langsamer Annäherung. Die drei stehen glücklich an der offenen Wohnungstür. Ben trägt seinen kleinen Rucksack, Oma hält ihren Koffer, Mia die Fahrkarten. Identität und Kleidung bleiben stabil. Münder der Sprecher sind sichtbar. Nur der jeweilige Sprecher bewegt die Lippen, andere Figuren bleiben stumm. Natürliches Standarddeutsch, keine zusätzlichen Stimmen oder Musik.",
+      "dialogue": [
+        {
+          "speaker": "birne",
+          "text": "Oma, ich zeige dir den größten Strand!"
+        },
+        {
+          "speaker": "orange",
+          "text": "Hauptsache, wir sind zusammen."
+        },
+        {
+          "speaker": "mango",
+          "text": "Dann los. Unser Abenteuer wartet!"
+        }
+      ]
+    }
+  ]
+}

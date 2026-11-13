@@ -57,7 +57,29 @@ def flow_grok_next(scene):
     if not flow:return 'flow'
     if flow[-1].get('kind')=='refusal' and not any(a.get('engine')=='grok' for a in attempts):
         return 'flow' if len(flow)==1 else 'grok'
+    # A technical failure before anything was sent (page not ready, settings not shown) gets one more Flow try instead
+    # of « Action requise » (10/11/2026: « Paramètres Flow indisponibles » 40 times in 3 days). An uncertain send never
+    # reaches here (clip_failed holds it for the owner).
+    # 12/11/2026 (« La méchante éducatrice », clip 2: image stuck in Flow, then its tab gone): a second technical failure
+    # with nothing sent goes to Grok instead of stopping the episode (« Flow prioritaire », but never a blocked video).
+    if flow[-1].get('kind') in FLOW_TECH_KINDS:
+        if sum(1 for a in flow if a.get('kind') in FLOW_TECH_KINDS)<2:
+            return 'flow'
+        # Flow's shared settings at fault: the owner fixes them once, before the same failure repeats on every clip.
+        shared=any(SHARED_FLOW_FAILURE.search(str(a.get('reason') or '')) for a in flow if a.get('kind') in FLOW_TECH_KINDS)
+        if not shared and not any(a.get('engine')=='grok' for a in attempts):
+            return 'grok'
+    # Grok slow or its page not read (11/11/2026, crèche clip 5: « vidéo non détectée après 4 minutes »): one more
+    # Grok try. A refusal by Grok is final.
+    grok=[a for a in attempts if a.get('engine')=='grok']
+    if grok and grok[-1].get('kind') in GROK_RETRY_KINDS and len(grok)<2:
+        return 'grok'
     return None
+
+
+GROK_RETRY_KINDS=('timeout','interface','other','restart')
+FLOW_TECH_KINDS=('interface','other','timeout','restart')
+SHARED_FLOW_FAILURE=re.compile(r'Paramètres Flow|Réglage|settings|résolution|resolution', re.I)
 
 
 def validate(value):

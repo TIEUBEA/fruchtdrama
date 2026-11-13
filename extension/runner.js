@@ -16,9 +16,13 @@ globalThis.fruchtRunnerHandler=(m,s,reply)=>{
  if(globalThis.fruchtRunState?.task===m.task.id&&['running','completed'].includes(globalThis.fruchtRunState.state)){
   reply({accepted:true,task:m.task.id,already_started:true});return false;
  }
- if(globalThis.fruchtRunState?.state==='running'){reply({accepted:false,error:'Une tâche est déjà en cours dans cet onglet.'});return false;}
- globalThis.fruchtRunState={state:'running',task:m.task.id};
- run(m.task,m.attachments).then(result=>{if(['flow_video','engine_video'].includes(m.task.kind))result.generation_submitted=globalThis.fruchtRunState.submitted===true;globalThis.fruchtRunState={...globalThis.fruchtRunState,state:'completed',task:m.task.id,result};return notifyResult(m.task.id);}).catch(e=>{globalThis.fruchtRunState={...globalThis.fruchtRunState,state:'completed',task:m.task.id,result:{ok:false,error:e.message,...(e.kind?{error_kind:e.kind}:{}),...(e.retryAfter?{retry_after:e.retryAfter}:{}),...(['flow_video','engine_video'].includes(m.task.kind)?{generation_submitted:globalThis.fruchtRunState.submitted===true,...(e.flowBlocked?{flow_blocked:e.flowBlocked}:{}),...(e.flow_failed?{flow_failed:true}:{})}:{})}};return notifyResult(m.task.id);});
+ // 12/11/2026 (« La méchante éducatrice », clip 2): a run frozen for 40 min before anything was sent kept the tab
+ // « busy » forever. A run older than 20 min that never submitted anything is abandoned; a submitted one never is.
+ const current=globalThis.fruchtRunState,stale=current?.state==='running'&&current.submitted!==true&&Date.now()-(current.at||0)>20*60000;
+ if(current?.state==='running'&&!stale){reply({accepted:false,error:'Une tâche est déjà en cours dans cet onglet.'});return false;}
+ globalThis.fruchtRunState={state:'running',task:m.task.id,at:Date.now()};
+ const mine=()=>globalThis.fruchtRunState?.task===m.task.id;  // an abandoned run that wakes up later never overwrites the new one
+ run(m.task,m.attachments).then(result=>{if(!mine())return;if(['flow_video','engine_video'].includes(m.task.kind))result.generation_submitted=globalThis.fruchtRunState.submitted===true;globalThis.fruchtRunState={...globalThis.fruchtRunState,state:'completed',task:m.task.id,result};return notifyResult(m.task.id);}).catch(e=>{if(!mine())return;globalThis.fruchtRunState={...globalThis.fruchtRunState,state:'completed',task:m.task.id,result:{ok:false,error:e.message,...(e.kind?{error_kind:e.kind}:{}),...(e.retryAfter?{retry_after:e.retryAfter}:{}),...(['flow_video','engine_video'].includes(m.task.kind)?{generation_submitted:globalThis.fruchtRunState.submitted===true,...(e.flowBlocked?{flow_blocked:e.flowBlocked}:{}),...(e.notReady?{not_ready:e.notReady}:{}),...(e.flow_failed?{flow_failed:true}:{})}:{})}};return notifyResult(m.task.id);});
  reply({accepted:true,task:m.task.id});return false;
 };chrome.runtime.onMessage.addListener(globalThis.fruchtRunnerHandler);
 }

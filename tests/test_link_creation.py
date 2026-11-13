@@ -27,8 +27,11 @@ class LinkTests(unittest.TestCase):
             if 'broken' in url:
                 raise ValueError('Vidéo TikTok illisible (privée, supprimée ou page changée).')
             dest.write_bytes(b'\x00\x00\x00\x18ftypmp42'); return {'desc': 'La pomme cache une lettre', 'duration': 24, 'account': 'oma'}
+        # Same signatures as source_video (transcribe gained required=, the frames come from ffmpeg): a stale fake made
+        # the whole analysis fail in the tests only.
         for target, value in (('download', fake_download), ('board', lambda video, out, duration: out.write_bytes(b'jpg') or True),
-                              ('transcribe', lambda video, root: '[00:01] Où est la lettre ?')):
+                              ('frame_sheets', lambda video, out, duration: []), ('window_frames', lambda video, seconds, count: []),
+                              ('transcribe', lambda video, root, required=False: '[00:01] Où est la lettre ?')):
             patcher = mock.patch.object(s.source_video, target, value); patcher.start(); self.addCleanup(patcher.stop)
 
     def script_task(self):
@@ -60,13 +63,15 @@ class LinkTests(unittest.TestCase):
     def test_identical_with_captures_and_instructions(self):
         png = 'data:image/png;base64,' + base64.b64encode(b'\x89PNG\r\n\x1a\n' + b'0' * 20).decode()
         self.req({'brief': 'Mets ma tête à la place du père.', 'source_url': 'https://www.tiktok.com/@oma/video/7312345678901234567',
-                  'config': {'recreate': 'identical'}, 'captures': [{'name': 'moi.png', 'data': png}]})
+                  'config': {'recreate': 'identical', 'cast': 'fruits'}, 'captures': [{'name': 'moi.png', 'data': png}]})
         j = s.STATE['jobs'][0]
         self.assertEqual(j['config']['recreate'], 'identical'); self.assertEqual(j['source_captures'], ['source_capture_1.png'])
         task = self.script_task()
         self.assertEqual(task['payload']['attachments'], [f"/media/{j['id']}/source_board.jpg", f"/media/{j['id']}/source_capture_1.png"])
         prompt = task['payload']['prompt']
-        self.assertIn('RECRÉER À L’IDENTIQUE', prompt); self.assertIn('jamais mot pour mot', prompt); self.assertNotIn('entièrement ORIGINALE', prompt)
+        # « Reproduire cette vidéo » (10/11/2026): same scenes and words, only the characters replaced by the owner's choice.
+        self.assertIn('recopie chaque parole mot pour mot', prompt); self.assertIn('traduis chaque réplique', prompt); self.assertIn('DÉCOUPAGE OBLIGATOIRE', prompt); self.assertIn('Où est la lettre ?', prompt)
+        self.assertIn('REMPLACEMENT CHOISI PAR LE PROPRIÉTAIRE : des fruits', prompt); self.assertNotIn('entièrement ORIGINALE', prompt)
         self.assertIn('Mets ma tête à la place du père.', prompt)
         self.assertIn('owner instructions: Mets ma tête', s.capture_note(j))
         self.assertEqual(s.captures_of(j), [f"/media/{j['id']}/source_capture_1.png"])

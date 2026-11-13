@@ -79,6 +79,8 @@ class LightCorrectionTests(unittest.TestCase):
         self.assertIn('Scène 1 : 30 mots', prompt)
         self.assertIn('JSON ENTIER', prompt)
         self.assertNotIn('old', prompt)
+        # Since 0.1.96 every refused story gets the light correction, not only the faithful remake.
         j['config']['recreate'] = 'inspired'
-        self.assertFalse(s.correction_ready(j))
+        self.assertTrue(s.correction_ready(j))
+        self.assertIn('JSON ENTIER', s.script_prompt({**j, 'selected': {'source': 'owner_link'}}))
 

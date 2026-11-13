@@ -15,12 +15,13 @@ def main():
         raise RuntimeError('Installez Python 3.11 ou 3.12 64 bits, puis relancez Installer.cmd.')
     venv = ROOT / '.venv' / ('Scripts' if os.name == 'nt' else 'bin')
     if pathlib.Path(sys.executable).parent.resolve() != venv.resolve():
-        raise RuntimeError('Utilisez Installer.cmd (Windows) ou installer.sh (Linux) pour installer dans l environnement separe de cette copie.')
+        raise RuntimeError('Utilisez Installer.cmd (Windows), Installer-Mac.command (Mac) ou installer.sh (Linux) pour installer dans l environnement separe de cette copie.')
     accept_terms()
     missing = [name for name in ('ffmpeg', 'ffprobe') if not shutil.which(name)]
     if missing:
         print('\nFFmpeg / ffprobe manquant. Installez FFmpeg, puis fermez cette fenetre et relancez Installer.cmd.')
-        print('Commande Windows proposee (a executer vous-meme) : winget install --id Gyan.FFmpeg --exact')
+        if sys.platform == 'darwin':print('Commande Mac proposee (a executer vous-meme, Homebrew requis) : brew install ffmpeg')
+        else:print('Commande Windows proposee (a executer vous-meme) : winget install --id Gyan.FFmpeg --exact')
         raise SystemExit(1)
     for requirements in ('requirements.txt', 'requirements-quality.txt'):
         subprocess.run([sys.executable, '-m', 'pip', 'install', '-r', str(ROOT / requirements)], check=True)
